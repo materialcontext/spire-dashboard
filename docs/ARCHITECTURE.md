@@ -88,14 +88,35 @@ The field shapes are the structs in `spire-core/src/catalog.rs`. Unknown enum
 values (e.g. a new card type) deserialize as `Other` instead of failing. A pack
 with a newer `format` is rejected with a clear message.
 
+## Game rules (StS2)
+
+`GameRules` in the catalog holds the mechanics the dashboard models:
+
+- the maximum ascension (10)
+- base potion slots
+- the ascensions that remove a slot (A4) and add the starting curse (A5)
+- the ascensions where enemies use their ascension HP (A8) and damage (A9)
+- the double-boss act (A10, Act 3)
+
+The Codex adapter derives these from the ascension descriptions. A rule
+whose description disappears is switched off rather than guessed.
+`RunEvent::start` applies the rules once and stores the result, and threat
+previews read `Scaling::for_run`.
+
+Weak-pool sizes per act (3/2/2) come from community runs (the most common
+count among acts that reached their boss). The playbook's `weak_fights` is
+only a fallback.
+
 ## Spire Codex adapter
 
 `spire-data/src/codex.rs` maps the API responses into a `DataPack`:
 
-- `/api/{acts,characters,cards,relics,potions,enchantments,monsters,encounters,events}`
-- `/api/versions`, for the game version label
+- `/api/{acts,characters,cards,relics,potions,enchantments,monsters,encounters,events,ascensions}?channel=beta`
+- `/api/beta/version` (or `/api/versions` on stable), for the game version label
 
-Wire structs name only the fields used, and every field is optional.
+The dashboard follows the **beta** branch by default (`Channel::Beta`, which
+sends `?channel=beta`). Wire structs name only the fields used, every field is
+optional, and `null` lists read as empty.
 
 Notes:
 

@@ -7,13 +7,14 @@
 //!
 //! Options: `--base-url URL`, `--out PATH` (default `data/catalog.json`),
 //! `--run-pages N` pages of community runs for exact lineups (default 3, 0 = none),
-//! `--runs-since RFC3339` (default: 14 days ago). With `--from-dir`, run pages
+//! `--runs-since RFC3339` (default: 14 days ago), `--channel beta|stable`
+//! (default beta). With `--from-dir`, run pages
 //! are read from `DIR/runs/*` (gzip or plain JSONL).
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use spire_data::codex::{self, Responses};
+use spire_data::codex::{self, Channel, Responses};
 use spire_data::{DataError, fetch, now_rfc3339, rfc3339, unix_now};
 
 struct Args {
@@ -22,6 +23,7 @@ struct Args {
     out: PathBuf,
     run_pages: u32,
     runs_since: Option<String>,
+    channel: Channel,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -31,6 +33,7 @@ fn parse_args() -> Result<Args, String> {
         out: PathBuf::from("data/catalog.json"),
         run_pages: fetch::DEFAULT_RUN_PAGES,
         runs_since: None,
+        channel: Channel::Beta,
     };
     let mut it = std::env::args().skip(1);
     while let Some(flag) = it.next() {
@@ -41,6 +44,13 @@ fn parse_args() -> Result<Args, String> {
             "--out" => args.out = PathBuf::from(value()?),
             "--run-pages" => args.run_pages = value()?.parse().map_err(|e| format!("--run-pages: {e}"))?,
             "--runs-since" => args.runs_since = Some(value()?),
+            "--channel" => {
+                args.channel = match value()?.as_str() {
+                    "beta" => Channel::Beta,
+                    "stable" => Channel::Stable,
+                    other => return Err(format!("--channel: unknown {other}")),
+                }
+            }
             other => return Err(format!("unknown argument {other}")),
         }
     }
@@ -50,7 +60,10 @@ fn parse_args() -> Result<Args, String> {
 fn read_dir(dir: &std::path::Path) -> Result<(Responses, Option<String>), DataError> {
     let mut responses = Responses::new();
     for endpoint in codex::ENDPOINTS {
-        responses.insert(endpoint, std::fs::read_to_string(dir.join(format!("{endpoint}.json")))?);
+        // Snapshots taken before an endpoint was added may lack it.
+        if let Ok(body) = std::fs::read_to_string(dir.join(format!("{endpoint}.json"))) {
+            responses.insert(endpoint, body);
+        }
     }
     let version =
         std::fs::read_to_string(dir.join("versions.json")).ok().and_then(|b| codex::latest_stable_version(&b));
@@ -71,7 +84,7 @@ fn run() -> Result<(), String> {
     let args = parse_args()?;
     let (responses, version) = match &args.from_dir {
         Some(dir) => read_dir(dir),
-        None => fetch::codex_responses(&args.base_url),
+        None => fetch::codex_responses(&args.base_url, args.channel),
     }
     .map_err(|e| e.to_string())?;
     let mut pack = codex::to_pack(&responses, version, Some(now_rfc3339())).map_err(|e| e.to_string())?;

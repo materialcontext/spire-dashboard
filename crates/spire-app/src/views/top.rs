@@ -1,34 +1,60 @@
-//! Top bar: run vitals and global controls.
+//! Header: identity, run vitals and global controls.
 
 use eframe::egui::{self, RichText, Ui};
 
 use crate::actions::Action;
 use crate::app::{UiState, ViewCtx};
+use crate::style::{self, color::*};
+use crate::widgets::{hp_bar, slots, stat};
 
 pub fn show(ui: &mut Ui, v: &ViewCtx, st: &UiState, out: &mut Vec<Action>) {
     let s = v.state;
+    ui.add_space(6.0);
     ui.horizontal(|ui| {
-        ui.label(RichText::new("Spire Dashboard").strong());
-        ui.separator();
+        ui.label(RichText::new("SPIRE").strong().color(ACCENT));
+        ui.label(RichText::new("DASHBOARD").color(TEXT_DIM));
+        ui.add_space(16.0);
+
         if let Some(c) = s.character.as_ref().and_then(|c| v.catalog.characters.get(c)) {
-            ui.label(RichText::new(&c.name).strong());
-            if s.ascension > 0 {
-                ui.label(format!("A{}", s.ascension));
-            }
-            ui.separator();
+            let accent = style::character_color(c.id.as_str());
+            ui.label(RichText::new(c.name.trim_start_matches("The ")).heading().color(accent));
+            let asc = v.catalog.ascensions.get(&s.ascension).map_or(String::new(), |a| a.name.clone());
+            ui.label(RichText::new(format!("A{}", s.ascension)).strong().color(if s.ascension > 0 {
+                ACCENT
+            } else {
+                TEXT_DIM
+            }))
+            .on_hover_text(asc);
+            ui.add_space(18.0);
+
             let act = s.act.as_ref().and_then(|a| v.catalog.acts.get(a));
-            ui.label(format!("Act {} {}", s.act_index + 1, act.map_or(String::new(), |a| format!("({})", a.name))));
-            ui.label(format!("Floor {}", s.floor));
-            ui.separator();
-            ui.label("HP");
-            ui.add(egui::ProgressBar::new(s.hp_fraction()).desired_width(140.0).text(format!("{}/{}", s.hp, s.max_hp)));
-            ui.label(format!("Gold {}", s.gold));
-            ui.label(format!("Potions {}/{}", s.potions.len(), s.potion_slots));
-            ui.label(format!("Deck {}", s.deck.len()));
+            stat(ui, &format!("Act {}", s.act_index + 1), act.map_or("Not started", |a| a.name.as_str()), TEXT);
+            ui.add_space(10.0);
+            stat(ui, "Floor", s.floor.to_string(), TEXT);
+            ui.add_space(10.0);
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 2.0;
+                ui.label(RichText::new("HP").small().color(TEXT_FAINT));
+                hp_bar(ui, s.hp, s.max_hp, 140.0);
+            });
+            ui.add_space(10.0);
+            stat(ui, "Gold", s.gold.to_string(), ACCENT);
+            ui.add_space(10.0);
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 4.0;
+                ui.label(RichText::new("POTIONS").small().color(TEXT_FAINT));
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 3.0;
+                    slots(ui, s.potions.len(), s.potion_slots);
+                });
+            });
+            ui.add_space(10.0);
+            stat(ui, "Deck", s.deck.len().to_string(), TEXT);
         }
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button(if st.updating { "Data… (updating)" } else { "Data…" }).clicked() {
+            let data_label = if st.updating { "Updating data…" } else { "Data" };
+            if ui.button(data_label).clicked() {
                 out.push(Action::ToggleDataWindow);
             }
             if s.started() {
@@ -43,9 +69,15 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &UiState, out: &mut Vec<Action>) {
                     out.push(Action::AbandonRun);
                 }
             }
+            if let Some(version) = v.catalog.layers.last().and_then(|l| l.game_version.as_ref()) {
+                ui.label(RichText::new(version).small().color(TEXT_FAINT));
+            }
         });
     });
-    if let Some(msg) = st.messages.last() {
-        ui.label(RichText::new(msg).small().weak());
+    match st.messages.last() {
+        Some(msg) => {
+            ui.label(RichText::new(msg).small().color(TEXT_FAINT));
+        }
+        None => ui.add_space(4.0),
     }
 }

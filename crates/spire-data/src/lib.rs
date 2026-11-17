@@ -125,6 +125,14 @@ mod tests {
     }
 
     #[test]
+    fn playbook_card_overrides_name_real_cards() {
+        let cat = spire_core::Catalog::from_layers([bundled_pack()]);
+        for id in bundled_playbook().card_roles.keys() {
+            assert!(cat.cards.contains_key(id), "playbook card_roles names unknown card {id}");
+        }
+    }
+
+    #[test]
     fn rejects_newer_format() {
         let json = r#"{"format": 999, "source": "future"}"#;
         assert!(matches!(parse_pack(json), Err(DataError::Format { .. })));

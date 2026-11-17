@@ -1,7 +1,7 @@
 //! Macro advice: compares the deck against the act plan and the act boss.
 
 use crate::analysis::deck::{Coverage, DeckProfile};
-use crate::analysis::threats::{ThreatPreview, preview};
+use crate::analysis::threats::{Scaling, ThreatPreview, preview};
 use crate::catalog::Catalog;
 use crate::playbook::Playbook;
 use crate::run::RunState;
@@ -19,15 +19,19 @@ pub struct Advice {
     pub text: String,
 }
 
-/// The act boss as a threat preview, if known.
-pub fn boss_preview(
+/// The act's known bosses as threat previews (two at A10 in act 3).
+pub fn boss_previews(
     state: &RunState,
     catalog: &Catalog,
     playbook: &Playbook,
     deck: &DeckProfile,
-) -> Option<ThreatPreview> {
-    let enc = catalog.encounters.get(state.boss.as_ref()?)?;
-    Some(preview(enc, catalog, playbook, state.act_index, deck, false))
+) -> Vec<ThreatPreview> {
+    let scaling = Scaling::for_run(state, catalog);
+    state
+        .bosses()
+        .filter_map(|b| catalog.encounters.get(b))
+        .map(|enc| preview(enc, catalog, playbook, state.act_index, scaling, deck, false))
+        .collect()
 }
 
 pub fn advise(state: &RunState, catalog: &Catalog, playbook: &Playbook, deck: &DeckProfile) -> Vec<Advice> {
@@ -59,7 +63,7 @@ pub fn advise(state: &RunState, catalog: &Catalog, playbook: &Playbook, deck: &D
         });
     }
 
-    if let Some(boss) = boss_preview(state, catalog, playbook, deck) {
+    for boss in boss_previews(state, catalog, playbook, deck) {
         for check in boss.checks.iter().filter(|c| c.coverage != Coverage::Covered) {
             out.push(Advice {
                 severity: Severity::Urgent,

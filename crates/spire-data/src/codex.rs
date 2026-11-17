@@ -16,13 +16,59 @@ pub const DEFAULT_BASE_URL: &str = "https://spire-codex.com";
 
 /// The endpoints one update reads, in order. Keyless use allows 15 calls per
 /// minute *per endpoint*, so one call to each is well within limits.
-pub const ENDPOINTS: [&str; 9] =
-    ["acts", "characters", "cards", "relics", "potions", "enchantments", "monsters", "encounters", "events"];
+pub const ENDPOINTS: [&str; 10] = [
+    "acts",
+    "characters",
+    "cards",
+    "relics",
+    "potions",
+    "enchantments",
+    "monsters",
+    "encounters",
+    "events",
+    "ascensions",
+];
+
+/// Which game branch to read. The dashboard follows the beta branch by
+/// default; Codex serves stable unless asked (`?channel=beta`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Channel {
+    #[default]
+    Beta,
+    Stable,
+}
+
+impl Channel {
+    /// Query string for entity endpoints.
+    pub fn query(self) -> &'static str {
+        match self {
+            Channel::Beta => "?channel=beta",
+            Channel::Stable => "",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Channel::Beta => "beta",
+            Channel::Stable => "stable",
+        }
+    }
+}
 
 /// Raw response bodies keyed by endpoint name.
 pub type Responses = BTreeMap<&'static str, String>;
 
 // ---------------------------------------------------------------- wire types
+
+/// Treats JSON `null` like a missing field (Codex sends both).
+fn null_as_default<'de, D, T>(d: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    Ok(Option::<T>::deserialize(d)?.unwrap_or_default())
+}
 
 #[derive(Deserialize)]
 struct WPower {
@@ -38,7 +84,7 @@ struct WPower {
 struct WCard {
     id: String,
     name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     description: String,
     #[serde(default)]
     cost: Option<i32>,
@@ -76,7 +122,7 @@ struct WCard {
 struct WCharacter {
     id: String,
     name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     description: String,
     #[serde(default)]
     starting_hp: Option<u32>,
@@ -84,9 +130,9 @@ struct WCharacter {
     starting_gold: Option<u32>,
     #[serde(default)]
     max_energy: Option<u32>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     starting_deck: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     starting_relics: Vec<String>,
 }
 
@@ -94,7 +140,7 @@ struct WCharacter {
 struct WItem {
     id: String,
     name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     description: String,
     #[serde(default)]
     rarity_key: Option<String>,
@@ -106,7 +152,7 @@ struct WItem {
 struct WEnchantment {
     id: String,
     name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     description: String,
     #[serde(default)]
     card_type: Option<String>,
@@ -121,14 +167,16 @@ struct WDamage {
     #[serde(default)]
     normal: Option<u32>,
     #[serde(default)]
+    ascension: Option<u32>,
+    #[serde(default)]
     hit_count: Option<u32>,
 }
 
 #[derive(Deserialize)]
 struct WMove {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     intent: String,
     #[serde(default)]
     damage: Option<WDamage>,
@@ -152,6 +200,10 @@ struct WMonster {
     #[serde(default)]
     max_hp: Option<u32>,
     #[serde(default)]
+    min_hp_ascension: Option<u32>,
+    #[serde(default)]
+    max_hp_ascension: Option<u32>,
+    #[serde(default)]
     moves: Option<Vec<WMove>>,
     #[serde(default)]
     innate_powers: Option<Vec<WInnate>>,
@@ -166,21 +218,21 @@ struct WRef {
 struct WEncounter {
     id: String,
     name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     room_type: String,
     #[serde(default)]
     is_weak: Option<bool>,
     #[serde(default)]
     tags: Option<Vec<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     monsters: Vec<WRef>,
 }
 
 #[derive(Deserialize)]
 struct WOption {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     title: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     description: String,
 }
 
@@ -202,13 +254,13 @@ struct WAct {
     index: u8,
     #[serde(default)]
     num_rooms: Option<u32>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     bosses: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     ancients: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     events: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     encounters: Vec<String>,
 }
 
@@ -355,6 +407,7 @@ fn map_monster(m: WMonster) -> Monster {
                 damage: mv.damage.as_ref().and_then(|d| d.normal),
                 hits: mv.damage.as_ref().and_then(|d| d.hit_count),
                 block: mv.block,
+                damage_asc: mv.damage.as_ref().and_then(|d| d.ascension),
             })
             .collect(),
         innate_powers: m
@@ -363,7 +416,37 @@ fn map_monster(m: WMonster) -> Monster {
             .into_iter()
             .map(|p| PowerAmount { power: p.power_id, amount: p.amount.unwrap_or(0) })
             .collect(),
+        hp_min_asc: m.min_hp_ascension,
+        hp_max_asc: m.max_hp_ascension,
     }
+}
+
+#[derive(Deserialize)]
+struct WAscension {
+    level: u32,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    description: String,
+}
+
+/// Reads the mechanical ascension rules from the level descriptions.
+/// A rule whose description is gone is switched off, not guessed.
+pub fn rules_from(levels: &[AscensionLevel]) -> Option<GameRules> {
+    let max = levels.iter().map(|l| l.level).max()?;
+    let find = |needles: &[&str]| {
+        levels.iter().find(|l| needles.iter().any(|n| spire_core::playbook::contains_ci(&l.text, n))).map(|l| l.level)
+    };
+    let defaults = GameRules::default();
+    Some(GameRules {
+        max_ascension: max,
+        fewer_potion_slot_from: find(&["less potion slot", "fewer potion slot"]),
+        cursed_start_from: find(&["cursed"]),
+        tougher_enemies_from: find(&["harder to kill"]),
+        deadlier_enemies_from: find(&["deadlier"]),
+        double_boss_from: find(&["2 bosses", "two bosses"]),
+        ..defaults
+    })
 }
 
 /// Builds a [`DataPack`] from one response per endpoint in [`ENDPOINTS`].
@@ -488,6 +571,15 @@ pub fn to_pack(
         })
         .collect();
 
+    let ascensions: Vec<AscensionLevel> = match responses.get("ascensions") {
+        Some(_) => parse::<WAscension>(responses, "ascensions")?
+            .into_iter()
+            .map(|a| AscensionLevel { level: a.level, name: a.name, text: strip_markup(&a.description) })
+            .collect(),
+        None => Vec::new(),
+    };
+    let rules = rules_from(&ascensions);
+
     let acts = acts
         .into_iter()
         .map(|a| Act {
@@ -499,6 +591,7 @@ pub fn to_pack(
             ancients: a.ancients.into_iter().map(EventId).collect(),
             events: a.events.into_iter().map(EventId).collect(),
             encounters: a.encounters.into_iter().map(EncounterId).collect(),
+            weak_fights: None,
         })
         .collect();
 
@@ -516,7 +609,18 @@ pub fn to_pack(
         encounters,
         events,
         acts,
+        ascensions,
+        rules,
     })
+}
+
+/// Reads `beta_version` from the `/api/beta/version` body.
+pub fn beta_version(body: &str) -> Option<String> {
+    #[derive(Deserialize)]
+    struct V {
+        beta_version: String,
+    }
+    serde_json::from_str::<V>(body).ok().map(|v| v.beta_version)
 }
 
 /// Picks the latest stable version from the `/api/versions` body.

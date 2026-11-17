@@ -409,19 +409,106 @@
     }
   ],
   "card_roles": {
+    "ALCHEMIZE": [
+      "consistency"
+    ],
+    "APOTHEOSIS": [
+      "consistency"
+    ],
+    "BEGONE": [
+      "scaling_damage"
+    ],
+    "BRACE": [
+      "scaling_damage"
+    ],
+    "BRIGHTEN_UP": [
+      "consistency"
+    ],
+    "CHAOS": [
+      "scaling_damage"
+    ],
+    "EIDOLON": [
+      "frontload_defense"
+    ],
+    "FLANKING": [
+      "consistency"
+    ],
+    "FLORESCENCE": [
+      "consistency"
+    ],
+    "FORBIDDEN_GRIMOIRE": [
+      "consistency"
+    ],
+    "GROWTH": [
+      "scaling_defense"
+    ],
+    "GUARDS": [
+      "frontload_defense"
+    ],
+    "IMITATION_LEARNING": [
+      "consistency"
+    ],
+    "JUDGEMENT": [
+      "frontload_damage"
+    ],
+    "KI_VERSE": [
+      "consistency"
+    ],
+    "KNIFE_TRAP": [
+      "scaling_damage"
+    ],
+    "LARGESSE": [
+      "consistency"
+    ],
+    "LOOP": [
+      "consistency"
+    ],
+    "MASTER_PLANNER": [
+      "consistency"
+    ],
+    "NOCK": [
+      "scaling_damage"
+    ],
+    "PRIMAL_FORCE": [
+      "scaling_damage"
+    ],
+    "QUIVER": [
+      "consistency"
+    ],
+    "ROYALTIES": [
+      "consistency"
+    ],
+    "SELF_DEPRECATE": [
+      "consistency"
+    ],
+    "SHOW_OFF": [
+      "scaling_damage"
+    ],
+    "SIGNAL_BOOST": [
+      "consistency"
+    ],
+    "SIMPLETON": [
+      "consistency"
+    ],
     "STAMPEDE": [
       "scaling_damage"
     ],
     "SYNCHRONIZE": [
       "scaling_damage"
     ],
-    "KNIFE_TRAP": [
-      "frontload_damage"
-    ],
-    "FORBIDDEN_GRIMOIRE": [
+    "THE_HANGED_MAN": [
       "consistency"
     ],
-    "MASTER_PLANNER": [
+    "THE_LOVERS": [
+      "consistency"
+    ],
+    "THE_MOON": [
+      "frontload_damage"
+    ],
+    "WELL_LAID_PLANS": [
+      "consistency"
+    ],
+    "YOGA": [
       "consistency"
     ]
   },

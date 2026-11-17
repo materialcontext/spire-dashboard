@@ -1,92 +1,155 @@
-//! Left panel: the deck, relics and potions as they stand.
+//! Left sidebar: the deck, relics and potions as they stand.
 
-use std::collections::BTreeMap;
-
-use eframe::egui::{self, RichText, Ui};
-use spire_core::analysis::deck::classify;
+use eframe::egui::{self, RichText, Sense, Ui, vec2};
+use spire_core::analysis::DeckRow;
 use spire_core::catalog::CardType;
-use spire_core::run::{Change, DeckCard};
+use spire_core::playbook::Role;
+use spire_core::run::Change;
 
 use crate::actions::Action;
 use crate::app::ViewCtx;
+use crate::style::{self, color::*};
+use crate::widgets::{culled, eyebrow, hairline, stripe};
 
 pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
     let s = v.state;
-    ui.heading(format!("Deck ({})", s.deck.len()));
-    ui.label(RichText::new("Hover a card for text. Buttons queue changes on the node log.").small().weak());
-
-    // Group identical cards: (type, name) → (deck card, count, roles).
-    let classified = classify(&s.deck, v.catalog, v.playbook);
-    let mut groups: BTreeMap<(CardType, String), (DeckCard, u32, String, String)> = BTreeMap::new();
-    for c in &classified {
-        let name = c.name();
-        let entry = groups.entry((c.card_type(), name)).or_insert_with(|| {
-            let roles: Vec<&str> = c.roles.iter().map(|r| r.short()).collect();
-            let text = c.card.map_or_else(
-                || "Not in the catalog".to_string(),
-                |card| format!("{} · cost {}\n{}", card.card_type.label(), card.cost_label(), card.text),
-            );
-            (c.deck.clone(), 0, roles.join(", "), text)
-        });
-        entry.1 += 1;
-    }
-
-    let mut current = None;
-    for ((t, name), (deck_card, count, roles, text)) in &groups {
-        if current != Some(*t) {
-            current = Some(*t);
-            ui.add_space(4.0);
-            ui.label(RichText::new(t.label()).strong());
-        }
-        ui.horizontal(|ui| {
-            let label = if *count > 1 { format!("{count}× {name}") } else { name.clone() };
-            let label = match &deck_card.enchantment {
-                Some(e) => format!("{label} [{}]", v.catalog.enchantment_name(e)),
-                None => label,
-            };
-            let hover = if roles.is_empty() { text.clone() } else { format!("{text}\n\nRoles: {roles}") };
-            ui.label(label).on_hover_text(hover);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("x").on_hover_text("Remove").clicked() {
-                    out.push(Action::Draft(Change::RemoveCard(deck_card.clone())));
-                }
-                if !deck_card.upgraded && ui.small_button("+").on_hover_text("Upgrade").clicked() {
-                    out.push(Action::Draft(Change::UpgradeCard(deck_card.clone())));
-                }
-                if !roles.is_empty() {
-                    ui.label(RichText::new(roles).small().weak());
-                }
-            });
-        });
-    }
-
     ui.add_space(8.0);
-    ui.separator();
-    ui.heading(format!("Relics ({})", s.relics.len()));
+    ui.horizontal(|ui| {
+        ui.label(eyebrow("Deck"));
+        ui.label(RichText::new(s.deck.len().to_string()).small().color(TEXT_FAINT));
+    });
+    hairline(ui);
+
+    // Rows are grouped once per run change (Dashboard::rows), not per frame.
+    let mut current = None;
+    for row in &v.dash.rows {
+        if current != Some(row.card_type) {
+            current = Some(row.card_type);
+            let count: u32 = v.dash.rows.iter().filter(|r| r.card_type == row.card_type).map(|r| r.count).sum();
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(format!("{}  {count}", type_plural(row.card_type)))
+                    .small()
+                    .color(style::card_type_color(row.card_type)),
+            );
+        }
+        culled(ui, ("deck-row", row), |ui| card_row(ui, v, row, out));
+    }
+
+    section(ui, "Relics", s.relics.len());
     for r in &s.relics {
         ui.horizontal(|ui| {
             let text = v.catalog.relics.get(r).map_or("", |x| x.text.as_str());
             ui.label(v.catalog.relic_name(r)).on_hover_text(text);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("x").on_hover_text("Lose relic").clicked() {
+                if ui.add(row_button("x")).on_hover_text("Lose relic").clicked() {
                     out.push(Action::Draft(Change::RemoveRelic(r.clone())));
                 }
             });
         });
     }
 
-    ui.add_space(8.0);
-    ui.separator();
-    ui.heading(format!("Potions ({}/{})", s.potions.len(), s.potion_slots));
+    section(ui, "Potions", s.potions.len());
+    if s.potions.is_empty() {
+        ui.label(RichText::new(format!("{} empty slots", s.potion_slots)).small().color(TEXT_FAINT));
+    }
     for p in &s.potions {
         ui.horizontal(|ui| {
             let text = v.catalog.potions.get(p).map_or("", |x| x.text.as_str());
-            ui.label(v.catalog.potion_name(p)).on_hover_text(text);
+            ui.label(RichText::new(v.catalog.potion_name(p)).color(INFO)).on_hover_text(text);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("used").clicked() {
+                if ui.add(row_button("Use")).on_hover_text("Mark as used").clicked() {
                     out.push(Action::Draft(Change::RemovePotion(p.clone())));
                 }
             });
         });
+    }
+    ui.add_space(12.0);
+}
+
+fn section(ui: &mut Ui, title: &str, count: usize) {
+    ui.add_space(14.0);
+    ui.horizontal(|ui| {
+        ui.label(eyebrow(title));
+        ui.label(RichText::new(count.to_string()).small().color(TEXT_FAINT));
+    });
+    hairline(ui);
+}
+
+fn type_plural(t: CardType) -> &'static str {
+    match t {
+        CardType::Attack => "Attacks",
+        CardType::Skill => "Skills",
+        CardType::Power => "Powers",
+        CardType::Status => "Statuses",
+        CardType::Curse => "Curses",
+        CardType::Quest => "Quests",
+        CardType::Other => "Other",
+    }
+}
+
+fn card_row(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        stripe(ui, style::card_type_color(row.card_type), 18.0);
+        let cost = v.catalog.cards.get(&row.card.card).map_or("?".to_string(), |c| c.cost_label());
+        ui.add_sized([14.0, 18.0], egui::Label::new(RichText::new(cost).small().color(ACCENT)));
+        let name = if row.count > 1 { format!("{}× {}", row.count, row.name) } else { row.name.clone() };
+        let color = if row.card.upgraded { GOOD } else { TEXT };
+        // Tooltip text is only built while hovered.
+        ui.label(RichText::new(name).color(color)).on_hover_ui(|ui| card_tooltip(ui, v, row));
+        if let Some(e) = &row.card.enchantment {
+            ui.label(RichText::new(v.catalog.enchantment_name(e)).small().color(INFO));
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+            // Frameless until hovered: framed buttons on every row were ~70
+            // filled rects per frame for little visual value.
+            if ui.add(row_button("x")).on_hover_text("Remove from deck").clicked() {
+                out.push(Action::Draft(Change::RemoveCard(row.card.clone())));
+            }
+            if !row.card.upgraded && ui.add(row_button("+")).on_hover_text("Upgrade").clicked() {
+                out.push(Action::Draft(Change::UpgradeCard(row.card.clone())));
+            }
+            ui.add_space(4.0);
+            role_marks(ui, &row.roles);
+        });
+    });
+}
+
+/// One small square per role the card fills, in that role's colour.
+fn role_marks(ui: &mut Ui, roles: &[Role]) {
+    for r in roles.iter().rev() {
+        let (rect, resp) = ui.allocate_exact_size(vec2(7.0, 7.0), Sense::hover());
+        ui.painter().rect_filled(rect, 0.0, style::role_color(*r));
+        resp.on_hover_text(r.label());
+    }
+}
+
+fn row_button(text: &str) -> egui::Button<'_> {
+    egui::Button::new(RichText::new(text).small().color(TEXT_FAINT)).frame_when_inactive(false)
+}
+
+fn card_tooltip(ui: &mut Ui, v: &ViewCtx, row: &DeckRow) {
+    match v.catalog.cards.get(&row.card.card) {
+        Some(card) => {
+            ui.label(RichText::new(&row.name).strong());
+            ui.label(
+                RichText::new(format!("{} · {:?} · cost {}", card.card_type.label(), card.rarity, card.cost_label()))
+                    .small()
+                    .color(TEXT_DIM),
+            );
+            let text = if row.card.upgraded { card.upgrade_text.as_ref().unwrap_or(&card.text) } else { &card.text };
+            ui.label(text);
+        }
+        None => {
+            ui.label("Not in the game data");
+        }
+    }
+    if !row.roles.is_empty() {
+        ui.add_space(4.0);
+        for r in &row.roles {
+            ui.label(RichText::new(r.label()).small().color(style::role_color(*r)));
+        }
     }
 }

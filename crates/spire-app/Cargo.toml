@@ -3,6 +3,7 @@ name = "spire-app"
 description = "egui dashboard for planning Slay the Spire 2 runs."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 
 [[bin]]
 name = "spire-dashboard"
@@ -12,6 +13,9 @@ path = "src/main.rs"
 spire-core.workspace = true
 spire-data.workspace = true
 eframe.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
 
 [lints]
 workspace = true

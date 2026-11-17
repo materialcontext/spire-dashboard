@@ -87,6 +87,13 @@ pub enum Condition {
     Not(Box<Condition>),
 }
 
+/// ASCII case-insensitive substring test without allocating. Non-ASCII
+/// characters must match exactly (game text is effectively ASCII).
+pub fn contains_ci(haystack: &str, needle: &str) -> bool {
+    let (h, n) = (haystack.as_bytes(), needle.as_bytes());
+    n.is_empty() || h.windows(n.len()).any(|w| w.eq_ignore_ascii_case(n))
+}
+
 impl Condition {
     pub fn matches(&self, card: &Card) -> bool {
         match self {
@@ -95,7 +102,7 @@ impl Condition {
             Condition::Draws => card.draw.is_some_and(|d| d > 0),
             Condition::GainsEnergy => card.energy.is_some_and(|e| e > 0),
             Condition::AppliesPower(p) => card.powers.iter().any(|x| x.power.eq_ignore_ascii_case(p)),
-            Condition::TextContains(s) => card.text.to_lowercase().contains(&s.to_lowercase()),
+            Condition::TextContains(s) => contains_ci(&card.text, s),
             Condition::Keyword(k) => card.keywords.iter().any(|x| x.eq_ignore_ascii_case(k)),
             Condition::CardType(t) => card.card_type == *t,
             Condition::Target(t) => card.target == *t,
@@ -251,17 +258,15 @@ impl Playbook {
     }
 
     pub fn sounds_like_group(&self, encounter_name: &str) -> bool {
-        let name = encounter_name.to_lowercase();
-        self.multi_enemy_names.iter().any(|w| name.contains(&w.to_lowercase()))
+        self.multi_enemy_names.iter().any(|w| contains_ci(encounter_name, w))
     }
 
     /// Opportunities found in a piece of event text.
     pub fn opportunities_in(&self, text: &str) -> Vec<Opportunity> {
-        let text = text.to_lowercase();
         let mut found: Vec<Opportunity> = self
             .opportunity_rules
             .iter()
-            .filter(|r| r.any_text.iter().any(|p| text.contains(&p.to_lowercase())))
+            .filter(|r| r.any_text.iter().any(|p| contains_ci(text, p)))
             .map(|r| r.opportunity)
             .collect();
         found.sort();

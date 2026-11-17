@@ -231,11 +231,20 @@ pub struct MonsterMove {
     pub hits: Option<u32>,
     #[serde(default)]
     pub block: Option<u32>,
+    /// Damage per hit at ascensions with deadlier enemies.
+    #[serde(default)]
+    pub damage_asc: Option<u32>,
 }
 
 impl MonsterMove {
     pub fn total_damage(&self) -> u32 {
-        self.damage.unwrap_or(0) * self.hits.unwrap_or(1).max(1)
+        self.total_damage_at(false)
+    }
+
+    /// Damage × hits, using the ascension value when `deadly` and known.
+    pub fn total_damage_at(&self, deadly: bool) -> u32 {
+        let per_hit = if deadly { self.damage_asc.or(self.damage) } else { self.damage };
+        per_hit.unwrap_or(0) * self.hits.unwrap_or(1).max(1)
     }
 
     pub fn intent_has(&self, word: &str) -> bool {
@@ -254,6 +263,23 @@ pub struct Monster {
     pub moves: Vec<MonsterMove>,
     #[serde(default)]
     pub innate_powers: Vec<PowerAmount>,
+    /// HP at ascensions with tougher enemies.
+    #[serde(default)]
+    pub hp_min_asc: Option<u32>,
+    #[serde(default)]
+    pub hp_max_asc: Option<u32>,
+}
+
+impl Monster {
+    /// `(min, max)` HP, using ascension values when `tough` and known.
+    pub fn hp_at(&self, tough: bool) -> (u32, u32) {
+        let (min, max) = if tough {
+            (self.hp_min_asc.unwrap_or(self.hp_min), self.hp_max_asc.or(self.hp_min_asc).or(self.hp_max))
+        } else {
+            (self.hp_min, self.hp_max)
+        };
+        (min, max.unwrap_or(min).max(min))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -358,6 +384,81 @@ pub struct Act {
     pub events: Vec<EventId>,
     #[serde(default)]
     pub encounters: Vec<EncounterId>,
+    /// Hallway fights drawn from the weak pool at the start of this act,
+    /// when measured from community runs.
+    #[serde(default)]
+    pub weak_fights: Option<u32>,
+}
+
+/// One ascension level as the game describes it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AscensionLevel {
+    pub level: u32,
+    pub name: String,
+    pub text: String,
+}
+
+/// Mechanical rules the dashboard models. Defaults are Slay the Spire 2
+/// (Codex ascension list, v0.113 beta); a data source may override them.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GameRules {
+    pub max_ascension: u32,
+    pub base_potion_slots: u32,
+    /// Ascension from which runs start with one fewer potion slot.
+    pub fewer_potion_slot_from: Option<u32>,
+    /// Ascension from which runs start with `start_curse` in the deck.
+    pub cursed_start_from: Option<u32>,
+    pub start_curse: Option<CardId>,
+    /// Ascension from which enemies use their ascension HP.
+    pub tougher_enemies_from: Option<u32>,
+    /// Ascension from which enemies use their ascension damage.
+    pub deadlier_enemies_from: Option<u32>,
+    /// Ascension from which the act at `double_boss_act` has two bosses.
+    pub double_boss_from: Option<u32>,
+    pub double_boss_act: u8,
+}
+
+impl Default for GameRules {
+    fn default() -> Self {
+        GameRules {
+            max_ascension: 10,
+            base_potion_slots: 3,
+            fewer_potion_slot_from: Some(4),
+            cursed_start_from: Some(5),
+            start_curse: Some(CardId::new("ASCENDERS_BANE")),
+            tougher_enemies_from: Some(8),
+            deadlier_enemies_from: Some(9),
+            double_boss_from: Some(10),
+            double_boss_act: 2,
+        }
+    }
+}
+
+impl GameRules {
+    fn at(from: Option<u32>, ascension: u32) -> bool {
+        from.is_some_and(|f| ascension >= f)
+    }
+
+    pub fn potion_slots(&self, ascension: u32) -> u32 {
+        self.base_potion_slots - u32::from(Self::at(self.fewer_potion_slot_from, ascension))
+    }
+
+    pub fn start_curse(&self, ascension: u32) -> Option<&CardId> {
+        self.start_curse.as_ref().filter(|_| Self::at(self.cursed_start_from, ascension))
+    }
+
+    pub fn tough_enemies(&self, ascension: u32) -> bool {
+        Self::at(self.tougher_enemies_from, ascension)
+    }
+
+    pub fn deadly_enemies(&self, ascension: u32) -> bool {
+        Self::at(self.deadlier_enemies_from, ascension)
+    }
+
+    pub fn double_boss(&self, ascension: u32, act_index: u8) -> bool {
+        act_index == self.double_boss_act && Self::at(self.double_boss_from, ascension)
+    }
 }
 
 /// Serialized, source-agnostic game data. Every list is optional so partial
@@ -380,6 +481,9 @@ pub struct DataPack {
     pub encounters: Vec<Encounter>,
     pub events: Vec<Event>,
     pub acts: Vec<Act>,
+    pub ascensions: Vec<AscensionLevel>,
+    /// Game rules, when the source knows them; otherwise StS2 defaults.
+    pub rules: Option<GameRules>,
 }
 
 impl DataPack {
@@ -421,6 +525,8 @@ pub struct Catalog {
     pub encounters: BTreeMap<EncounterId, Encounter>,
     pub events: BTreeMap<EventId, Event>,
     pub acts: BTreeMap<ActId, Act>,
+    pub ascensions: BTreeMap<u32, AscensionLevel>,
+    pub rules: GameRules,
 }
 
 fn merge<K: Ord, V>(map: &mut BTreeMap<K, V>, items: Vec<V>, key: impl Fn(&V) -> K) {
@@ -447,6 +553,10 @@ impl Catalog {
             merge(&mut cat.encounters, pack.encounters, |v| v.id.clone());
             merge(&mut cat.events, pack.events, |v| v.id.clone());
             merge(&mut cat.acts, pack.acts, |v| v.id.clone());
+            merge(&mut cat.ascensions, pack.ascensions, |v| v.level);
+            if let Some(rules) = pack.rules {
+                cat.rules = rules;
+            }
             cat
         })
     }

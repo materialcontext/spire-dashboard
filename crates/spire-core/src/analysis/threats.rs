@@ -25,12 +25,31 @@ pub struct ThreatProfile {
     pub statuses: bool,
 }
 
-fn lineup_profile<'a>(monsters: impl Iterator<Item = &'a crate::catalog::Monster>) -> ThreatProfile {
+/// Which ascension values enemies use in this run.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Scaling {
+    /// Ascension HP (StS2 A8+).
+    pub tough: bool,
+    /// Ascension damage (StS2 A9+).
+    pub deadly: bool,
+}
+
+impl Scaling {
+    pub fn for_run(state: &RunState, catalog: &Catalog) -> Scaling {
+        Scaling {
+            tough: catalog.rules.tough_enemies(state.ascension),
+            deadly: catalog.rules.deadly_enemies(state.ascension),
+        }
+    }
+}
+
+fn lineup_profile<'a>(monsters: impl Iterator<Item = &'a crate::catalog::Monster>, scaling: Scaling) -> ThreatProfile {
     monsters.fold(ThreatProfile::default(), |mut t, m| {
+        let (hp_min, hp_max) = m.hp_at(scaling.tough);
         t.enemies += 1;
-        t.hp_min += m.hp_min;
-        t.hp_max += m.hp_max.unwrap_or(m.hp_min);
-        let biggest = m.moves.iter().map(|mv| mv.total_damage()).max().unwrap_or(0);
+        t.hp_min += hp_min;
+        t.hp_max += hp_max;
+        let biggest = m.moves.iter().map(|mv| mv.total_damage_at(scaling.deadly)).max().unwrap_or(0);
         t.max_hit = t.max_hit.max(biggest);
         t.worst_turn += biggest;
         t.buffs |= m.moves.iter().any(|mv| mv.intent_has("buff"));
@@ -45,16 +64,16 @@ fn lineup_profile<'a>(monsters: impl Iterator<Item = &'a crate::catalog::Monster
 /// instance and spans all variants (HP from the smallest to the largest
 /// lineup, the worst turn of any). Without them, falls back to one of each
 /// listed type plus the playbook's name heuristic for groups.
-pub fn threat_profile(enc: &Encounter, catalog: &Catalog, playbook: &Playbook) -> ThreatProfile {
+pub fn threat_profile(enc: &Encounter, catalog: &Catalog, playbook: &Playbook, scaling: Scaling) -> ThreatProfile {
     let resolve =
         |ids: &'_ [crate::ids::MonsterId]| ids.iter().filter_map(|id| catalog.monsters.get(id)).collect::<Vec<_>>();
     let mut t = if enc.lineups.is_empty() {
-        let mut t = lineup_profile(resolve(&enc.monsters).into_iter());
+        let mut t = lineup_profile(resolve(&enc.monsters).into_iter(), scaling);
         t.group = playbook.sounds_like_group(&enc.name);
         t
     } else {
         let profiles: Vec<ThreatProfile> =
-            enc.lineups.iter().map(|l| lineup_profile(resolve(&l.monsters).into_iter())).collect();
+            enc.lineups.iter().map(|l| lineup_profile(resolve(&l.monsters).into_iter(), scaling)).collect();
         profiles.iter().fold(ThreatProfile { hp_min: u32::MAX, ..Default::default() }, |acc, p| ThreatProfile {
             enemies: acc.enemies.max(p.enemies),
             group: false,
@@ -148,11 +167,12 @@ pub fn preview(
     catalog: &Catalog,
     playbook: &Playbook,
     act_index: u8,
+    scaling: Scaling,
     deck: &DeckProfile,
     seen: bool,
 ) -> ThreatPreview {
     let plan = playbook.act(act_index);
-    let profile = threat_profile(enc, catalog, playbook);
+    let profile = threat_profile(enc, catalog, playbook, scaling);
     let checks = demands(&profile, enc.room, plan)
         .into_iter()
         .map(|d| DemandCheck {
@@ -196,12 +216,13 @@ pub fn next_threats(
         },
     };
 
-    let weak_phase = plan.is_some_and(|p| state.hallway_fights_in_act < p.weak_fights);
+    let _ = plan;
+    let weak_phase = state.hallway_fights_in_act < weak_fights(state, catalog, playbook);
     let pool: Vec<&Encounter> = match room {
-        RoomType::Boss => match &state.boss {
-            Some(b) => catalog.encounters.get(b).into_iter().collect(),
-            None => catalog.encounters_in(act, RoomType::Boss).collect(),
-        },
+        RoomType::Boss => {
+            let known: Vec<&Encounter> = state.bosses().filter_map(|b| catalog.encounters.get(b)).collect();
+            if known.is_empty() { catalog.encounters_in(act, RoomType::Boss).collect() } else { known }
+        }
         RoomType::Elite => catalog.encounters_in(act, RoomType::Elite).collect(),
         RoomType::Monster => {
             let all: Vec<&Encounter> = catalog.encounters_in(act, RoomType::Monster).collect();
@@ -212,8 +233,23 @@ pub fn next_threats(
 
     let mut out: Vec<ThreatPreview> = pool
         .into_iter()
-        .map(|e| preview(e, catalog, playbook, state.act_index, deck, state.encounters_seen.contains(&e.id)))
+        .map(|e| {
+            let seen = state.encounters_seen.contains(&e.id);
+            preview(e, catalog, playbook, state.act_index, Scaling::for_run(state, catalog), deck, seen)
+        })
         .collect();
     out.sort_by(|a, b| a.seen.cmp(&b.seen).then(a.worst().cmp(&b.worst())).then(a.name.cmp(&b.name)));
     out
+}
+
+/// Hallway fights drawn from the weak pool this act: measured from community
+/// runs when the data has it, else the playbook's value.
+pub fn weak_fights(state: &RunState, catalog: &Catalog, playbook: &Playbook) -> u32 {
+    state
+        .act
+        .as_ref()
+        .and_then(|a| catalog.acts.get(a))
+        .and_then(|a| a.weak_fights)
+        .or_else(|| playbook.act(state.act_index).map(|p| p.weak_fights))
+        .unwrap_or(0)
 }

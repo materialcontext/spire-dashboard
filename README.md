@@ -1,7 +1,7 @@
 # Spire Dashboard
 
-A desktop companion for **Slay the Spire 2** that helps you learn and play the
-*macro* game: what your deck is missing, what the next fight will ask of it,
+A desktop companion for **Slay the Spire 2** (beta branch) that helps you learn
+and play the *macro* game: what your deck is missing, what the next fight will ask of it,
 which `?` events to hope for, and what the act boss demands.
 
 It never reads the game. After each node you tell it what happened: the fight,
@@ -48,9 +48,23 @@ The run saves after every change and reloads on start.
 
 ## Game data
 
-The app ships with a full snapshot of the game data (cards, characters, relics,
-potions, enchantments, monsters, encounters, events, acts), taken from the
-[Spire Codex](https://spire-codex.com) API. It works offline.
+The app ships with a full snapshot of the **StS2 beta branch** (cards,
+characters including The Fool, relics, potions, enchantments, monsters,
+encounters, events, acts and ascensions), taken from the
+[Spire Codex](https://spire-codex.com) API. It works offline. The Data window
+can switch to the stable branch.
+
+Ascension follows StS2 (A0–A10), with the mechanical effects modelled:
+
+| Level | Effect |
+|---|---|
+| A4 | One fewer potion slot |
+| A5 | Start with Ascender's Bane |
+| A8 | Threats use enemies' ascension HP |
+| A9 | Threats use enemies' ascension damage |
+| A10 | Two Act 3 bosses |
+
+These are read from the ascension data itself.
 
 Exact enemy lineups ("3× Corpse Slug", "3 of 5 Ruby Raiders", "Fogmog +
 Eye With Teeth mid-fight") and average damage taken per fight are aggregated
@@ -101,7 +115,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-See `docs/ARCHITECTURE.md` for the design and extension points.
+See `docs/ARCHITECTURE.md` for the design and extension points, and
+`docs/PERFORMANCE.md` for benchmarks and the rules that keep frames cheap
+on weak hardware.
 
 Game data comes from Spire Codex (community-maintained). Not affiliated with
 Mega Crit.

@@ -3,6 +3,7 @@ name = "spire-data"
 description = "Bundled data, local storage, and data-source adapters (Spire Codex)."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 spire-core.workspace = true

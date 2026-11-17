@@ -139,6 +139,74 @@ impl Store {
     pub fn save_run(&self, run: &Run) -> Result<(), DataError> {
         self.write_json(RUN, run)
     }
+
+    /// A writer thread for this store's run file (see [`RunSaver`]).
+    pub fn run_saver(&self) -> RunSaver {
+        RunSaver::spawn(self.clone())
+    }
+}
+
+/// Saves the run off the UI thread. Slow storage (SD cards, spinning disks,
+/// network homes) can take tens of milliseconds per write; the UI should
+/// never wait for it.
+///
+/// Serialising happens on the caller (microseconds); only the write moves.
+/// Pending saves coalesce: if several arrive while one is being written,
+/// only the newest is written next. Dropping the saver flushes and joins,
+/// so the last state reaches disk on exit.
+pub struct RunSaver {
+    tx: Option<std::sync::mpsc::Sender<String>>,
+    errors: std::sync::mpsc::Receiver<String>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl RunSaver {
+    fn spawn(store: Store) -> RunSaver {
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let (err_tx, errors) = std::sync::mpsc::channel();
+        let thread = std::thread::Builder::new()
+            .name("run-saver".into())
+            .spawn(move || {
+                while let Ok(mut json) = rx.recv() {
+                    // Skip to the newest pending save.
+                    while let Ok(newer) = rx.try_recv() {
+                        json = newer;
+                    }
+                    if let Err(e) = store.write(RUN, &json) {
+                        let _ = err_tx.send(e.to_string());
+                    }
+                }
+            })
+            .ok();
+        RunSaver { tx: Some(tx), errors, thread }
+    }
+
+    /// Queues a save. Returns an error only if serialising fails.
+    pub fn save(&self, run: &Run) -> Result<(), DataError> {
+        let json = serde_json::to_string_pretty(run).map_err(|e| DataError::Parse(e.to_string()))?;
+        match (&self.tx, &self.thread) {
+            (Some(tx), Some(_)) => {
+                let _ = tx.send(json);
+                Ok(())
+            }
+            // No thread (spawn failed): fall back to a blocking write.
+            _ => Err(DataError::Io(std::io::Error::other("run saver thread is not running"))),
+        }
+    }
+
+    /// Errors from finished writes, oldest first.
+    pub fn take_errors(&self) -> Vec<String> {
+        self.errors.try_iter().collect()
+    }
+}
+
+impl Drop for RunSaver {
+    fn drop(&mut self) {
+        drop(self.tx.take());
+        if let Some(t) = self.thread.take() {
+            let _ = t.join();
+        }
+    }
 }
 
 #[cfg(test)]
@@ -175,6 +243,23 @@ mod tests {
         let loaded = store.load();
         assert_eq!(loaded.warnings.len(), 2);
         assert!(!loaded.catalog.cards.is_empty());
+    }
+
+    #[test]
+    fn saver_writes_latest_run_on_drop() {
+        let store = temp_store("saver");
+        let cat = Catalog::from_layers([bundled_pack()]);
+        let character = cat.characters.keys().next().unwrap().clone();
+        let mut run = Run::default();
+        run.push(RunEvent::start(&cat, &character, 0).unwrap());
+        {
+            let saver = store.run_saver();
+            for gold in 0..50 {
+                run.push(RunEvent::Adjust(vec![spire_core::run::Change::SetGold(gold)]));
+                saver.save(&run).unwrap();
+            }
+        }
+        assert_eq!(store.load_run().unwrap().unwrap(), run);
     }
 
     #[test]

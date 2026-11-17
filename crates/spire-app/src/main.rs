@@ -1,12 +1,12 @@
 //! StS2 macro dashboard.
 
-mod actions;
-mod app;
-mod draft;
-mod views;
-mod widgets;
+use spire_app::{app::SpireApp, bench::RenderBench};
 
 fn main() -> eframe::Result {
+    let _ = spire_app::bench::PROCESS_START.set(std::time::Instant::now());
+    // `SPIRE_BENCH=<scenario>[:frames]` renders a scenario continuously,
+    // prints frame timings, and exits. See `bench.rs`.
+    let bench = std::env::var("SPIRE_BENCH").ok().and_then(|s| RenderBench::parse(&s));
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Spire Dashboard")
@@ -14,5 +14,27 @@ fn main() -> eframe::Result {
             .with_min_inner_size([900.0, 600.0]),
         ..Default::default()
     };
-    eframe::run_native("spire-dashboard", options, Box::new(|cc| Ok(Box::new(app::SpireApp::new(cc)))))
+    let mut options = options;
+    // The UI is flat colours with no gradients, so dithering only costs
+    // per-pixel shader work.
+    options.dithering = false;
+    // Benchmarks measure frame cost, so don't wait for the display.
+    options.glow_options.vsync = bench.is_none();
+    eframe::run_native(
+        "spire-dashboard",
+        options,
+        Box::new(move |cc| {
+            spire_app::style::configure(&cc.egui_ctx);
+            let idle = std::env::var("SPIRE_IDLE_CHECK").ok().and_then(|s| s.parse::<f64>().ok());
+            let app: Box<dyn eframe::App> = match (bench, idle) {
+                (Some(b), _) => Box::new(b.into_app()),
+                (None, Some(secs)) => Box::new(spire_app::bench::IdleCheckApp::new(
+                    SpireApp::from_store(spire_data::store::Store::default_location()),
+                    secs,
+                )),
+                (None, None) => Box::new(SpireApp::from_store(spire_data::store::Store::default_location())),
+            };
+            Ok(app)
+        }),
+    )
 }

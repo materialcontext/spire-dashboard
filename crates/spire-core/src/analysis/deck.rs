@@ -40,6 +40,38 @@ pub fn classify<'a>(deck: &'a [DeckCard], catalog: &'a Catalog, playbook: &Playb
         .collect()
 }
 
+/// Identical deck cards grouped for display: one row per (type, card,
+/// upgrade, enchantment), in type then name order.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct DeckRow {
+    pub card: DeckCard,
+    pub card_type: CardType,
+    /// Display name, with `+` when upgraded.
+    pub name: String,
+    pub count: u32,
+    pub roles: Vec<Role>,
+    pub known: bool,
+}
+
+pub fn deck_rows(cards: &[ClassifiedCard<'_>]) -> Vec<DeckRow> {
+    let mut rows: BTreeMap<(CardType, String, Option<String>), DeckRow> = BTreeMap::new();
+    for c in cards {
+        let name = c.name();
+        let enchant = c.deck.enchantment.as_ref().map(|e| e.to_string());
+        rows.entry((c.card_type(), name.clone(), enchant))
+            .or_insert_with(|| DeckRow {
+                card: c.deck.clone(),
+                card_type: c.card_type(),
+                name,
+                count: 0,
+                roles: c.roles.clone(),
+                known: c.card.is_some(),
+            })
+            .count += 1;
+    }
+    rows.into_values().collect()
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct DeckProfile {
     pub total: u32,

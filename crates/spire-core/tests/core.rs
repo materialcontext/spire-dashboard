@@ -44,8 +44,11 @@ fn monster(id: &str, hp: u32, hit: u32, intent: &str) -> Monster {
             damage: Some(hit),
             hits: None,
             block: None,
+            damage_asc: Some(hit + 5),
         }],
         innate_powers: vec![],
+        hp_min_asc: Some(hp + 10),
+        hp_max_asc: None,
     }
 }
 
@@ -129,6 +132,7 @@ fn catalog() -> Catalog {
             ancients: vec![],
             events: vec![EventId::new("SHRINE")],
             encounters: vec![],
+            weak_fights: None,
         }],
         ..Default::default()
     };
@@ -324,7 +328,7 @@ fn dashboard_advice_flags_gaps_and_boss() {
     let pb = playbook();
     let s = started(&cat).state();
     let d = Dashboard::compute(&s, &cat, &pb);
-    assert!(d.boss.is_some());
+    assert_eq!(d.bosses.len(), 1);
     assert!(d.advice.iter().any(|a| a.severity == Severity::Urgent));
     assert!(d.advice.iter().any(|a| a.text == "Take fights."));
     assert_eq!(d.threats.len(), 3);
@@ -362,7 +366,7 @@ fn known_lineups_count_every_monster() {
     let cat = catalog();
     let pb = playbook();
     let mut enc = cat.encounters[&EncounterId::new("SLIMES_WEAK")].clone();
-    let before = threat_profile(&enc, &cat, &pb);
+    let before = threat_profile(&enc, &cat, &pb, Default::default());
     assert_eq!(before.enemies, 1);
 
     enc.lineups = vec![
@@ -370,10 +374,79 @@ fn known_lineups_count_every_monster() {
         Lineup { monsters: vec!["SLIME".into(), "CULTIST".into()], share: 0.4 },
     ];
     enc.spawns = vec!["CULTIST".into()];
-    let t = threat_profile(&enc, &cat, &pb);
+    let t = threat_profile(&enc, &cat, &pb, Default::default());
     assert_eq!(t.enemies, 3);
     assert_eq!((t.hp_min, t.hp_max), (60, 70), "3 slimes = 60, slime + cultist = 70");
     assert_eq!(t.worst_turn, 15);
     assert!(t.summons);
     assert_eq!(cat.lineup_label(&enc.lineups[0]), "3× SLIME");
+}
+
+#[test]
+fn deck_rows_group_identical_cards() {
+    use spire_core::analysis::deck::{classify, deck_rows};
+    let cat = catalog();
+    let pb = playbook();
+    let mut up = DeckCard::new("STRIKE".into());
+    up.upgraded = true;
+    let deck = vec![DeckCard::new("STRIKE".into()), DeckCard::new("STRIKE".into()), up, DeckCard::new("DEFEND".into())];
+    let rows = deck_rows(&classify(&deck, &cat, &pb));
+    let view: Vec<(&str, u32)> = rows.iter().map(|r| (r.name.as_str(), r.count)).collect();
+    assert_eq!(view, [("STRIKE", 2), ("STRIKE+", 1), ("DEFEND", 1)]);
+}
+
+#[test]
+fn case_insensitive_contains_matches_without_allocating() {
+    use spire_core::playbook::contains_ci;
+    assert!(contains_ci("Gain 5 Block.", "block"));
+    assert!(contains_ci("A Pair of Nibbits", "PAIR"));
+    assert!(!contains_ci("Deal 6 damage.", "block"));
+    assert!(contains_ci("anything", ""));
+}
+
+#[test]
+fn ascension_rules_shape_the_start() {
+    let mut cat = catalog();
+    cat.rules.start_curse = Some(CardId::new("REGRET"));
+    let start = |asc| {
+        let mut run = Run::default();
+        run.push(RunEvent::start(&cat, &CharacterId::new("HERO"), asc).unwrap());
+        run.state()
+    };
+    let a0 = start(0);
+    assert_eq!((a0.potion_slots, a0.deck.len()), (3, 3));
+    let a4 = start(4);
+    assert_eq!((a4.potion_slots, a4.deck.len()), (2, 3), "A4: one fewer potion slot");
+    let a5 = start(5);
+    assert_eq!(a5.deck.len(), 4, "A5: starts cursed");
+    assert!(a5.deck.iter().any(|c| c.card == CardId::new("REGRET")));
+    assert_eq!(start(20).ascension, 10, "StS2 ascension tops out at 10");
+}
+
+#[test]
+fn high_ascension_uses_ascension_stats() {
+    use spire_core::analysis::threats::{Scaling, threat_profile};
+    let cat = catalog();
+    let pb = playbook();
+    let enc = &cat.encounters[&EncounterId::new("BRUTE_ELITE")];
+    let base = threat_profile(enc, &cat, &pb, Scaling::default());
+    let tough = threat_profile(enc, &cat, &pb, Scaling { tough: true, deadly: false });
+    let deadly = threat_profile(enc, &cat, &pb, Scaling { tough: true, deadly: true });
+    assert_eq!((base.hp_min, base.worst_turn), (120, 30));
+    assert_eq!((tough.hp_min, tough.worst_turn), (130, 30), "A8: tougher enemies");
+    assert_eq!(deadly.worst_turn, 35, "A9: deadlier enemies");
+}
+
+#[test]
+fn double_boss_act_tracks_both_bosses() {
+    let cat = catalog();
+    let mut run = started(&cat);
+    run.push(RunEvent::SetSecondBoss(EncounterId::new("BRUTE_ELITE")));
+    let s = run.state();
+    assert_eq!(s.bosses().count(), 2);
+    assert!(cat.rules.double_boss(10, 2));
+    assert!(!cat.rules.double_boss(9, 2));
+    // Entering a new act clears both.
+    run.push(RunEvent::EnterAct { act: ActId::new("ACT1"), index: 1, boss: None });
+    assert_eq!(run.state().bosses().count(), 0);
 }
