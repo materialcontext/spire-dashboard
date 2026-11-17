@@ -421,6 +421,9 @@
     "CHAOS": [
       "scaling_damage"
     ],
+    "EIDOLON": [
+      "frontload_defense"
+    ],
     "FLANKING": [
       "consistency"
     ],
