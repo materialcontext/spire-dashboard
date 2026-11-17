@@ -26,5 +26,7 @@ pub enum Action {
     ReloadData,
     SetSourceUrl(String),
     SetChannel(spire_data::codex::Channel),
+    SetLook(&'static str),
+    SetLargeText(bool),
     ToggleDataWindow,
 }

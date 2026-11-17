@@ -24,7 +24,13 @@ fn main() -> eframe::Result {
         "spire-dashboard",
         options,
         Box::new(move |cc| {
-            spire_app::style::configure(&cc.egui_ctx);
+            // SPIRE_LOOK overrides the saved appearance (for reviews and screenshots).
+            let settings = spire_data::store::Store::default_location().settings();
+            // SPIRE_LARGE=1 forces Larger text on (screenshots); else the saved choice.
+            let large = std::env::var("SPIRE_LARGE").map_or(settings.large_text, |v| v == "1");
+            spire_app::style::set_large(&cc.egui_ctx, large);
+            let look = std::env::var("SPIRE_LOOK").ok().or(settings.look);
+            spire_app::style::set_look(&cc.egui_ctx, look.as_deref().unwrap_or(spire_app::style::DEFAULT_LOOK));
             let idle = std::env::var("SPIRE_IDLE_CHECK").ok().and_then(|s| s.parse::<f64>().ok());
             let app: Box<dyn eframe::App> = match (bench, idle) {
                 (Some(b), _) => Box::new(b.into_app()),

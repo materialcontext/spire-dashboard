@@ -253,6 +253,20 @@ impl SpireApp {
                     self.note(format!("Could not save settings: {e}"));
                 }
             }
+            Action::SetLook(name) => {
+                crate::style::set_look(ctx, name);
+                self.settings.look = Some(name.to_string());
+                if let Err(e) = self.store.save_settings(&self.settings) {
+                    self.note(format!("Could not save settings: {e}"));
+                }
+            }
+            Action::SetLargeText(on) => {
+                crate::style::set_large(ctx, on);
+                self.settings.large_text = on;
+                if let Err(e) = self.store.save_settings(&self.settings) {
+                    self.note(format!("Could not save settings: {e}"));
+                }
+            }
             Action::SetChannel(channel) => {
                 if let Source::SpireCodex { channel: c, .. } = &mut self.settings.source {
                     *c = channel;
@@ -270,6 +284,7 @@ impl SpireApp {
     /// One frame of UI: layout, then apply the actions it produced.
     pub fn frame(&mut self, ui: &mut egui::Ui) {
         self.poll_update();
+        crate::style::set_character(ui.ctx(), self.state.character.as_ref().map(|c| c.as_str()));
         for e in self.saver.take_errors() {
             self.note(format!("Could not save the run: {e}"));
         }

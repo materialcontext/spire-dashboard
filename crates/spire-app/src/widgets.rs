@@ -10,8 +10,9 @@ use crate::style::color::*;
 /// and a hairline under the header. Outlined rather than filled: borders
 /// cost a few pixels to draw, fills cost their whole area.
 pub fn panel<R>(ui: &mut Ui, title: &str, note: Option<&str>, add: impl FnOnce(&mut Ui) -> R) -> R {
-    egui::Frame::new()
-        .stroke(Stroke::new(1.0, BORDER))
+    let look = crate::style::current();
+    let shown = egui::Frame::new()
+        .stroke(Stroke::new(look.border, border()))
         .inner_margin(egui::Margin { left: 14, right: 14, top: 10, bottom: 12 })
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -19,25 +20,30 @@ pub fn panel<R>(ui: &mut Ui, title: &str, note: Option<&str>, add: impl FnOnce(&
                 ui.label(eyebrow(title));
                 if let Some(note) = note {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(RichText::new(note).small().color(TEXT_FAINT));
+                        ui.label(RichText::new(note).small().color(text_faint()));
                     });
                 }
             });
             hairline(ui);
             add(ui)
-        })
-        .inner
+        });
+    if look.glow {
+        // One faint outer outline: reads as a glow for a few hundred pixels.
+        let rect = shown.response.rect.expand(2.0);
+        ui.painter().rect_stroke(rect, 0.0, Stroke::new(2.0, border_hi().gamma_multiply(0.35)), StrokeKind::Outside);
+    }
+    shown.inner
 }
 
 /// Uppercase, small, dimmed label used for section titles.
 pub fn eyebrow(text: &str) -> RichText {
-    RichText::new(text.to_uppercase()).small().strong().color(TEXT_DIM)
+    RichText::new(text.to_uppercase()).small().family(crate::style::strong_family()).color(text_dim())
 }
 
 /// A horizontal 1px rule across the available width.
 pub fn hairline(ui: &mut Ui) {
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
-    ui.painter().hline(rect.x_range(), rect.center().y, Stroke::new(1.0, BORDER));
+    ui.painter().hline(rect.x_range(), rect.center().y, Stroke::new(1.0, border()));
     ui.add_space(4.0);
 }
 
@@ -50,6 +56,9 @@ pub fn chip(ui: &mut Ui, text: impl Into<String>, color: Color32) -> egui::Respo
     let (rect, response) = ui.allocate_exact_size(galley.size() + 2.0 * PAD, Sense::hover());
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
+        if crate::style::tinted_chips() {
+            painter.rect_filled(rect, 0.0, color.gamma_multiply(0.18));
+        }
         painter.rect_stroke(rect, 0.0, Stroke::new(1.0, color.gamma_multiply(0.7)), StrokeKind::Inside);
         painter.galley(rect.min + PAD, galley, color);
     }
@@ -60,8 +69,8 @@ pub fn chip(ui: &mut Ui, text: impl Into<String>, color: Color32) -> egui::Respo
 pub fn stat(ui: &mut Ui, caption: &str, value: impl Into<String>, value_color: Color32) {
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 0.0;
-        ui.label(RichText::new(caption.to_uppercase()).small().color(TEXT_FAINT));
-        ui.label(RichText::new(value).strong().color(value_color));
+        ui.label(RichText::new(caption.to_uppercase()).small().color(text_faint()));
+        ui.label(RichText::new(value).family(crate::style::strong_family()).color(value_color));
     });
 }
 
@@ -70,7 +79,7 @@ pub fn hp_bar(ui: &mut Ui, hp: i32, max: i32, width: f32) {
     let fraction = if max > 0 { (hp as f32 / max as f32).clamp(0.0, 1.0) } else { 0.0 };
     let (rect, _) = ui.allocate_exact_size(vec2(width, 20.0), Sense::hover());
     let painter = ui.painter();
-    painter.rect_stroke(rect, 0.0, Stroke::new(1.0, BORDER_HI), StrokeKind::Inside);
+    painter.rect_stroke(rect, 0.0, Stroke::new(1.0, border_hi()), StrokeKind::Inside);
     let fill = Rect::from_min_size(rect.min + vec2(2.0, 2.0), vec2((width - 4.0) * fraction, rect.height() - 4.0));
     painter.rect_filled(fill, 0.0, crate::style::hp_color(fraction).gamma_multiply(0.75));
     painter.text(
@@ -78,7 +87,7 @@ pub fn hp_bar(ui: &mut Ui, hp: i32, max: i32, width: f32) {
         egui::Align2::CENTER_CENTER,
         format!("{hp} / {max}"),
         egui::TextStyle::Small.resolve(ui.style()),
-        Color32::WHITE,
+        text(),
     );
 }
 
@@ -88,9 +97,9 @@ pub fn slots(ui: &mut Ui, held: usize, total: u32) {
     for i in 0..total as usize {
         let (rect, _) = ui.allocate_exact_size(vec2(size, size), Sense::hover());
         if i < held {
-            ui.painter().rect_filled(rect, 0.0, INFO);
+            ui.painter().rect_filled(rect, 0.0, info());
         } else {
-            ui.painter().rect_stroke(rect, 0.0, Stroke::new(1.0, BORDER_HI), StrokeKind::Inside);
+            ui.painter().rect_stroke(rect, 0.0, Stroke::new(1.0, border_hi()), StrokeKind::Inside);
         }
     }
 }
@@ -102,10 +111,10 @@ pub fn segmented<T: PartialEq + Copy>(ui: &mut Ui, value: &mut T, options: &[(T,
         ui.spacing_mut().item_spacing.x = 4.0;
         for (opt, label) in options {
             let selected = *value == *opt;
-            let text = RichText::new(*label).color(if selected { BG } else { TEXT });
+            let text = RichText::new(*label).color(if selected { bg() } else { text() });
             let button = egui::Button::new(text)
-                .fill(if selected { ACCENT } else { Color32::TRANSPARENT })
-                .stroke(Stroke::new(1.0, if selected { ACCENT } else { BORDER }));
+                .fill(if selected { accent() } else { Color32::TRANSPARENT })
+                .stroke(Stroke::new(1.0, if selected { accent() } else { border() }));
             if ui.add(button).clicked() && !selected {
                 *value = *opt;
                 changed = true;
@@ -117,9 +126,10 @@ pub fn segmented<T: PartialEq + Copy>(ui: &mut Ui, value: &mut T, options: &[(T,
 
 /// The single most important action in a panel.
 pub fn primary_button(ui: &mut Ui, text: &str, enabled: bool) -> egui::Response {
-    let button = egui::Button::new(RichText::new(text).strong().color(if enabled { BG } else { TEXT_FAINT }))
-        .fill(if enabled { ACCENT } else { Color32::TRANSPARENT })
-        .stroke(if enabled { Stroke::NONE } else { Stroke::new(1.0, BORDER) })
+    let label = RichText::new(text).family(crate::style::strong_family());
+    let button = egui::Button::new(label.color(if enabled { bg() } else { text_faint() }))
+        .fill(if enabled { accent() } else { Color32::TRANSPARENT })
+        .stroke(if enabled { Stroke::NONE } else { Stroke::new(1.0, border()) })
         .min_size(vec2(ui.available_width(), 32.0));
     ui.add_enabled(enabled, button)
 }
@@ -128,12 +138,12 @@ pub fn primary_button(ui: &mut Ui, text: &str, enabled: bool) -> egui::Response 
 /// segment after it, and an optional target tick.
 pub fn bar(ui: &mut Ui, label: &str, value: u32, extra: u32, max: u32, target: Option<u32>, color: Color32) {
     ui.horizontal(|ui| {
-        ui.add_sized([150.0, 18.0], egui::Label::new(RichText::new(label).color(TEXT_DIM)).truncate());
+        ui.add_sized([150.0, 18.0], egui::Label::new(RichText::new(label).color(text_dim())).truncate());
         let width = (ui.available_width() - 64.0).max(60.0);
         let (rect, _) = ui.allocate_exact_size(vec2(width, 10.0), Sense::hover());
         let painter = ui.painter_at(rect.expand(3.0));
         let max = max.max(1) as f32;
-        painter.rect_filled(rect, 0.0, SURFACE);
+        painter.rect_filled(rect, 0.0, surface());
         let frac = |n: u32| (n as f32 / max).min(1.0) * rect.width();
         let main = Rect::from_min_size(rect.min, vec2(frac(value), rect.height()));
         painter.rect_filled(main, 0.0, color);
@@ -146,7 +156,7 @@ pub fn bar(ui: &mut Ui, label: &str, value: u32, extra: u32, max: u32, target: O
         }
         if let Some(t) = target {
             let x = rect.min.x + frac(t);
-            painter.vline(x, (rect.min.y - 3.0)..=(rect.max.y + 3.0), Stroke::new(2.0, TEXT));
+            painter.vline(x, (rect.min.y - 3.0)..=(rect.max.y + 3.0), Stroke::new(2.0, text()));
         }
         let text = match (extra, target) {
             (0, Some(t)) => format!("{value} / {t}"),
@@ -155,7 +165,7 @@ pub fn bar(ui: &mut Ui, label: &str, value: u32, extra: u32, max: u32, target: O
             (e, None) => format!("{value} +{e}"),
         };
         let met = target.is_none_or(|t| value >= t);
-        ui.label(RichText::new(text).small().color(if met { TEXT } else { WARN }));
+        ui.label(RichText::new(text).small().color(if met { crate::style::color::text() } else { warn() }));
     });
 }
 
@@ -167,14 +177,14 @@ pub fn stripe(ui: &mut Ui, color: Color32, height: f32) {
 
 pub fn coverage_color(c: Coverage) -> Color32 {
     match c {
-        Coverage::Missing => BAD,
-        Coverage::Thin => WARN,
-        Coverage::Covered => GOOD,
+        Coverage::Missing => bad(),
+        Coverage::Thin => warn(),
+        Coverage::Covered => good(),
     }
 }
 
 pub fn opportunity_color(o: Opportunity) -> Color32 {
-    if o.is_risk() { WARN } else { INFO }
+    if o.is_risk() { warn() } else { info() }
 }
 
 /// A search box with a short list of matches. Returns the picked id.
@@ -192,7 +202,7 @@ pub fn search_pick<'a>(
     let mut picked = None;
     // Allocation-free match; stops scanning after the eighth hit.
     let matches = items.filter(|(_, name, _)| contains_ci(name, q)).take(8);
-    egui::Frame::new().stroke(Stroke::new(1.0, BORDER)).inner_margin(4).show(ui, |ui| {
+    egui::Frame::new().stroke(Stroke::new(1.0, border())).inner_margin(4).show(ui, |ui| {
         ui.set_width(ui.available_width());
         let mut any = false;
         for (id, name, detail) in matches {
@@ -202,7 +212,7 @@ pub fn search_pick<'a>(
             }
         }
         if !any {
-            ui.label(RichText::new("No matches").small().color(TEXT_FAINT));
+            ui.label(RichText::new("No matches").small().color(text_faint()));
         }
     });
     if picked.is_some() {

@@ -19,13 +19,44 @@ pub fn window(
     out: &mut Vec<Action>,
 ) {
     let mut open = true;
-    egui::Window::new(RichText::new("Game data").strong())
+    egui::Window::new(RichText::new("Settings").family(crate::style::strong_family()))
         .open(&mut open)
         .default_width(520.0)
         .resizable(false)
         .collapsible(false)
         .show(ctx, |ui| {
-            ui.label(eyebrow("Loaded"));
+            ui.label(eyebrow("Appearance"));
+            hairline(ui);
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                let current = crate::style::current().name;
+                for look in crate::style::LOOKS {
+                    let selected = look.name == current;
+                    let label = RichText::new(look.label).color(if selected { bg() } else { text() });
+                    let button = egui::Button::new(label)
+                        .fill(if selected { accent() } else { egui::Color32::TRANSPARENT })
+                        .stroke(egui::Stroke::new(1.0, if selected { accent() } else { border() }));
+                    if ui.add(button).on_hover_text(look.blurb).clicked() && !selected {
+                        out.push(Action::SetLook(look.name));
+                    }
+                }
+            });
+            ui.label(RichText::new(crate::style::current().blurb).small().color(text_dim()));
+            ui.add_space(4.0);
+            let mut large = crate::style::large();
+            if ui.checkbox(&mut large, "Larger text").changed() {
+                out.push(Action::SetLargeText(large));
+            }
+            ui.label(
+                RichText::new(
+                    "Bigger type, roomier spacing, filled chips and brighter secondary text. Works with any look.",
+                )
+                .small()
+                .color(text_faint()),
+            );
+            ui.add_space(10.0);
+
+            ui.label(eyebrow("Game data"));
             hairline(ui);
             for (i, l) in v.catalog.layers.iter().enumerate() {
                 let role = if i == 0 {
@@ -36,15 +67,15 @@ pub fn window(
                     "Downloaded"
                 };
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(role).strong().color(TEXT));
+                    ui.label(RichText::new(role).strong().color(text()));
                     if let Some(g) = &l.game_version {
-                        ui.label(RichText::new(g).small().color(ACCENT));
+                        ui.label(RichText::new(g).small().color(accent()));
                     }
                     if let Some(t) = &l.fetched_at {
-                        ui.label(RichText::new(t).small().color(TEXT_FAINT));
+                        ui.label(RichText::new(t).small().color(text_faint()));
                     }
                 });
-                ui.label(RichText::new(&l.summary).small().color(TEXT_DIM));
+                ui.label(RichText::new(&l.summary).small().color(text_dim()));
                 ui.add_space(4.0);
             }
 
@@ -53,7 +84,7 @@ pub fn window(
             hairline(ui);
             if let Source::SpireCodex { channel, .. } = &settings.source {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("Game branch").color(TEXT_DIM));
+                    ui.label(RichText::new("Game branch").color(text_dim()));
                     let mut c = *channel;
                     if segmented(ui, &mut c, &[(Channel::Beta, "Beta"), (Channel::Stable, "Stable")]) {
                         out.push(Action::SetChannel(c));
@@ -61,7 +92,7 @@ pub fn window(
                 });
             }
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Source").color(TEXT_DIM));
+                ui.label(RichText::new("Source").color(text_dim()));
                 let r = ui.add(egui::TextEdit::singleline(&mut st.source_url).desired_width(f32::INFINITY));
                 if r.lost_focus() {
                     out.push(Action::SetSourceUrl(st.source_url.trim().to_string()));
@@ -70,7 +101,7 @@ pub fn window(
             ui.label(
                 RichText::new("A base URL reads the Spire Codex API; a URL ending in .json reads a data pack.")
                     .small()
-                    .color(TEXT_FAINT),
+                    .color(text_faint()),
             );
             ui.add_space(6.0);
             let label = if st.updating { "Updating…" } else { "Update data now" };
@@ -81,7 +112,7 @@ pub fn window(
                 if ui.button("Revert to bundled").clicked() {
                     out.push(Action::RevertData);
                 }
-                ui.label(RichText::new("Nothing updates unless you press Update.").small().color(TEXT_FAINT));
+                ui.label(RichText::new("Nothing updates unless you press Update.").small().color(text_faint()));
             });
 
             ui.add_space(8.0);
@@ -92,7 +123,7 @@ pub fn window(
                     "Role rules, act targets and event tags live in editable JSON. Export, edit, then reload.",
                 )
                 .small()
-                .color(TEXT_DIM),
+                .color(text_dim()),
             );
             ui.horizontal(|ui| {
                 if ui.button("Export playbook").clicked() {
@@ -104,11 +135,11 @@ pub fn window(
             });
 
             ui.add_space(8.0);
-            ui.label(RichText::new(format!("Data folder: {}", store.dir().display())).small().color(TEXT_FAINT));
+            ui.label(RichText::new(format!("Data folder: {}", store.dir().display())).small().color(text_faint()));
             if !st.messages.is_empty() {
                 ui.add_space(4.0);
                 for m in st.messages.iter().rev() {
-                    ui.label(RichText::new(m).small().color(TEXT_DIM));
+                    ui.label(RichText::new(m).small().color(text_dim()));
                 }
             }
         });
