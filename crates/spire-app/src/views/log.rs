@@ -112,32 +112,15 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
     }
 
     step(ui, 3, "After the floor");
-    // Absolute values and changes are two views of the same numbers:
-    // edit whichever you know ("took 12", "+25 gold").
-    egui::Grid::new("vitals").num_columns(3).spacing([12.0, 6.0]).show(ui, |ui| {
+    egui::Grid::new("vitals").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
         ui.label(RichText::new("HP").color(text_dim()));
         ui.add(egui::DragValue::new(&mut d.hp).range(0..=d.max_hp.max(1)));
-        let mut lost = s.hp - d.hp;
-        ui.horizontal(|ui| {
-            ui.label(RichText::new("lost").small().color(text_faint()));
-            if ui.add(egui::DragValue::new(&mut lost).range(-999..=s.hp)).changed() {
-                d.hp = (s.hp - lost).clamp(0, d.max_hp.max(1));
-            }
-        });
         ui.end_row();
         ui.label(RichText::new("Max HP").color(text_dim()));
         ui.add(egui::DragValue::new(&mut d.max_hp).range(1..=999));
-        ui.label("");
         ui.end_row();
         ui.label(RichText::new("Gold").color(text_dim()));
         ui.add(egui::DragValue::new(&mut d.gold).range(0..=9999));
-        let mut delta = d.gold - s.gold;
-        ui.horizontal(|ui| {
-            ui.label(RichText::new("change").small().color(text_faint()));
-            if ui.add(egui::DragValue::new(&mut delta).range(-s.gold..=9999)).changed() {
-                d.gold = (s.gold + delta).max(0);
-            }
-        });
         ui.end_row();
     });
 
