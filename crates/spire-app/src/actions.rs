@@ -1,0 +1,29 @@
+//! Everything the UI can ask for. Views only read state and push actions;
+//! [`crate::app::SpireApp::apply`] is the one place that changes anything.
+
+use spire_core::ids::*;
+use spire_core::run::{Change, RunEvent};
+
+#[derive(Clone, Debug)]
+pub enum Action {
+    NewRun {
+        character: CharacterId,
+        ascension: u32,
+    },
+    AbandonRun,
+    EnterAct {
+        act: ActId,
+        index: u8,
+        boss: Option<EncounterId>,
+    },
+    Record(RunEvent),
+    Undo,
+    /// Queue a change on the node being logged.
+    Draft(Change),
+    UpdateData,
+    RevertData,
+    ExportPlaybook,
+    ReloadData,
+    SetSourceUrl(String),
+    ToggleDataWindow,
+}

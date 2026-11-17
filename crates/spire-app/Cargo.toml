@@ -1,0 +1,17 @@
+[package]
+name = "spire-app"
+description = "egui dashboard for planning Slay the Spire 2 runs."
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "spire-dashboard"
+path = "src/main.rs"
+
+[dependencies]
+spire-core.workspace = true
+spire-data.workspace = true
+eframe.workspace = true
+
+[lints]
+workspace = true

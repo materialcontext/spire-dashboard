@@ -1,0 +1,14 @@
+[package]
+name = "spire-core"
+description = "Pure domain model and analysis for the StS2 macro dashboard. No IO, no UI."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

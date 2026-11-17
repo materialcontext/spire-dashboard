@@ -1,0 +1,662 @@
+{
+  "version": 1,
+  "role_rules": [
+    {
+      "role": "frontload_damage",
+      "when": "has_damage"
+    },
+    {
+      "role": "frontload_damage",
+      "when": {
+        "applies_power": "Vulnerable"
+      }
+    },
+    {
+      "role": "frontload_damage",
+      "when": {
+        "applies_power": "Vigor"
+      }
+    },
+    {
+      "role": "scaling_damage",
+      "when": {
+        "applies_power": "Strength"
+      }
+    },
+    {
+      "role": "scaling_damage",
+      "when": {
+        "applies_power": "Focus"
+      }
+    },
+    {
+      "role": "scaling_damage",
+      "when": {
+        "applies_power": "Poison"
+      }
+    },
+    {
+      "role": "scaling_damage",
+      "when": {
+        "applies_power": "Doom"
+      }
+    },
+    {
+      "role": "scaling_damage",
+      "when": {
+        "applies_power": "Accuracy"
+      }
+    },
+    {
+      "role": "scaling_damage",
+      "when": {
+        "applies_power": "Envenom"
+      }
+    },
+    {
+      "role": "scaling_damage",
+      "when": {
+        "applies_power": "Lethality"
+      }
+    },
+    {
+      "role": "scaling_damage",
+      "when": {
+        "all": [
+          {
+            "card_type": "power"
+          },
+          {
+            "any": [
+              {
+                "text_contains": "damage"
+              },
+              {
+                "text_contains": "strength"
+              },
+              {
+                "text_contains": "poison"
+              },
+              {
+                "text_contains": "doom"
+              },
+              {
+                "text_contains": "focus"
+              },
+              {
+                "text_contains": "channel"
+              },
+              {
+                "text_contains": "summon"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "role": "frontload_defense",
+      "when": "has_block"
+    },
+    {
+      "role": "frontload_defense",
+      "when": {
+        "applies_power": "Weak"
+      }
+    },
+    {
+      "role": "frontload_defense",
+      "when": {
+        "applies_power": "Intangible"
+      }
+    },
+    {
+      "role": "frontload_defense",
+      "when": {
+        "applies_power": "Buffer"
+      }
+    },
+    {
+      "role": "scaling_defense",
+      "when": {
+        "applies_power": "Dexterity"
+      }
+    },
+    {
+      "role": "scaling_defense",
+      "when": {
+        "applies_power": "Plating"
+      }
+    },
+    {
+      "role": "scaling_defense",
+      "when": {
+        "text_contains": "plating"
+      }
+    },
+    {
+      "role": "scaling_defense",
+      "when": {
+        "all": [
+          {
+            "card_type": "power"
+          },
+          {
+            "any": [
+              {
+                "text_contains": "block"
+              },
+              {
+                "text_contains": "dexterity"
+              },
+              {
+                "text_contains": "intangible"
+              },
+              {
+                "text_contains": "heal"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "role": "consistency",
+      "when": "draws"
+    },
+    {
+      "role": "consistency",
+      "when": "gains_energy"
+    },
+    {
+      "role": "consistency",
+      "when": {
+        "keyword": "Retain"
+      }
+    },
+    {
+      "role": "consistency",
+      "when": {
+        "text_contains": "draw"
+      }
+    },
+    {
+      "role": "consistency",
+      "when": {
+        "text_contains": "energy"
+      }
+    },
+    {
+      "role": "frontload_damage",
+      "when": {
+        "all": [
+          {
+            "card_type": "attack"
+          },
+          {
+            "text_contains": "damage"
+          }
+        ]
+      }
+    },
+    {
+      "role": "frontload_damage",
+      "when": {
+        "all": [
+          {
+            "text_contains": "loses"
+          },
+          {
+            "text_contains": " hp"
+          }
+        ]
+      }
+    },
+    {
+      "role": "frontload_damage",
+      "when": {
+        "text_contains": "forge"
+      }
+    },
+    {
+      "role": "frontload_damage",
+      "when": {
+        "all": [
+          {
+            "text_contains": "channel"
+          },
+          {
+            "text_contains": "lightning"
+          }
+        ]
+      }
+    },
+    {
+      "role": "scaling_damage",
+      "when": {
+        "all": [
+          {
+            "text_contains": "channel"
+          },
+          {
+            "text_contains": "dark"
+          }
+        ]
+      }
+    },
+    {
+      "role": "scaling_damage",
+      "when": {
+        "text_contains": "orb slot"
+      }
+    },
+    {
+      "role": "scaling_damage",
+      "when": {
+        "text_contains": "played an extra time"
+      }
+    },
+    {
+      "role": "frontload_defense",
+      "when": {
+        "all": [
+          {
+            "card_type": "skill"
+          },
+          {
+            "text_contains": "block"
+          }
+        ]
+      }
+    },
+    {
+      "role": "frontload_defense",
+      "when": {
+        "all": [
+          {
+            "text_contains": "channel"
+          },
+          {
+            "text_contains": "frost"
+          }
+        ]
+      }
+    },
+    {
+      "role": "frontload_defense",
+      "when": {
+        "text_contains": "summon"
+      }
+    },
+    {
+      "role": "consistency",
+      "when": {
+        "text_contains": "into your hand"
+      }
+    },
+    {
+      "role": "consistency",
+      "when": {
+        "all": [
+          {
+            "text_contains": "gain"
+          },
+          {
+            "text_contains": "star"
+          }
+        ]
+      }
+    },
+    {
+      "role": "consistency",
+      "when": {
+        "all": [
+          {
+            "text_contains": "channel"
+          },
+          {
+            "text_contains": "plasma"
+          }
+        ]
+      }
+    },
+    {
+      "role": "consistency",
+      "when": {
+        "text_contains": "cost"
+      }
+    },
+    {
+      "role": "frontload_damage",
+      "when": {
+        "text_contains": "vulnerable"
+      }
+    },
+    {
+      "role": "frontload_damage",
+      "when": {
+        "all": [
+          {
+            "text_contains": "deal"
+          },
+          {
+            "text_contains": "damage"
+          }
+        ]
+      }
+    },
+    {
+      "role": "frontload_damage",
+      "when": {
+        "text_contains": "evoke"
+      }
+    },
+    {
+      "role": "scaling_damage",
+      "when": {
+        "all": [
+          {
+            "text_contains": "gain"
+          },
+          {
+            "text_contains": "strength"
+          }
+        ]
+      }
+    },
+    {
+      "role": "scaling_damage",
+      "when": {
+        "text_contains": "replay"
+      }
+    },
+    {
+      "role": "frontload_defense",
+      "when": {
+        "text_contains": "weak"
+      }
+    },
+    {
+      "role": "frontload_defense",
+      "when": {
+        "all": [
+          {
+            "text_contains": "lose"
+          },
+          {
+            "text_contains": "strength"
+          }
+        ]
+      }
+    },
+    {
+      "role": "frontload_defense",
+      "when": {
+        "text_contains": "heal"
+      }
+    },
+    {
+      "role": "consistency",
+      "when": {
+        "text_contains": "retain"
+      }
+    },
+    {
+      "role": "consistency",
+      "when": {
+        "text_contains": "free to play"
+      }
+    }
+  ],
+  "card_roles": {
+    "STAMPEDE": [
+      "scaling_damage"
+    ],
+    "SYNCHRONIZE": [
+      "scaling_damage"
+    ],
+    "KNIFE_TRAP": [
+      "frontload_damage"
+    ],
+    "FORBIDDEN_GRIMOIRE": [
+      "consistency"
+    ],
+    "MASTER_PLANNER": [
+      "consistency"
+    ]
+  },
+  "aoe": {
+    "any": [
+      {
+        "all": [
+          "has_damage",
+          {
+            "target": "all_enemies"
+          }
+        ]
+      },
+      {
+        "text_contains": "to all enemies"
+      }
+    ]
+  },
+  "multi_enemy_names": [
+    "pair",
+    "many",
+    "swarm",
+    "group",
+    "gang",
+    "two",
+    "party",
+    "menagerie",
+    "colony",
+    "pack",
+    "raiders",
+    "gardeners",
+    "mass of",
+    "crawlers",
+    "cultists",
+    "gremlins"
+  ],
+  "opportunity_rules": [
+    {
+      "opportunity": "card_removal",
+      "any_text": [
+        "remove"
+      ]
+    },
+    {
+      "opportunity": "upgrade",
+      "any_text": [
+        "upgrade"
+      ]
+    },
+    {
+      "opportunity": "transform",
+      "any_text": [
+        "transform"
+      ]
+    },
+    {
+      "opportunity": "enchant",
+      "any_text": [
+        "enchant"
+      ]
+    },
+    {
+      "opportunity": "new_card",
+      "any_text": [
+        "to your deck",
+        "add a",
+        "card reward",
+        "choose a card"
+      ]
+    },
+    {
+      "opportunity": "relic",
+      "any_text": [
+        "relic"
+      ]
+    },
+    {
+      "opportunity": "potion",
+      "any_text": [
+        "potion"
+      ]
+    },
+    {
+      "opportunity": "gold",
+      "any_text": [
+        "gain gold",
+        "gold."
+      ]
+    },
+    {
+      "opportunity": "max_hp",
+      "any_text": [
+        "max hp"
+      ]
+    },
+    {
+      "opportunity": "heal",
+      "any_text": [
+        "heal"
+      ]
+    },
+    {
+      "opportunity": "fight",
+      "any_text": [
+        "fight",
+        "combat"
+      ]
+    },
+    {
+      "opportunity": "curse_risk",
+      "any_text": [
+        "curse"
+      ]
+    },
+    {
+      "opportunity": "hp_cost",
+      "any_text": [
+        "damage",
+        "lose hp",
+        "lose max hp"
+      ]
+    }
+  ],
+  "acts": [
+    {
+      "index": 0,
+      "weak_fights": 3,
+      "targets": [
+        {
+          "role": "frontload_damage",
+          "min": 3
+        },
+        {
+          "role": "frontload_defense",
+          "min": 1
+        },
+        {
+          "role": "scaling_damage",
+          "min": 1
+        }
+      ],
+      "needs_aoe": 1,
+      "big_hit": 25,
+      "long_fight_hp": {
+        "monster": 90,
+        "elite": 120,
+        "boss": 200
+      },
+      "notes": [
+        "Hallway fights are the cheapest card rewards in the run: take them while the deck can win them.",
+        "Frontloaded damage wins Act 1. Elites punish decks that need more than ~4 turns to kill.",
+        "Starter Strikes are the first removal target; Defends hold value longer.",
+        "Save gold for a shop removal or a key relic rather than spending it all early."
+      ]
+    },
+    {
+      "index": 1,
+      "weak_fights": 2,
+      "targets": [
+        {
+          "role": "frontload_damage",
+          "min": 4
+        },
+        {
+          "role": "scaling_damage",
+          "min": 2
+        },
+        {
+          "role": "frontload_defense",
+          "min": 3
+        },
+        {
+          "role": "scaling_defense",
+          "min": 1
+        },
+        {
+          "role": "consistency",
+          "min": 2
+        }
+      ],
+      "needs_aoe": 2,
+      "big_hit": 30,
+      "long_fight_hp": {
+        "monster": 130,
+        "elite": 140,
+        "boss": 300
+      },
+      "notes": [
+        "Multi-enemy fights get common: secure area damage.",
+        "Commit to one scaling plan for the Act 2 boss and upgrade its key cards.",
+        "Upgrades on key cards often beat taking another common."
+      ]
+    },
+    {
+      "index": 2,
+      "weak_fights": 2,
+      "targets": [
+        {
+          "role": "frontload_damage",
+          "min": 4
+        },
+        {
+          "role": "scaling_damage",
+          "min": 3
+        },
+        {
+          "role": "frontload_defense",
+          "min": 4
+        },
+        {
+          "role": "scaling_defense",
+          "min": 2
+        },
+        {
+          "role": "consistency",
+          "min": 3
+        }
+      ],
+      "needs_aoe": 2,
+      "big_hit": 35,
+      "long_fight_hp": {
+        "monster": 180,
+        "elite": 250,
+        "boss": 450
+      },
+      "notes": [
+        "The deck must now win long fights: scaling damage and scaling defense.",
+        "Skip marginal card rewards; dilution costs consistency.",
+        "Hold potions for elites and the boss."
+      ]
+    }
+  ],
+  "needs": {
+    "low_hp": 0.5,
+    "starter_cards": 7,
+    "low_upgrades": 0.25
+  }
+}
