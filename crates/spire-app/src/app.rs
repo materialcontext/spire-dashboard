@@ -4,7 +4,7 @@ use std::sync::mpsc::{Receiver, channel};
 
 use eframe::egui;
 use spire_core::analysis::Dashboard;
-use spire_core::run::{Change, RunEvent, RunState};
+use spire_core::run::{Change, Outcome, RunEvent, RunState};
 use spire_core::{Catalog, Playbook, Run};
 use spire_data::fetch::{self, Source};
 use spire_data::store::{RunSaver, Settings, Store};
@@ -33,6 +33,11 @@ pub struct UiState {
     pub source_url: String,
     pub messages: Vec<String>,
     pub updating: bool,
+    /// "Abandon this run?" confirmation is open.
+    pub confirm_abandon: bool,
+    /// The End run dialog is open, with the fight to blame for a death.
+    pub end_run_open: bool,
+    pub end_encounter: Option<spire_core::EncounterId>,
 }
 
 pub struct SpireApp {
@@ -71,7 +76,7 @@ impl SpireApp {
             Source::PackUrl { url } => url.clone(),
         };
         Self {
-            draft: NodeDraft::from_state(&state),
+            draft: NodeDraft::for_next(&state, &loaded.catalog),
             saver: store.run_saver(),
             store,
             catalog: loaded.catalog,
@@ -89,6 +94,9 @@ impl SpireApp {
                 source_url,
                 messages,
                 updating: false,
+                confirm_abandon: false,
+                end_run_open: false,
+                end_encounter: None,
             },
             update_rx: None,
         }
@@ -101,11 +109,22 @@ impl SpireApp {
         }
     }
 
+    /// Ends the run, files it in history and returns to the start screen.
+    fn finish(&mut self, outcome: Outcome) {
+        self.run.push(RunEvent::End { outcome, at: Some(spire_data::now_rfc3339()) });
+        match self.store.archive_run(&self.run) {
+            Ok(_) => self.note("Run saved to history."),
+            Err(e) => self.note(format!("Could not save the run to history: {e}")),
+        }
+        self.run = Run::default();
+        self.run_changed();
+    }
+
     /// Re-derives everything from the run log and saves it.
     fn run_changed(&mut self) {
         self.state = self.run.state();
         self.recompute();
-        self.draft = NodeDraft::from_state(&self.state);
+        self.draft = NodeDraft::for_next(&self.state, &self.catalog);
         if let Err(e) = self.saver.save(&self.run).or_else(|_| self.store.save_run(&self.run)) {
             self.note(format!("Could not save the run: {e}"));
         }
@@ -167,7 +186,7 @@ impl SpireApp {
         self.run = run;
         self.state = self.run.state();
         self.recompute();
-        self.draft = NodeDraft::from_state(&self.state);
+        self.draft = NodeDraft::for_next(&self.state, &self.catalog);
     }
 
     pub fn ui_state(&mut self) -> &mut UiState {
@@ -190,16 +209,21 @@ impl SpireApp {
         match action {
             Action::NewRun { character, ascension } => match RunEvent::start(&self.catalog, &character, ascension) {
                 Some(start) => {
-                    self.run = Run::default();
+                    self.run = Run { started_at: Some(spire_data::now_rfc3339()), ..Run::default() };
                     self.run.push(start);
                     self.run_changed();
                 }
                 None => self.note(format!("Unknown character {character}")),
             },
             Action::AbandonRun => {
-                self.run = Run::default();
-                self.run_changed();
+                if self.state.started() && !self.run.ended() {
+                    self.finish(Outcome::Abandoned);
+                } else {
+                    self.run = Run::default();
+                    self.run_changed();
+                }
             }
+            Action::EndRun(outcome) => self.finish(outcome),
             Action::EnterAct { act, index, boss } => {
                 self.run.push(RunEvent::EnterAct { act, index, boss });
                 self.run_changed();

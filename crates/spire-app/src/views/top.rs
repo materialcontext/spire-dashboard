@@ -7,7 +7,7 @@ use crate::app::{UiState, ViewCtx};
 use crate::style::{self, color::*};
 use crate::widgets::{hp_bar, slots, stat};
 
-pub fn show(ui: &mut Ui, v: &ViewCtx, st: &UiState, out: &mut Vec<Action>) {
+pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
     let s = v.state;
     if crate::style::current().character_accent && s.started() {
         // Spirebound: a band in the character's colour across the top.
@@ -71,8 +71,19 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &UiState, out: &mut Vec<Action>) {
                 {
                     out.push(Action::Undo);
                 }
+                let in_progress = s.outcome.is_none();
                 if ui.button("New run").clicked() {
-                    out.push(Action::AbandonRun);
+                    if in_progress {
+                        st.confirm_abandon = true;
+                    } else {
+                        out.push(Action::AbandonRun);
+                    }
+                }
+                if in_progress
+                    && ui.button("End run").on_hover_text("Record how the run ended and file it in history").clicked()
+                {
+                    st.end_run_open = true;
+                    st.end_encounter = s.encounters_seen.last().cloned();
                 }
             }
             if let Some(version) = v.catalog.layers.last().and_then(|l| l.game_version.as_ref()) {

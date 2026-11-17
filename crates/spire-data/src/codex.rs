@@ -510,7 +510,12 @@ pub fn to_pack(
             id: EnchantmentId(e.id),
             name: e.name,
             text: strip_markup(&e.description),
-            card_type: e.card_type.as_deref().map(|t| card_type(Some(t))),
+            // "Attack, Skill" lists several types.
+            card_types: e
+                .card_type
+                .as_deref()
+                .map(|t| t.split(',').map(|x| card_type(Some(x.trim()))).collect())
+                .unwrap_or_default(),
             applicable_to: e.applicable_to,
             stackable: e.is_stackable.unwrap_or(false),
         })
@@ -592,6 +597,8 @@ pub fn to_pack(
             events: a.events.into_iter().map(EventId).collect(),
             encounters: a.encounters.into_iter().map(EncounterId).collect(),
             weak_fights: None,
+            length: None,
+            fixed_rooms: Vec::new(),
         })
         .collect();
 

@@ -53,6 +53,16 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
     step(ui, 1, "Room");
     let rooms: Vec<(NodeKind, &str)> = NodeKind::ALL.iter().map(|k| (*k, k.label())).collect();
     segmented(ui, &mut d.kind, &rooms);
+    let length = spire_core::analysis::floors::act_length(s, v.catalog);
+    let position = match length {
+        Some(l) => format!("Act floor {} of {l}", s.act_floor + 1),
+        None => format!("Act floor {}", s.act_floor + 1),
+    };
+    let hint = match d.expected {
+        Some(k) => format!("{position} · always {}", k.label()),
+        None => position,
+    };
+    ui.label(RichText::new(hint).small().color(if d.expected.is_some() { accent() } else { text_faint() }));
 
     if let Some(act) = &s.act {
         let room = match d.kind {
@@ -183,7 +193,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
             out.push(Action::Record(d.to_adjustment(s)));
         }
         if ui.add(egui::Button::new(RichText::new("Clear").color(text_dim())).frame_when_inactive(false)).clicked() {
-            *d = NodeDraft::from_state(s);
+            *d = NodeDraft::for_next(s, v.catalog);
         }
     });
     ui.add_space(12.0);

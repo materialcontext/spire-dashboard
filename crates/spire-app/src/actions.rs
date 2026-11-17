@@ -10,7 +10,9 @@ pub enum Action {
         character: CharacterId,
         ascension: u32,
     },
+    /// Abandon the current run (filed in history as Abandoned).
     AbandonRun,
+    EndRun(spire_core::run::Outcome),
     EnterAct {
         act: ActId,
         index: u8,

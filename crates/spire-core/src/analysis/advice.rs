@@ -78,10 +78,30 @@ pub fn advise(state: &RunState, catalog: &Catalog, playbook: &Playbook, deck: &D
         }
     }
 
-    if deck.of_type(crate::catalog::CardType::Curse) > 0 {
+    if deck.removable_curses > 0 {
         out.push(Advice {
             severity: Severity::Watch,
-            text: "Curses in deck: value shops and events that remove cards.".into(),
+            text: format!(
+                "{} removable curse(s) in deck: value shops and events that remove cards.",
+                deck.removable_curses
+            ),
+        });
+    }
+    let mut permanent: Vec<String> = state
+        .deck
+        .iter()
+        .filter_map(|d| catalog.cards.get(&d.card))
+        .filter(|c| c.is_eternal() && c.card_type == crate::catalog::CardType::Curse)
+        .map(|c| c.name.clone())
+        .collect();
+    permanent.dedup();
+    if !permanent.is_empty() {
+        out.push(Advice {
+            severity: Severity::Info,
+            text: format!(
+                "{} can't be removed or transformed: plan around the dead draw (more draw, Retain, smaller deck).",
+                permanent.join(", ")
+            ),
         });
     }
     out.extend(plan.notes.iter().map(|n| Advice { severity: Severity::Info, text: n.clone() }));

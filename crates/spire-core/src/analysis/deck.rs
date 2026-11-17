@@ -51,6 +51,8 @@ pub struct DeckRow {
     pub count: u32,
     pub roles: Vec<Role>,
     pub known: bool,
+    /// Cannot be removed or transformed.
+    pub eternal: bool,
 }
 
 pub fn deck_rows(cards: &[ClassifiedCard<'_>]) -> Vec<DeckRow> {
@@ -66,6 +68,7 @@ pub fn deck_rows(cards: &[ClassifiedCard<'_>]) -> Vec<DeckRow> {
                 count: 0,
                 roles: c.roles.clone(),
                 known: c.card.is_some(),
+                eternal: c.card.is_some_and(|k| k.is_eternal()),
             })
             .count += 1;
     }
@@ -89,6 +92,12 @@ pub struct DeckProfile {
     pub starter_basics: u32,
     /// Cards that fill no role (curses, statuses, unclassified).
     pub no_role: u32,
+    /// Curses that can be removed or transformed.
+    pub removable_curses: u32,
+    /// Eternal cards: permanent, cannot be removed or transformed.
+    pub eternal: u32,
+    /// Draws that do nothing: curses, statuses, unplayables.
+    pub dead: u32,
 }
 
 impl DeckProfile {
@@ -134,6 +143,10 @@ pub fn profile(cards: &[ClassifiedCard<'_>]) -> DeckProfile {
         p.unknown += u32::from(c.card.is_none());
         p.starter_basics += u32::from(starter);
         p.no_role += u32::from(c.roles.is_empty());
+        let eternal = c.card.is_some_and(|k| k.is_eternal());
+        p.eternal += u32::from(eternal);
+        p.removable_curses += u32::from(c.card_type() == CardType::Curse && !eternal);
+        p.dead += u32::from(c.card.is_some_and(|k| k.is_dead_draw()));
         p
     })
 }

@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Deserialize;
 use spire_core::DataPack;
-use spire_core::catalog::{EncounterStats, Lineup};
+use spire_core::catalog::{EncounterStats, FixedRoom, GameRules, Lineup, NodeKind};
 use spire_core::ids::MonsterId;
 
 /// Fewer fights than this and an encounter is left unenriched.
@@ -37,6 +37,8 @@ const ALLY_SPREAD: usize = 5;
 #[derive(Deserialize)]
 struct WRun {
     #[serde(default)]
+    ascension: Option<u32>,
+    #[serde(default)]
     modifiers: Option<serde_json::Value>,
     #[serde(default)]
     players: Vec<serde_json::Value>,
@@ -46,6 +48,8 @@ struct WRun {
 
 #[derive(Deserialize)]
 struct WPoint {
+    #[serde(default)]
+    map_point_type: Option<String>,
     #[serde(default)]
     player_stats: Vec<WStats>,
     #[serde(default)]
@@ -141,6 +145,115 @@ pub fn fights_from_pages(pages: &[String]) -> Vec<Fight> {
         }));
     }
     out
+}
+
+/// The room sequence of one act that reached its boss.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ActLayout {
+    pub act: usize,
+    pub ascension: u32,
+    pub rooms: Vec<NodeKind>,
+}
+
+fn node_kind(map_point_type: &str) -> Option<NodeKind> {
+    Some(match map_point_type {
+        "ancient" => NodeKind::Ancient,
+        "monster" => NodeKind::Monster,
+        "elite" => NodeKind::Elite,
+        "unknown" => NodeKind::Unknown,
+        "shop" => NodeKind::Shop,
+        "rest_site" => NodeKind::Rest,
+        "treasure" => NodeKind::Treasure,
+        "boss" => NodeKind::Boss,
+        _ => return None,
+    })
+}
+
+/// Room sequences of completed acts (last room a boss), single-player and
+/// unmodified runs only.
+pub fn layouts(jsonl: &str) -> Vec<ActLayout> {
+    jsonl
+        .lines()
+        .filter_map(|line| serde_json::from_str::<WRun>(line).ok())
+        .filter(|run| run.players.len() == 1 && is_empty_value(&run.modifiers))
+        .flat_map(|run| {
+            let ascension = run.ascension.unwrap_or(0);
+            run.map_point_history.into_iter().enumerate().filter_map(move |(act, points)| {
+                let rooms: Option<Vec<NodeKind>> =
+                    points.iter().map(|p| p.map_point_type.as_deref().and_then(node_kind)).collect();
+                let rooms = rooms?;
+                (rooms.last() == Some(&NodeKind::Boss)).then_some(ActLayout { act, ascension, rooms })
+            })
+        })
+        .collect()
+}
+
+/// Share of acts a floor must agree on to count as fixed.
+const FIXED_SHARE: f32 = 0.97;
+
+/// Per act index: the usual length and the floors whose room never varies
+/// (counted from the start, and from the end as negative positions).
+/// Double-boss acts are left out; `floors::expected_room` adds the extra
+/// boss floor itself.
+pub fn act_shapes(layouts: &[ActLayout], rules: &GameRules) -> Vec<(u8, u32, Vec<FixedRoom>)> {
+    let mut by_act: BTreeMap<usize, Vec<&ActLayout>> = BTreeMap::new();
+    for l in layouts {
+        let index = u8::try_from(l.act).unwrap_or(u8::MAX);
+        if !rules.double_boss(l.ascension, index) {
+            by_act.entry(l.act).or_default().push(l);
+        }
+    }
+    by_act
+        .into_iter()
+        .filter(|(_, ls)| ls.len() >= MIN_FIGHTS)
+        .filter_map(|(act, ls)| {
+            let mut lengths: BTreeMap<usize, usize> = BTreeMap::new();
+            for l in &ls {
+                *lengths.entry(l.rooms.len()).or_default() += 1;
+            }
+            let (length, _) = lengths.into_iter().max_by_key(|(_, n)| *n)?;
+            let fixed_at = |pick: &dyn Fn(&ActLayout) -> Option<NodeKind>| {
+                let mut counts: BTreeMap<String, (NodeKind, usize)> = BTreeMap::new();
+                let mut n = 0;
+                for l in &ls {
+                    if let Some(k) = pick(l) {
+                        n += 1;
+                        counts.entry(format!("{k:?}")).or_insert((k, 0)).1 += 1;
+                    }
+                }
+                let (k, c) = counts.into_values().max_by_key(|(_, c)| *c)?;
+                (n > 0 && c as f32 / n as f32 >= FIXED_SHARE).then_some(k)
+            };
+            let mut fixed = Vec::new();
+            for i in 0..length {
+                if let Some(room) = fixed_at(&|l: &ActLayout| l.rooms.get(i).copied()) {
+                    fixed.push(FixedRoom { at: i as i32, room });
+                }
+            }
+            for back in 1..=3usize {
+                if let Some(room) = fixed_at(&|l: &ActLayout| l.rooms.len().checked_sub(back).map(|i| l.rooms[i])) {
+                    fixed.push(FixedRoom { at: -(back as i32), room });
+                }
+            }
+            // Keep start-counted floors only where they are not the end
+            // floors seen from the front (those vary with act length).
+            fixed.retain(|f| f.at < 0 || (f.at as usize) < length.saturating_sub(3));
+            Some((u8::try_from(act).ok()?, length as u32, fixed))
+        })
+        .collect()
+}
+
+/// Writes act lengths and fixed rooms onto the pack's acts.
+pub fn enrich_layouts(pack: &mut DataPack, layouts: &[ActLayout]) -> usize {
+    let rules = pack.rules.clone().unwrap_or_default();
+    let shapes = act_shapes(layouts, &rules);
+    for act in &mut pack.acts {
+        if let Some((_, length, fixed)) = shapes.iter().find(|(i, _, _)| *i == act.index) {
+            act.length = Some(*length);
+            act.fixed_rooms = fixed.clone();
+        }
+    }
+    shapes.len()
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -389,6 +502,36 @@ mod tests {
         let o = obs(&[(&["A"], 5)]);
         let refs: Vec<&[String]> = o.iter().map(|v| v.as_slice()).collect();
         assert!(read_encounter(&refs, false).is_none());
+    }
+
+    #[test]
+    fn act_shapes_find_fixed_floors_and_skip_double_boss_acts() {
+        use NodeKind::*;
+        let rules = GameRules::default();
+        let mut ls = Vec::new();
+        for i in 0..40 {
+            let middle = if i % 2 == 0 { Monster } else { Unknown };
+            ls.push(ActLayout {
+                act: 0,
+                ascension: 0,
+                rooms: vec![Ancient, Monster, middle, Treasure, middle, Rest, Boss],
+            });
+        }
+        // A10 act 3 has an extra boss floor; it must not skew the act length.
+        for _ in 0..40 {
+            ls.push(ActLayout { act: 2, ascension: 10, rooms: vec![Ancient, Monster, Rest, Boss, Boss] });
+        }
+        let shapes = act_shapes(&ls, &rules);
+        assert_eq!(shapes.len(), 1, "double-boss acts are excluded: {shapes:?}");
+        let (act, length, fixed) = &shapes[0];
+        assert_eq!((*act, *length), (0, 7));
+        let at = |i: i32| fixed.iter().find(|f| f.at == i).map(|f| f.room);
+        assert_eq!(at(0), Some(Ancient));
+        assert_eq!(at(1), Some(Monster));
+        assert_eq!(at(2), None, "varies");
+        assert_eq!(at(3), Some(Treasure));
+        assert_eq!(at(-2), Some(Rest));
+        assert_eq!(at(-1), Some(Boss));
     }
 
     #[test]

@@ -2,7 +2,7 @@
 //! the current run should be hoping for.
 
 use crate::analysis::deck::DeckProfile;
-use crate::catalog::{CardType, Catalog, Event};
+use crate::catalog::{Catalog, Event};
 use crate::ids::EventId;
 use crate::playbook::{Opportunity, Playbook};
 use crate::run::RunState;
@@ -21,10 +21,12 @@ pub fn needs(state: &RunState, deck: &DeckProfile, playbook: &Playbook) -> Vec<N
     let mut out = Vec::new();
     let mut want = |opportunity, weight, reason: String| out.push(Need { opportunity, reason, weight });
 
-    let curses = deck.of_type(CardType::Curse);
+    // Eternal curses can be neither removed nor transformed, so they never
+    // make removal or transform worth more.
+    let curses = deck.removable_curses;
     if curses > 0 {
-        want(Opportunity::CardRemoval, 3, format!("{curses} curse(s) in deck"));
-        want(Opportunity::Transform, 2, format!("{curses} curse(s) in deck"));
+        want(Opportunity::CardRemoval, 3, format!("{curses} removable curse(s) in deck"));
+        want(Opportunity::Transform, 2, format!("{curses} removable curse(s) in deck"));
     }
     if deck.starter_basics >= t.starter_cards {
         want(Opportunity::CardRemoval, 2, format!("{} starter Strikes/Defends", deck.starter_basics));

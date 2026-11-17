@@ -135,6 +135,20 @@ pub struct Card {
 }
 
 impl Card {
+    /// Eternal cards cannot be removed or transformed (e.g. Ascender's Bane).
+    pub fn is_eternal(&self) -> bool {
+        self.keywords.iter().any(|k| k.eq_ignore_ascii_case("Eternal"))
+    }
+
+    pub fn is_unplayable(&self) -> bool {
+        self.cost.is_none() && !self.x_cost || self.keywords.iter().any(|k| k.eq_ignore_ascii_case("Unplayable"))
+    }
+
+    /// A draw that does nothing useful: curses, statuses, unplayables.
+    pub fn is_dead_draw(&self) -> bool {
+        matches!(self.card_type, CardType::Curse | CardType::Status) || self.is_unplayable()
+    }
+
     pub fn cost_label(&self) -> String {
         match (self.x_cost, self.cost) {
             (true, _) => "X".into(),
@@ -192,14 +206,92 @@ pub struct Enchantment {
     pub id: EnchantmentId,
     pub name: String,
     pub text: String,
-    /// Card type restriction, if any.
+    /// Card types it can go on; empty means any.
     #[serde(default)]
-    pub card_type: Option<CardType>,
+    pub card_types: Vec<CardType>,
     /// Free-text restriction from the source (e.g. "Defend cards").
     #[serde(default)]
     pub applicable_to: Option<String>,
     #[serde(default)]
     pub stackable: bool,
+}
+
+impl Enchantment {
+    /// Whether this enchantment can go on `card`. Reads the type list and the
+    /// source's text restriction ("Defend cards", "cards that gain Block",
+    /// "Basic Strike or Defend cards"). Curses and statuses never qualify.
+    pub fn fits(&self, card: &Card) -> bool {
+        use crate::playbook::contains_ci;
+        if matches!(card.card_type, CardType::Curse | CardType::Status | CardType::Quest) {
+            return false;
+        }
+        if !self.card_types.is_empty() && !self.card_types.contains(&card.card_type) {
+            return false;
+        }
+        let Some(rule) = &self.applicable_to else { return true };
+        if contains_ci(rule, "basic") && card.rarity != Rarity::Basic {
+            return false;
+        }
+        let tags: Vec<&str> = ["Strike", "Defend"].into_iter().filter(|t| contains_ci(rule, t)).collect();
+        if !tags.is_empty() && !card.tags.iter().any(|t| tags.contains(&t.as_str())) {
+            return false;
+        }
+        if contains_ci(rule, "gain block") && !(card.block.is_some_and(|b| b > 0) || contains_ci(&card.text, "block")) {
+            return false;
+        }
+        true
+    }
+}
+
+/// The kind of map node just completed (or about to be entered).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NodeKind {
+    Monster,
+    Elite,
+    Boss,
+    /// A `?` node. What it turned into is recorded by the encounter/event.
+    Unknown,
+    Shop,
+    Rest,
+    Treasure,
+    Ancient,
+}
+
+impl NodeKind {
+    pub const ALL: [NodeKind; 8] = [
+        NodeKind::Monster,
+        NodeKind::Elite,
+        NodeKind::Unknown,
+        NodeKind::Rest,
+        NodeKind::Shop,
+        NodeKind::Treasure,
+        NodeKind::Boss,
+        NodeKind::Ancient,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            // StS2's own room names.
+            NodeKind::Monster => "Enemy",
+            NodeKind::Elite => "Elite",
+            NodeKind::Boss => "Boss",
+            NodeKind::Unknown => "Event",
+            NodeKind::Shop => "Shop",
+            NodeKind::Rest => "Rest Site",
+            NodeKind::Treasure => "Treasure",
+            NodeKind::Ancient => "Ancient",
+        }
+    }
+
+    pub fn room(self) -> Option<RoomType> {
+        match self {
+            NodeKind::Monster => Some(RoomType::Monster),
+            NodeKind::Elite => Some(RoomType::Elite),
+            NodeKind::Boss => Some(RoomType::Boss),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -388,6 +480,21 @@ pub struct Act {
     /// when measured from community runs.
     #[serde(default)]
     pub weak_fights: Option<u32>,
+    /// Usual number of floors (single-boss), measured from community runs.
+    #[serde(default)]
+    pub length: Option<u32>,
+    /// Floors whose room never varies, measured from community runs.
+    #[serde(default)]
+    pub fixed_rooms: Vec<FixedRoom>,
+}
+
+/// A floor whose room type is always the same.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FixedRoom {
+    /// 0-based floor within the act; negative counts from the end
+    /// (-1 = the last floor).
+    pub at: i32,
+    pub room: NodeKind,
 }
 
 /// One ascension level as the game describes it.

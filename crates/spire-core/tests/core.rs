@@ -133,6 +133,8 @@ fn catalog() -> Catalog {
             events: vec![EventId::new("SHRINE")],
             encounters: vec![],
             weak_fights: None,
+            length: None,
+            fixed_rooms: Vec::new(),
         }],
         ..Default::default()
     };
@@ -449,4 +451,152 @@ fn double_boss_act_tracks_both_bosses() {
     // Entering a new act clears both.
     run.push(RunEvent::EnterAct { act: ActId::new("ACT1"), index: 1, boss: None });
     assert_eq!(run.state().bosses().count(), 0);
+}
+
+fn with_eternal_curse(mut cat: Catalog) -> Catalog {
+    let mut bane = card("BANE", CardType::Curse, Rarity::Curse, "Unplayable. Eternal.");
+    bane.cost = None;
+    bane.keywords = vec!["Unplayable".into(), "Eternal".into()];
+    cat.cards.insert(bane.id.clone(), bane);
+    cat
+}
+
+#[test]
+fn eternal_curses_never_drive_removal_or_transform() {
+    use spire_core::analysis::events::needs;
+    let cat = with_eternal_curse(catalog());
+    let mut pb = playbook();
+    pb.needs.starter_cards = 99; // isolate curses from the starter-card rule
+    let mut run = started(&cat);
+    run.push(RunEvent::Adjust(vec![Change::AddCard(DeckCard::new("BANE".into()))]));
+    let s = run.state();
+    let deck = deck_profile(&s.deck, &cat, &pb);
+    assert_eq!((deck.eternal, deck.removable_curses, deck.dead), (1, 0, 1));
+    let wants = needs(&s, &deck, &pb);
+    assert!(
+        !wants.iter().any(|n| matches!(n.opportunity, Opportunity::CardRemoval | Opportunity::Transform)),
+        "an eternal curse alone must not ask for removal: {wants:?}"
+    );
+
+    // A removable curse still does.
+    run.push(RunEvent::Adjust(vec![Change::AddCard(DeckCard::new("REGRET".into()))]));
+    let s = run.state();
+    let deck = deck_profile(&s.deck, &cat, &pb);
+    assert_eq!(deck.removable_curses, 1);
+    let wants = needs(&s, &deck, &pb);
+    let removal = wants.iter().find(|n| n.opportunity == Opportunity::CardRemoval).unwrap();
+    assert!(removal.reason.starts_with("1 removable"), "{}", removal.reason);
+}
+
+#[test]
+fn advice_calls_eternal_curses_permanent() {
+    let cat = with_eternal_curse(catalog());
+    let pb = playbook();
+    let mut run = started(&cat);
+    run.push(RunEvent::Adjust(vec![Change::AddCard(DeckCard::new("BANE".into()))]));
+    let d = Dashboard::compute(&run.state(), &cat, &pb);
+    assert!(d.advice.iter().any(|a| a.text.starts_with("BANE can't be removed")));
+    assert!(!d.advice.iter().any(|a| a.text.contains("removable curse")));
+}
+
+#[test]
+fn a_card_takes_one_enchantment_ever() {
+    let cat = catalog();
+    let mut run = started(&cat);
+    let strike = DeckCard::new("STRIKE".into());
+    run.push(RunEvent::Adjust(vec![
+        Change::Enchant { card: strike.clone(), enchantment: "SHARP".into() },
+        Change::Enchant { card: strike.clone(), enchantment: "SHARP".into() },
+    ]));
+    let s = run.state();
+    let enchanted: Vec<_> = s.deck.iter().filter(|c| c.enchantment.is_some()).collect();
+    // Two Strikes: each enchant lands on a different, unenchanted Strike.
+    assert_eq!(enchanted.len(), 2);
+    run.push(RunEvent::Adjust(vec![Change::Enchant { card: strike, enchantment: "OTHER".into() }]));
+    let s = run.state();
+    assert!(
+        !s.deck.iter().any(|c| c.enchantment == Some("OTHER".into())),
+        "no unenchanted Strike left, so nothing changes"
+    );
+}
+
+#[test]
+fn enchantment_fit_follows_type_and_text_rules() {
+    let cat = catalog();
+    let ench = |types: Vec<CardType>, rule: Option<&str>| Enchantment {
+        id: "E".into(),
+        name: "E".into(),
+        text: String::new(),
+        card_types: types,
+        applicable_to: rule.map(String::from),
+        stackable: false,
+    };
+    let strike = &cat.cards[&CardId::new("STRIKE")];
+    let defend = &cat.cards[&CardId::new("DEFEND")];
+    let cleave = &cat.cards[&CardId::new("CLEAVE")];
+    let regret = &cat.cards[&CardId::new("REGRET")];
+    assert!(ench(vec![CardType::Attack], None).fits(cleave));
+    assert!(!ench(vec![CardType::Attack], None).fits(defend));
+    assert!(ench(vec![CardType::Attack, CardType::Skill], None).fits(defend));
+    assert!(ench(vec![], Some("Defend cards")).fits(defend));
+    assert!(!ench(vec![], Some("Defend cards")).fits(strike));
+    assert!(ench(vec![], Some("Basic Strike or Defend cards")).fits(strike));
+    assert!(!ench(vec![], Some("Basic Strike or Defend cards")).fits(cleave));
+    assert!(ench(vec![], Some("cards that gain Block")).fits(defend));
+    assert!(!ench(vec![], None).fits(regret), "curses can't be enchanted");
+}
+
+#[test]
+fn fixed_rooms_are_predicted_from_the_act_floor() {
+    use spire_core::analysis::floors::expected_room;
+    let mut cat = catalog();
+    {
+        let act = cat.acts.get_mut(&ActId::new("ACT1")).unwrap();
+        act.length = Some(6);
+        act.fixed_rooms = vec![
+            FixedRoom { at: 0, room: NodeKind::Ancient },
+            FixedRoom { at: 1, room: NodeKind::Monster },
+            FixedRoom { at: 3, room: NodeKind::Treasure },
+            FixedRoom { at: -2, room: NodeKind::Rest },
+            FixedRoom { at: -1, room: NodeKind::Boss },
+        ];
+    }
+    let mut run = started(&cat);
+    let mut rooms = Vec::new();
+    for _ in 0..6 {
+        rooms.push(expected_room(&run.state(), &cat));
+        run.push(RunEvent::Node(NodeReport { kind: NodeKind::Unknown, encounter: None, event: None, changes: vec![] }));
+    }
+    use NodeKind::*;
+    assert_eq!(rooms, [Some(Ancient), Some(Monster), None, Some(Treasure), Some(Rest), Some(Boss)]);
+    assert_eq!(run.state().act_floor, 6);
+
+    // Double-boss act (A10, act index 2): one extra boss floor before the last.
+    cat.rules.double_boss_act = 0;
+    let mut run = Run::default();
+    run.push(RunEvent::start(&cat, &CharacterId::new("HERO"), 10).unwrap());
+    run.push(RunEvent::EnterAct { act: ActId::new("ACT1"), index: 0, boss: None });
+    let mut rooms = Vec::new();
+    for _ in 0..7 {
+        rooms.push(expected_room(&run.state(), &cat));
+        run.push(RunEvent::Node(NodeReport { kind: NodeKind::Unknown, encounter: None, event: None, changes: vec![] }));
+    }
+    assert_eq!(rooms, [Some(Ancient), Some(Monster), None, Some(Treasure), Some(Rest), Some(Boss), Some(Boss)]);
+}
+
+#[test]
+fn ending_a_run_records_outcome_and_summary() {
+    use spire_core::run::Outcome;
+    let cat = catalog();
+    let mut run = started(&cat);
+    run.started_at = Some("2026-11-17T08:00:00Z".into());
+    assert!(!run.ended());
+    let death = Outcome::Died { encounter: Some(EncounterId::new("BIG_BOSS")) };
+    run.push(RunEvent::End { outcome: death.clone(), at: Some("2026-11-17T09:00:00Z".into()) });
+    assert!(run.ended());
+    let sum = run.summary();
+    assert_eq!(sum.outcome, Some(death));
+    assert_eq!(sum.character, Some(CharacterId::new("HERO")));
+    assert_eq!(sum.ended_at.as_deref(), Some("2026-11-17T09:00:00Z"));
+    assert_eq!(run.state_at(1).act, None, "scrubbing to the start is before entering an act");
 }
