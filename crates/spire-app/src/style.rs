@@ -313,8 +313,8 @@ pub fn card_type_color(t: CardType) -> Color32 {
 pub fn role_color(r: Role) -> Color32 {
     adapt(match r {
         Role::FrontloadDamage => rgb(232, 112, 96),
-        Role::ScalingDamage => rgb(240, 156, 76),
-        Role::FrontloadDefense => rgb(96, 172, 232),
+        Role::ScalingDamage => rgb(224, 180, 60),
+        Role::FrontloadDefense => rgb(90, 140, 240),
         Role::ScalingDefense => rgb(80, 200, 188),
         Role::Consistency => rgb(186, 146, 232),
     })

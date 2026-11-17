@@ -25,6 +25,19 @@ the card you took, HP and gold after. Then it re-analyses the run.
   they answer what the run needs (removal for curses, healing when low…).
 - **Macro advice**: role gaps for this act, boss gaps, and act notes.
 - **Enemies seen** this run.
+- **Analytics** for the current run:
+  - HP, max HP and gold by floor.
+  - HP lost in each fight next to what other players lose in the same fight.
+  - Deck roles growing floor by floor against the act targets.
+  - The share of dead cards, and elites fought per act.
+- **Deck simulation**, read from the card data. Damage and block per turn
+  come with a spread, alongside turnover, the odds of drawing each card by
+  turn 3, dead draws, and whether energy fits the deck. Character mechanics are
+  simulated: orbs and Focus, Osty, Summon, Stars, Forge, Doom, Poison, Aim,
+  Stretch, Vigor and the Fool's Arrows.
+- **History**: every run you end or abandon here, filtered by character and
+  outcome, with the same charts, plus a floor-by-floor replay of the deck and
+  relics.
 
 ## Run it
 
@@ -43,6 +56,10 @@ Linux needs the usual X11/Wayland runtime libraries (e.g. `libxkbcommon-x11-0`).
 3. After a boss, choose the next act.
 4. **Undo** reverts the last step. **Apply as correction** fixes a mistake
    without advancing the floor.
+5. **End run** files the run in History.
+
+Keys are optional shortcuts: 1–8 pick the room, Ctrl+Enter commits, Ctrl+Z
+undoes, Ctrl+1–5 switch tabs and Esc closes dialogs.
 
 The run saves after every change and reloads on start.
 
@@ -116,6 +133,9 @@ Everything the dashboard *believes* lives in `data/playbook.json`, not in code:
 - per-act role targets
 - thresholds for "big hit" and "long fight"
 - the words that mark event options as removal, upgrade, relic and so on
+- what the deck simulator assumes where the game data is silent (`simulation`):
+  cards drawn per turn, hand limit, turns and fights simulated, and hits that
+  bring back a shot Arrow
 
 **Export playbook** in the Data window copies it to your data folder. Edit it,
 then press **Reload from disk**.
@@ -124,6 +144,12 @@ To see how the current playbook classifies every card and encounter:
 
 ```bash
 cargo run -p spire-data --example audit -- --cards
+```
+
+To run the deck simulator on every starter deck:
+
+```bash
+cargo run --release -p spire-data --example audit -- --sim
 ```
 
 ## Development

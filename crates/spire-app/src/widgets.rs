@@ -77,12 +77,67 @@ pub fn chip(ui: &mut Ui, text: impl Into<String>, color: Color32) -> egui::Respo
 }
 
 /// A number with a small caption, for header stats ("FLOOR 12").
-pub fn stat(ui: &mut Ui, caption: &str, value: impl Into<String>, value_color: Color32) {
+pub fn stat(ui: &mut Ui, caption: &str, value: impl Into<String>, value_color: Color32) -> egui::Response {
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 0.0;
         ui.label(RichText::new(caption.to_uppercase()).small().color(text_faint()));
         ui.label(RichText::new(value).family(crate::style::strong_family()).color(value_color));
+    })
+    .response
+}
+
+/// One series key for the row of keys above a chart: a colour, a name and
+/// whether its line is dashed. Kept outside the plot so it never covers data.
+pub struct Key<'a> {
+    pub color: Color32,
+    pub name: &'a str,
+    pub dashed: bool,
+}
+
+pub fn keys(ui: &mut Ui, keys: &[Key<'_>]) {
+    ui.horizontal_wrapped(|ui| {
+        for k in keys {
+            let (rect, _) = ui.allocate_exact_size(vec2(18.0, 10.0), Sense::hover());
+            let (a, b) = (egui::pos2(rect.left(), rect.center().y), egui::pos2(rect.right(), rect.center().y));
+            let stroke = Stroke::new(2.0, k.color);
+            if k.dashed {
+                ui.painter().extend(egui::Shape::dashed_line(&[a, b], stroke, 4.0, 3.0));
+            } else {
+                ui.painter().line_segment([a, b], stroke);
+            }
+            ui.label(RichText::new(k.name).small().color(text_dim()));
+            ui.add_space(8.0);
+        }
     });
+}
+
+/// A tiny painted line chart (no axes), with an optional dashed target.
+/// Painted directly: five of these cost less than one plot widget.
+pub fn sparkline(ui: &mut Ui, values: &[f32], target: Option<f32>, color: Color32, size: Vec2) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
+    if !ui.is_rect_visible(rect) {
+        return response;
+    }
+    let painter = ui.painter();
+    painter.hline(rect.x_range(), rect.bottom(), Stroke::new(1.0, border()));
+    let top = values.iter().copied().fold(target.unwrap_or(0.0), f32::max).max(1.0);
+    let y = |v: f32| rect.bottom() - (v / top) * (rect.height() - 2.0);
+    if let Some(t) = target {
+        let dash = egui::Shape::dashed_line(
+            &[egui::pos2(rect.left(), y(t)), egui::pos2(rect.right(), y(t))],
+            Stroke::new(1.0, text_faint()),
+            4.0,
+            3.0,
+        );
+        painter.extend(dash);
+    }
+    if values.len() >= 2 {
+        let step = rect.width() / (values.len() - 1) as f32;
+        let points: Vec<egui::Pos2> =
+            values.iter().enumerate().map(|(i, v)| egui::pos2(rect.left() + i as f32 * step, y(*v))).collect();
+        painter.add(egui::Shape::line(points, Stroke::new(2.0, color)));
+    }
+    response
 }
 
 /// HP bar coloured by health, with the numbers inside.

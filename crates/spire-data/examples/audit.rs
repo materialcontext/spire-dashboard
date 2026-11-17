@@ -2,7 +2,9 @@
 //! `data/playbook.json`: role coverage per character, unclassified cards,
 //! and encounter threat numbers per act and room.
 //!
-//! `cargo run -p spire-data --example audit [-- --cards]`
+//! `cargo run -p spire-data --example audit [-- --cards] [-- --sim]`
+//!
+//! `--sim` runs the deck simulator on every starter deck instead.
 
 use std::collections::BTreeMap;
 
@@ -14,6 +16,10 @@ fn main() {
     let show_cards = std::env::args().any(|a| a == "--cards");
     let cat = Catalog::from_layers([spire_data::bundled_pack()]);
     let pb = spire_data::bundled_playbook();
+    if std::env::args().any(|a| a == "--sim") {
+        starter_sims(&cat, &pb);
+        return;
+    }
 
     println!("== roles by pool (excluding curses/statuses)");
     let mut by_color: BTreeMap<&str, BTreeMap<Role, u32>> = BTreeMap::new();
@@ -60,5 +66,28 @@ fn main() {
             rows.sort();
             println!("{} idx{} {:?}: {}", act.name, act.index, room, rows.join(", "));
         }
+    }
+}
+
+fn starter_sims(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
+    use spire_core::analysis::sim::simulate;
+    use spire_core::run::{RunEvent, RunState, apply};
+    for id in cat.characters.keys() {
+        let Some(start) = RunEvent::start(cat, id, 0) else { continue };
+        let state = apply(RunState::default(), &start);
+        let t0 = std::time::Instant::now();
+        let sim = simulate(&state, cat, &pb.simulation);
+        let took = t0.elapsed();
+        let turns: Vec<String> =
+            sim.turns.iter().map(|t| format!("{:.1}/{:.1}", t.damage.mean, t.block.mean)).collect();
+        println!(
+            "{id:<12} dmg/blk by turn {}  turnover {:.1}  dead {:.0}%  unspent {:.2}  stranded {:.2}  {:?}  ({took:.1?})",
+            turns.join(" "),
+            sim.turnover,
+            sim.dead_draws * 100.0,
+            sim.unspent_energy,
+            sim.stranded_energy,
+            sim.resources,
+        );
     }
 }

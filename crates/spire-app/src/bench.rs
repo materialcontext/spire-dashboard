@@ -14,7 +14,7 @@ pub static PROCESS_START: OnceLock<Instant> = OnceLock::new();
 use eframe::egui::{self, Event, Modifiers, MouseWheelUnit, Pos2, Rect, TouchPhase, Vec2, pos2, vec2};
 use spire_core::catalog::{CardType, Catalog, Rarity, RoomType};
 use spire_core::ids::*;
-use spire_core::run::{Change, DeckCard, NodeKind, NodeReport};
+use spire_core::run::{Change, DeckCard, NodeKind, NodeReport, Outcome};
 use spire_core::{Run, RunEvent};
 use spire_data::store::Store;
 
@@ -53,10 +53,14 @@ pub enum Scenario {
     CardsTab,
     /// Enemy catalog with an elite selected.
     EnemiesTab,
+    /// Analytics for the late run: charts and the deck simulation.
+    AnalyticsTab,
+    /// History with three archived runs, the newest selected.
+    HistoryTab,
 }
 
 impl Scenario {
-    pub const ALL: [Scenario; 14] = [
+    pub const ALL: [Scenario; 16] = [
         Scenario::Start,
         Scenario::Idle,
         Scenario::IdleLate,
@@ -71,6 +75,8 @@ impl Scenario {
         Scenario::CommitUndo,
         Scenario::CardsTab,
         Scenario::EnemiesTab,
+        Scenario::AnalyticsTab,
+        Scenario::HistoryTab,
     ];
 
     pub fn name(self) -> &'static str {
@@ -89,6 +95,8 @@ impl Scenario {
             Scenario::CommitUndo => "commit-undo",
             Scenario::CardsTab => "cards",
             Scenario::EnemiesTab => "enemies",
+            Scenario::AnalyticsTab => "analytics",
+            Scenario::HistoryTab => "history",
         }
     }
 
@@ -119,6 +127,13 @@ impl Scenario {
     pub fn app(self) -> SpireApp {
         let dir = std::env::temp_dir().join(format!("spire-bench-{}-{}", self.name(), std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
+        if self == Scenario::HistoryTab {
+            let store = Store::at(&dir);
+            let cat = store.load().catalog;
+            for run in archived_runs(&cat) {
+                store.archive_run(&run).expect("archive bench run");
+            }
+        }
         let mut app = SpireApp::from_store(Store::at(dir));
         if self != Scenario::Start {
             let run = if self.late() { late_run(app.catalog()) } else { mid_run(app.catalog()) };
@@ -132,6 +147,12 @@ impl Scenario {
         }
         if self == Scenario::EnemiesTab {
             app.open("enemies", Some("KNIGHTS_ELITE"));
+        }
+        if self == Scenario::AnalyticsTab {
+            app.open("analytics", None);
+        }
+        if self == Scenario::HistoryTab {
+            app.open("history", None);
         }
         app
     }
@@ -261,18 +282,42 @@ pub fn late_run(cat: &Catalog) -> Run {
     changes.push(Change::SetGold(240));
     run.push(RunEvent::Adjust(changes));
 
+    // HP and gold move fight by fight, so the analytics charts have shape.
+    let (mut hp, mut gold) = (61, 240);
     for (index, act) in [(1u8, "HIVE"), (2, "GLORY")] {
         let act = ActId::new(act);
         let boss = cat.acts.get(&act).and_then(|a| a.bosses.first().cloned());
         run.push(RunEvent::EnterAct { act: act.clone(), index, boss });
         let seen: Vec<EncounterId> = cat.encounters_in(&act, RoomType::Monster).map(|e| e.id.clone()).take(5).collect();
-        for e in &seen {
-            run.push(node(NodeKind::Monster, Some(e), vec![]));
+        for (i, e) in seen.iter().enumerate() {
+            hp = (hp - 4 - (i as i32 * 7) % 11).max(12);
+            gold += 12 + (i as i32 * 5) % 9;
+            run.push(node(NodeKind::Monster, Some(e), vec![Change::SetHp(hp), Change::SetGold(gold)]));
         }
+        hp = (hp + 26).min(92);
+        run.push(node(NodeKind::Rest, None, vec![Change::SetHp(hp)]));
         let elite = cat.encounters_in(&act, RoomType::Elite).map(|e| e.id.clone()).next();
-        run.push(node(NodeKind::Elite, elite.as_ref(), vec![]));
+        hp = (hp - 19).max(12);
+        gold += 30;
+        run.push(node(NodeKind::Elite, elite.as_ref(), vec![Change::SetHp(hp), Change::SetGold(gold)]));
     }
     run
+}
+
+/// A few finished runs, for the History tab.
+pub fn archived_runs(cat: &Catalog) -> Vec<Run> {
+    let stamp = |n: u32| Some(format!("2026-11-{n:02}T18:00:00Z"));
+    let mut won = late_run(cat);
+    won.started_at = stamp(10);
+    won.push(RunEvent::End { outcome: Outcome::Victory, at: stamp(10) });
+    let mut died = mid_run(cat);
+    died.started_at = stamp(12);
+    let killer = cat.encounters_in(&ActId::new("OVERGROWTH"), RoomType::Elite).map(|e| e.id.clone()).next();
+    died.push(RunEvent::End { outcome: Outcome::Died { encounter: killer }, at: stamp(12) });
+    let mut quit = mid_run(cat);
+    quit.started_at = stamp(14);
+    quit.push(RunEvent::End { outcome: Outcome::Abandoned, at: stamp(14) });
+    vec![won, died, quit]
 }
 
 // ---------------------------------------------------------------- stats

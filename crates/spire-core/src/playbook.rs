@@ -267,6 +267,31 @@ pub struct Playbook {
     pub opportunity_rules: Vec<OpportunityRule>,
     pub acts: Vec<ActPlan>,
     pub needs: NeedThresholds,
+    #[serde(default)]
+    pub simulation: SimAssumptions,
+}
+
+/// What the deck simulator assumes where the game data is silent.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SimAssumptions {
+    /// Cards drawn at the start of each turn.
+    pub hand_size: u32,
+    /// Most cards a hand can hold; further draws are lost.
+    pub max_hand: u32,
+    /// Turns per simulated fight.
+    pub turns: u32,
+    /// Simulated fights per estimate. More is steadier and slower.
+    pub trials: u32,
+    /// Further attack hits that bring a shot Arrow back (the Fool), per
+    /// community guides; the card data only says "Dislodge".
+    pub arrow_return_hits: u32,
+}
+
+impl Default for SimAssumptions {
+    fn default() -> Self {
+        SimAssumptions { hand_size: 5, max_hand: 10, turns: 5, trials: 400, arrow_return_hits: 3 }
+    }
 }
 
 impl Playbook {

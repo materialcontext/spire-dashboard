@@ -16,7 +16,7 @@ pub const DEFAULT_BASE_URL: &str = "https://spire-codex.com";
 
 /// The endpoints one update reads, in order. Keyless use allows 15 calls per
 /// minute *per endpoint*, so one call to each is well within limits.
-pub const ENDPOINTS: [&str; 10] = [
+pub const ENDPOINTS: [&str; 11] = [
     "acts",
     "characters",
     "cards",
@@ -27,6 +27,7 @@ pub const ENDPOINTS: [&str; 10] = [
     "encounters",
     "events",
     "ascensions",
+    "orbs",
 ];
 
 /// Which game branch to read. The dashboard follows the beta branch by
@@ -116,6 +117,20 @@ struct WCard {
     tags: Option<Vec<String>>,
     #[serde(default)]
     upgrade_description: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    vars: BTreeMap<String, serde_json::Value>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    upgrade: BTreeMap<String, serde_json::Value>,
+    #[serde(default)]
+    star_cost: Option<i32>,
+}
+
+#[derive(Deserialize)]
+struct WOrb {
+    id: String,
+    name: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    description: String,
 }
 
 #[derive(Deserialize)]
@@ -130,6 +145,10 @@ struct WCharacter {
     starting_gold: Option<u32>,
     #[serde(default)]
     max_energy: Option<u32>,
+    #[serde(default)]
+    orb_slots: Option<u32>,
+    #[serde(default)]
+    arrow_slots: Option<u32>,
     #[serde(default, deserialize_with = "null_as_default")]
     starting_deck: Vec<String>,
     #[serde(default, deserialize_with = "null_as_default")]
@@ -388,6 +407,97 @@ fn map_card(c: WCard) -> Card {
             .into_iter()
             .filter_map(|p| Some(PowerAmount { power: p.power_key.or(p.power)?, amount: p.amount.unwrap_or(0) }))
             .collect(),
+        vars: c
+            .vars
+            .into_iter()
+            .filter_map(|(k, v)| Some((k.to_lowercase(), i32::try_from(v.as_i64()?).ok()?)))
+            .collect(),
+        upgrade: upgrade(c.upgrade),
+        star_cost: c.star_cost.and_then(|n| u8::try_from(n).ok()),
+        channels: Vec::new(),
+    }
+}
+
+/// Codex upgrades: `{"damage": "+3", "cost": 0, "add_innate": 1, "remove_exhaust": 1}`.
+fn upgrade(raw: BTreeMap<String, serde_json::Value>) -> Upgrade {
+    let mut u = Upgrade::default();
+    for (key, value) in raw {
+        let number = value.as_i64().or_else(|| value.as_str().and_then(|s| s.trim_start_matches('+').parse().ok()));
+        let Some(n) = number.and_then(|n| i32::try_from(n).ok()) else { continue };
+        let keyword = |k: &str| {
+            let mut c = k.chars();
+            c.next().map(|f| f.to_ascii_uppercase().to_string() + c.as_str()).unwrap_or_default()
+        };
+        if key == "cost" {
+            u.cost = u8::try_from(n).ok();
+        } else if let Some(k) = key.strip_prefix("add_") {
+            u.adds.push(keyword(k));
+        } else if let Some(k) = key.strip_prefix("remove_") {
+            u.removes.push(keyword(k));
+        } else if key != "description_changed" {
+            u.deltas.insert(key, n);
+        }
+    }
+    u
+}
+
+/// `Channel 2 Frost`, `Channel X Lightning` in plain card text. Phrases
+/// naming no known orb ("Channel 1 random Orb") are left out.
+fn channels(text: &str, orbs: &[Orb]) -> Vec<OrbChannel> {
+    let mut out = Vec::new();
+    let mut rest = text;
+    while let Some(i) = rest.find("Channel ") {
+        rest = &rest[i + "Channel ".len()..];
+        let mut words = rest.split_whitespace();
+        let (Some(count), Some(name)) = (words.next(), words.next()) else { break };
+        let name = name.trim_end_matches(|c: char| !c.is_alphanumeric());
+        let Some(orb) = orbs.iter().find(|o| o.name.eq_ignore_ascii_case(name)) else { continue };
+        let (count, x) = match count {
+            "X" => (1, true),
+            n => match n.parse() {
+                Ok(n) => (n, false),
+                Err(_) => continue,
+            },
+        };
+        out.push(OrbChannel { orb: orb.id.clone(), count, x });
+    }
+    out
+}
+
+/// Reads an orb's passive and evoke from its text (`Passive: ... Evoke: ...`).
+fn map_orb(o: WOrb) -> Orb {
+    let raw = o.description.replace("[gold]", "").replace("[/gold]", "");
+    let (passive, evoke) = raw.split_once("Evoke:").unwrap_or((raw.as_str(), ""));
+    let number = |s: &str| -> i32 {
+        let blue = s.split("[blue]").nth(1).and_then(|r| r.split("[/blue]").next());
+        let energy = s.split("[energy:").nth(1).and_then(|r| r.split(']').next());
+        blue.or(energy).and_then(|n| n.trim().parse().ok()).unwrap_or(0)
+    };
+    let effect = |s: &str| {
+        let has = |n: &str| spire_core::playbook::contains_ci(s, n);
+        if has("increase this orb") {
+            OrbEffect::Grow
+        } else if has("damage") && has("all enemies") {
+            OrbEffect::DamageAll
+        } else if has("damage") {
+            OrbEffect::Damage
+        } else if has("block") {
+            OrbEffect::Block
+        } else if has("energy") {
+            OrbEffect::Energy
+        } else {
+            OrbEffect::Other
+        }
+    };
+    Orb {
+        id: OrbId(o.id),
+        name: o.name,
+        text: strip_markup(&o.description),
+        passive: number(passive),
+        passive_effect: effect(passive),
+        evoke: number(evoke),
+        evoke_effect: effect(evoke),
+        focus: !spire_core::playbook::contains_ci(&raw, "unaffected by focus"),
     }
 }
 
@@ -456,7 +566,16 @@ pub fn to_pack(
     fetched_at: Option<String>,
 ) -> Result<DataPack, DataError> {
     let acts: Vec<WAct> = parse(responses, "acts")?;
-    let cards: Vec<Card> = parse::<WCard>(responses, "cards")?.into_iter().map(map_card).collect();
+    // Orbs arrived later than the other endpoints; older saved responses lack them.
+    let orbs: Vec<Orb> = if responses.contains_key("orbs") { parse::<WOrb>(responses, "orbs")? } else { Vec::new() }
+        .into_iter()
+        .map(map_orb)
+        .collect();
+    let cards: Vec<Card> = parse::<WCard>(responses, "cards")?
+        .into_iter()
+        .map(map_card)
+        .map(|c| Card { channels: channels(&c.text, &orbs), ..c })
+        .collect();
     let card_ids: BTreeSet<String> = cards.iter().map(|c| c.id.0.clone()).collect();
 
     let relics: Vec<Relic> = parse::<WItem>(responses, "relics")?
@@ -490,6 +609,8 @@ pub fn to_pack(
                 .map(|n| RelicId(resolve(n, &relic_ids).cloned().unwrap_or_else(|| camel_to_id(n))))
                 .collect(),
             description: strip_markup(&c.description),
+            orb_slots: c.orb_slots,
+            arrow_slots: c.arrow_slots,
         })
         .collect();
 
@@ -617,6 +738,7 @@ pub fn to_pack(
         events,
         acts,
         ascensions,
+        orbs,
         rules,
     })
 }
@@ -666,5 +788,76 @@ mod tests {
         assert_eq!(card_type(Some("Attack")), CardType::Attack);
         assert_eq!(card_type(Some("Mystery")), CardType::Other);
         assert_eq!(rarity(Some("Uncommon")), Rarity::Uncommon);
+    }
+
+    #[test]
+    fn reads_upgrades_vars_and_orbs() {
+        let up = upgrade(
+            serde_json::from_str(
+                r#"{"damage": "+3", "cost": 0, "add_innate": 1, "remove_exhaust": 1, "description_changed": 1}"#,
+            )
+            .unwrap(),
+        );
+        assert_eq!(up.cost, Some(0));
+        assert_eq!(up.deltas.get("damage"), Some(&3));
+        assert_eq!(
+            (up.adds.as_slice(), up.removes.as_slice()),
+            (&["Innate".to_string()][..], &["Exhaust".to_string()][..])
+        );
+        assert!(!up.deltas.contains_key("description_changed"));
+
+        let frost = map_orb(WOrb {
+            id: "FROST_ORB".into(),
+            name: "Frost".into(),
+            description: "[gold]Passive:[/gold] At the end of turn, gain [blue]2[/blue] [gold]Block[/gold].\n\
+                          [gold]Evoke:[/gold] Gain [blue]5[/blue] [gold]Block[/gold]."
+                .into(),
+        });
+        assert_eq!(
+            (frost.passive, frost.passive_effect, frost.evoke, frost.evoke_effect),
+            (2, OrbEffect::Block, 5, OrbEffect::Block)
+        );
+        let plasma = map_orb(WOrb {
+            id: "PLASMA_ORB".into(),
+            name: "Plasma".into(),
+            description: "[gold]Passive:[/gold] At the start of turn, gain [energy:1].\n\
+                          [gold]Evoke:[/gold] Gain [energy:2]. Plasma is unaffected by [gold]Focus[/gold]."
+                .into(),
+        });
+        assert_eq!((plasma.passive, plasma.evoke, plasma.passive_effect), (1, 2, OrbEffect::Energy));
+        assert!(!plasma.focus);
+        let dark = map_orb(WOrb {
+            id: "DARK_ORB".into(),
+            name: "Dark".into(),
+            description: "[gold]Passive:[/gold] At the end of turn, increase this Orb's damage by [blue]6[/blue].\n\
+                          [gold]Evoke:[/gold] Deal [blue]6[/blue] damage to the enemy with the lowest HP."
+                .into(),
+        });
+        assert_eq!((dark.passive_effect, dark.evoke_effect), (OrbEffect::Grow, OrbEffect::Damage));
+
+        let orbs = [frost, plasma];
+        let found = channels("Gain 6 Block. Channel 2 Frost. Channel X Plasma. Channel 1 random Orb.", &orbs);
+        assert_eq!(
+            found,
+            vec![
+                OrbChannel { orb: OrbId::new("FROST_ORB"), count: 2, x: false },
+                OrbChannel { orb: OrbId::new("PLASMA_ORB"), count: 1, x: true },
+            ]
+        );
+    }
+
+    #[test]
+    fn keeps_card_vars_lowercased() {
+        let card: WCard = serde_json::from_str(
+            r#"{"id": "FALLING_STAR", "name": "Falling Star", "description": "Deal 8 damage.", "cost": 0,
+                "vars": {"Damage": 8, "StarCost": 2, "Odd": "text"}, "upgrade": {"damage": "+4"}, "star_cost": 2}"#,
+        )
+        .unwrap();
+        let card = map_card(card);
+        assert_eq!(card.vars.get("damage"), Some(&8));
+        assert_eq!(card.vars.get("starcost"), Some(&2));
+        assert!(!card.vars.contains_key("odd"), "non-numeric vars are dropped");
+        assert_eq!(card.star_cost, Some(2));
+        assert_eq!((card.value("damage", false), card.value("damage", true)), (8, 12));
     }
 }

@@ -63,9 +63,25 @@ kit, so old runs replay even after a data update.
 - `events`: run `needs` (removal, heal, upgrade…), and a `watchlist` of
   act events ranked by how well they meet those needs.
 - `advice`: act targets, boss gaps and act notes.
+- `timeline`: a run floor by floor (HP, gold, roles, dead cards, damage per
+  fight against the community average, elites per act), folded from the event
+  log, so archived runs work the same as the live one.
+- `sim`: the deck simulator. It plays seeded fights against a passive target
+  with two policies, one leaning to damage and one to block, that share
+  shuffles. The per-card data it reads:
+  - `vars` and `upgrade` deltas
+  - star costs and orbs channelled
+  - the character's energy, orb slots and arrow slots
 
-`Dashboard::compute` bundles everything a frame needs. The app recomputes it
-only when the run or data changes, never per frame.
+  It carries Strength, Dexterity, Focus, orbs, Poison, Aim, Stretch, Vigor,
+  Stars and Arrows between turns. Assumptions the data doesn't state (hand
+  size, hand limit, Arrow return) are in the playbook's `simulation` block.
+  The results are deterministic.
+
+`Dashboard::compute` bundles everything the Run tab needs. The app recomputes
+it only when the run or data changes, never per frame. Analytics (`timeline` +
+`sim`, a few ms) are built lazily, only while the Analytics tab is open; History
+reads archived runs from disk when its tab opens.
 
 ## App
 
@@ -166,6 +182,8 @@ the update still applies.
 | Add a data source | Add a `fetch::Source` variant and an adapter module that returns a `DataPack`. |
 | Change how cards are read | Edit `role_rules` / `card_roles` in the playbook; add a `Condition` variant if a new predicate is needed. |
 | Add a deck metric | Extend `DeckProfile` and `profile()`; show it in `views/breakdown.rs`. |
+| Simulate a new card mechanic | Read its `vars` key in `sim::play_of`, carry it in `Fight`, and add a `Resource` if it should be reported. |
+| Add a run chart | Add a field to `FloorPoint` in `timeline`, then a panel in `views/analytics.rs::run_section` (History gets it too). |
 | Add a threat signal | Extend `ThreatProfile` and `demands()`; thresholds go in `ActPlan`. |
 | Add a run action | Add a `Change` variant and handle it in `apply_change`; add UI in `views/log.rs`. |
 | Add a panel | New file in `views/`, call it from `views::root`. |
@@ -180,7 +198,7 @@ Each milestone is its own PR.
    shop node helper (removal cost, gold planning).
 3. **M3**: route planning: enter the visible map and get elite/rest/`?` counts
    against the deck's readiness.
-4. **M4**: run history and post-run review: which roles were missing when HP
-   was lost.
+4. **M4** (done): run history, floor-by-floor replay, run analytics and the
+   deck simulator.
 5. **M5**: community stats from Codex (`/api/runs/metrics/*`) to weigh card
    picks and event options, cached and updated by the same button.

@@ -13,6 +13,7 @@ path = "src/main.rs"
 spire-core.workspace = true
 spire-data.workspace = true
 eframe.workspace = true
+egui_plot.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

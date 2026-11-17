@@ -42,6 +42,10 @@ comparisons. Under Xvfb, wrap the window runs in `xvfb-run -a -s "-screen 0
 | `combo-open` | Encounter dropdown opened by a click |
 | `resize` | Window width changing every frame |
 | `commit-undo` | Commit a floor, then undo, alternating |
+| `cards` | Card catalog with Bash selected |
+| `enemies` | Enemy catalog with an elite selected |
+| `analytics` | Analytics tab for the late run: five charts and the deck simulation |
+| `history` | History tab with three archived runs, the newest selected |
 
 ## Results
 
