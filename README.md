@@ -63,6 +63,14 @@ undoes, Ctrl+1–5 switch tabs and Esc closes dialogs.
 
 The run saves after every change and reloads on start.
 
+The header doubles as the title bar:
+- Drag it to move the window, and double-click it to maximise.
+- Drag any edge or corner to resize.
+
+The app draws this title bar itself, so desktop tools that restyle native title
+bars (Mica For Everyone, blur themes) can't hide it. **Settings → Use the
+system title bar** brings back the operating system's own.
+
 ## Appearance
 
 **Settings** lets you choose a look, and the choice is saved.

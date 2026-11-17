@@ -381,6 +381,13 @@ impl SpireApp {
                     self.note(format!("Could not save settings: {e}"));
                 }
             }
+            Action::SetSystemTitleBar(on) => {
+                crate::chrome::set_custom(ctx, !on);
+                self.settings.system_title_bar = on;
+                if let Err(e) = self.store.save_settings(&self.settings) {
+                    self.note(format!("Could not save settings: {e}"));
+                }
+            }
             Action::SetChannel(channel) => {
                 if let Source::SpireCodex { channel: c, .. } = &mut self.settings.source {
                     *c = channel;
@@ -423,6 +430,7 @@ impl SpireApp {
                 views::data::window(&ctx, &view, &self.store, &self.settings, &mut self.ui, &mut actions);
             }
         }
+        crate::chrome::window_edges(&ctx);
         for action in actions {
             self.apply(action, &ctx);
         }

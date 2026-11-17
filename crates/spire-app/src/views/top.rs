@@ -15,6 +15,8 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
         let band = egui::Rect::from_min_size(egui::pos2(r.min.x - 14.0, r.min.y), egui::vec2(r.width() + 28.0, 3.0));
         ui.painter().rect_filled(band, 0.0, accent());
     }
+    let top = ui.max_rect().top();
+    crate::chrome::title_bar_area(ui);
     ui.add_space(6.0);
     ui.horizontal(|ui| {
         let full = ui.max_rect();
@@ -39,6 +41,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
             }
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            crate::chrome::window_buttons(ui);
             let data_label = if st.updating { "Updating data…" } else { "Settings" };
             if ui.button(data_label).clicked() {
                 out.push(Action::ToggleDataWindow);
@@ -77,6 +80,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
         }
         None => ui.add_space(4.0),
     }
+    crate::chrome::title_bar_done(ui, top);
 }
 
 /// Character, act, floor, HP, gold, potions and deck: the run at a glance.
