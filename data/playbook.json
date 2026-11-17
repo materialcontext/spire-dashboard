@@ -409,20 +409,53 @@
     }
   ],
   "card_roles": {
+    "ALCHEMIZE": [
+      "consistency"
+    ],
+    "APOTHEOSIS": [
+      "consistency"
+    ],
+    "BEGONE": [
+      "scaling_damage"
+    ],
+    "CHAOS": [
+      "scaling_damage"
+    ],
+    "FLANKING": [
+      "consistency"
+    ],
+    "FORBIDDEN_GRIMOIRE": [
+      "consistency"
+    ],
+    "GUARDS": [
+      "frontload_defense"
+    ],
+    "KNIFE_TRAP": [
+      "scaling_damage"
+    ],
+    "LARGESSE": [
+      "consistency"
+    ],
+    "LOOP": [
+      "consistency"
+    ],
+    "MASTER_PLANNER": [
+      "consistency"
+    ],
+    "PRIMAL_FORCE": [
+      "scaling_damage"
+    ],
+    "ROYALTIES": [
+      "consistency"
+    ],
+    "SIGNAL_BOOST": [
+      "consistency"
+    ],
     "STAMPEDE": [
       "scaling_damage"
     ],
     "SYNCHRONIZE": [
       "scaling_damage"
-    ],
-    "KNIFE_TRAP": [
-      "frontload_damage"
-    ],
-    "FORBIDDEN_GRIMOIRE": [
-      "consistency"
-    ],
-    "MASTER_PLANNER": [
-      "consistency"
     ]
   },
   "aoe": {
