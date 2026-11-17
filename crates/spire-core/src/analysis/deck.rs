@@ -42,7 +42,7 @@ pub fn classify<'a>(deck: &'a [DeckCard], catalog: &'a Catalog, playbook: &Playb
 
 /// Identical deck cards grouped for display: one row per (type, card,
 /// upgrade, enchantment), in type then name order.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct DeckRow {
     pub card: DeckCard,
     pub card_type: CardType,

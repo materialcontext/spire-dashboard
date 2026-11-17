@@ -157,7 +157,7 @@ impl Scenario {
                 vec![Event::PointerMoved(pos2(x, 60.0 + (i % 60) as f32 * 13.0))]
             }
             // Move once and rest: tooltips need the pointer still for a moment.
-            Scenario::Tooltip if i == 1 => vec![Event::PointerMoved(pos2(60.0, 116.0))],
+            Scenario::Tooltip if i == 1 => vec![Event::PointerMoved(pos2(70.0, 142.0))],
             Scenario::Scroll => vec![
                 Event::PointerMoved(pos2(700.0, 500.0)),
                 Event::MouseWheel {
@@ -169,7 +169,7 @@ impl Scenario {
                 },
             ],
             // egui hit-tests against the previous frame, so click after layout exists.
-            Scenario::ComboOpen if i == 2 => click(pos2(1225.0, 124.0)),
+            Scenario::ComboOpen if i == 2 => click(pos2(1235.0, 276.0)),
             _ => Vec::new(),
         }
     }

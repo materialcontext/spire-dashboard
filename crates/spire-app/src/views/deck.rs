@@ -33,7 +33,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
                     .color(style::card_type_color(row.card_type)),
             );
         }
-        culled(ui, ("deck-row", v.generation, &row.name, &row.card.enchantment), |ui| card_row(ui, v, row, out));
+        culled(ui, ("deck-row", row), |ui| card_row(ui, v, row, out));
     }
 
     section(ui, "Relics", s.relics.len());

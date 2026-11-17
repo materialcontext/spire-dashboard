@@ -115,7 +115,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-See `docs/ARCHITECTURE.md` for the design and extension points.
+See `docs/ARCHITECTURE.md` for the design and extension points, and
+`docs/PERFORMANCE.md` for benchmarks and the rules that keep frames cheap
+on weak hardware.
 
 Game data comes from Spire Codex (community-maintained). Not affiliated with
 Mega Crit.

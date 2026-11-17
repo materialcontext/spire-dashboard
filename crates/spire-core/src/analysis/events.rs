@@ -8,7 +8,7 @@ use crate::playbook::{Opportunity, Playbook};
 use crate::run::RunState;
 
 /// Something the run currently wants, and why.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Need {
     pub opportunity: Opportunity,
     pub reason: String,
@@ -47,7 +47,7 @@ pub fn needs(state: &RunState, deck: &DeckProfile, playbook: &Playbook) -> Vec<N
     out
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct EventWatch {
     pub event: EventId,
     pub name: String,

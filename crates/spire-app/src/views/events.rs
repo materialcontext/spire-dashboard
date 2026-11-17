@@ -24,7 +24,9 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
         for e in &fresh {
             // The watchlist is long and mostly below the fold: skip layout
             // of entries that are scrolled out of view.
-            culled(ui, ("event", v.generation, &e.event), |ui| event_entry(ui, v, e));
+            // Keyed by content, not generation: entries that a commit
+            // doesn't change keep their cached size.
+            culled(ui, ("event", e), |ui| event_entry(ui, v, e));
         }
         if !seen.is_empty() {
             ui.add_space(6.0);
