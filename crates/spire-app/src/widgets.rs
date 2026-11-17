@@ -35,6 +35,17 @@ pub fn panel<R>(ui: &mut Ui, title: &str, note: Option<&str>, add: impl FnOnce(&
     shown.inner
 }
 
+/// A label that links somewhere: pointer cursor and underline on hover.
+pub fn link(ui: &mut Ui, text: RichText) -> egui::Response {
+    let r = ui.add(egui::Label::new(text).sense(Sense::click()));
+    if r.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        let y = r.rect.max.y - 1.0;
+        ui.painter().hline(r.rect.x_range(), y, Stroke::new(1.0, text_faint()));
+    }
+    r
+}
+
 /// Uppercase, small, dimmed label used for section titles.
 pub fn eyebrow(text: &str) -> RichText {
     RichText::new(text.to_uppercase()).small().family(crate::style::strong_family()).color(text_dim())

@@ -35,6 +35,8 @@ pub struct UiState {
     pub updating: bool,
     /// "Abandon this run?" confirmation is open.
     pub confirm_abandon: bool,
+    /// A short-lived notice after a commit, with an Undo button.
+    pub toast: Option<Toast>,
     /// Which top-level tab is showing.
     pub tab: crate::views::Tab,
     pub cards: crate::views::cards::CardBrowser,
@@ -43,6 +45,15 @@ pub struct UiState {
     pub end_run_open: bool,
     pub end_encounter: Option<spire_core::EncounterId>,
 }
+
+pub struct Toast {
+    pub text: String,
+    /// `ctx.input().time` after which it disappears.
+    pub until: f64,
+}
+
+/// Seconds a commit notice stays up.
+const TOAST_SECONDS: f64 = 6.0;
 
 pub struct SpireApp {
     store: Store,
@@ -99,6 +110,7 @@ impl SpireApp {
                 messages,
                 updating: false,
                 confirm_abandon: false,
+                toast: None,
                 tab: crate::views::Tab::Run,
                 cards: Default::default(),
                 enemies: Default::default(),
@@ -252,9 +264,27 @@ impl SpireApp {
                 self.run_changed();
             }
             Action::Record(event) => {
+                let node = matches!(event, RunEvent::Node(_));
                 self.run.push(event);
                 self.run_changed();
+                if node {
+                    let now = ctx.input(|i| i.time);
+                    let text = format!("Floor {} logged", self.state.floor);
+                    self.ui.toast = Some(Toast { text, until: now + TOAST_SECONDS });
+                    ctx.request_repaint_after(std::time::Duration::from_secs_f64(TOAST_SECONDS));
+                }
             }
+            Action::DismissToast => self.ui.toast = None,
+            Action::Open(link) => match link {
+                crate::actions::Link::Card(id) => {
+                    self.ui.tab = crate::views::Tab::Cards;
+                    self.ui.cards.selected = Some(id);
+                }
+                crate::actions::Link::Encounter(id) => {
+                    self.ui.tab = crate::views::Tab::Enemies;
+                    self.ui.enemies.selected = Some(id);
+                }
+            },
             Action::Undo => {
                 if self.run.undo().is_some() {
                     self.run_changed();
@@ -346,7 +376,10 @@ impl SpireApp {
             self.note(format!("Could not save the run: {e}"));
         }
         let ctx = ui.ctx().clone();
-        let mut actions = Vec::new();
+        let mut actions = self.keys(&ctx);
+        if self.ui.toast.as_ref().is_some_and(|t| ctx.input(|i| i.time) > t.until) {
+            self.ui.toast = None;
+        }
         {
             let view = ViewCtx {
                 catalog: &self.catalog,
@@ -364,6 +397,48 @@ impl SpireApp {
         for action in actions {
             self.apply(action, &ctx);
         }
+    }
+}
+
+impl SpireApp {
+    /// Keyboard accelerators. Ignored while a text field has focus, so
+    /// typing a search never triggers them; everything also works by mouse.
+    ///
+    /// 1–8 room · Ctrl+Enter commit · Ctrl+Z undo · Ctrl+1/2/3 tabs · Esc close.
+    fn keys(&mut self, ctx: &egui::Context) -> Vec<Action> {
+        use egui::{Key, Modifiers};
+        let mut out = Vec::new();
+        if ctx.text_edit_focused() {
+            return out;
+        }
+        let tabs = crate::views::Tab::ALL;
+        let digits = [Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5, Key::Num6, Key::Num7, Key::Num8];
+        ctx.input_mut(|i| {
+            for (n, key) in digits.iter().enumerate() {
+                if n < tabs.len() && i.consume_key(Modifiers::COMMAND, *key) {
+                    self.ui.tab = tabs[n];
+                }
+            }
+            if self.ui.tab == crate::views::Tab::Run && self.state.started() {
+                for (n, key) in digits.iter().enumerate() {
+                    if i.consume_key(Modifiers::NONE, *key) {
+                        self.draft.kind = spire_core::run::NodeKind::ALL[n];
+                    }
+                }
+                if i.consume_key(Modifiers::COMMAND, Key::Enter) {
+                    out.push(Action::Record(self.draft.to_node(&self.state)));
+                }
+            }
+            if i.consume_key(Modifiers::COMMAND, Key::Z) {
+                out.push(Action::Undo);
+            }
+            if i.consume_key(Modifiers::NONE, Key::Escape) {
+                self.ui.show_data = false;
+                self.ui.end_run_open = false;
+                self.ui.confirm_abandon = false;
+            }
+        });
+        out
     }
 }
 

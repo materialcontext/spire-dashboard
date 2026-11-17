@@ -53,6 +53,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
     step(ui, 1, "Room");
     let rooms: Vec<(NodeKind, &str)> = NodeKind::ALL.iter().map(|k| (*k, k.label())).collect();
     segmented(ui, &mut d.kind, &rooms);
+    ui.label(RichText::new("Keys: 1–8 room · Ctrl+Enter commit · Ctrl+Z undo").small().color(text_faint()));
     let length = spire_core::analysis::floors::act_length(s, v.catalog);
     let position = match length {
         Some(l) => format!("Act floor {} of {l}", s.act_floor + 1),
@@ -111,15 +112,32 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
     }
 
     step(ui, 3, "After the floor");
-    egui::Grid::new("vitals").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+    // Absolute values and changes are two views of the same numbers:
+    // edit whichever you know ("took 12", "+25 gold").
+    egui::Grid::new("vitals").num_columns(3).spacing([12.0, 6.0]).show(ui, |ui| {
         ui.label(RichText::new("HP").color(text_dim()));
         ui.add(egui::DragValue::new(&mut d.hp).range(0..=d.max_hp.max(1)));
+        let mut lost = s.hp - d.hp;
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("lost").small().color(text_faint()));
+            if ui.add(egui::DragValue::new(&mut lost).range(-999..=s.hp)).changed() {
+                d.hp = (s.hp - lost).clamp(0, d.max_hp.max(1));
+            }
+        });
         ui.end_row();
         ui.label(RichText::new("Max HP").color(text_dim()));
         ui.add(egui::DragValue::new(&mut d.max_hp).range(1..=999));
+        ui.label("");
         ui.end_row();
         ui.label(RichText::new("Gold").color(text_dim()));
         ui.add(egui::DragValue::new(&mut d.gold).range(0..=9999));
+        let mut delta = d.gold - s.gold;
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("change").small().color(text_faint()));
+            if ui.add(egui::DragValue::new(&mut delta).range(-s.gold..=9999)).changed() {
+                d.gold = (s.gold + delta).max(0);
+            }
+        });
         ui.end_row();
     });
 
@@ -157,9 +175,11 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
     step(ui, 5, "Review");
     if d.changes.is_empty() {
         ui.label(
-            RichText::new("No card, relic or potion changes. Use + and x in the deck list to upgrade or remove.")
-                .small()
-                .color(text_faint()),
+            RichText::new(
+                "No card, relic or potion changes yet. Right-click a deck card to upgrade, enchant or remove it.",
+            )
+            .small()
+            .color(text_faint()),
         );
     }
     let mut remove = None;
