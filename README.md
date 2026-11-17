@@ -46,6 +46,25 @@ Linux needs the usual X11/Wayland runtime libraries (e.g. `libxkbcommon-x11-0`).
 
 The run saves after every change and reloads on start.
 
+## Appearance
+
+**Settings** lets you choose a look, and the choice is saved.
+
+| Look | Style |
+|---|---|
+| **Spirebound** (default) | High contrast in Inter. The accent follows your character. |
+| **Forge** | Charcoal and embers. |
+| **Neon Spire** | Synthwave with glowing edges. |
+| **Grimoire** | A light theme: parchment, ink and crimson. |
+| **Terminal** | A phosphor-green CRT, all monospace. |
+
+**Larger text** is a separate readability switch that works with every look:
+
+- type about 10% bigger
+- roomier spacing
+- filled chips
+- brighter secondary text
+
 ## Game data
 
 The app ships with a full snapshot of the **StS2 beta branch** (cards,

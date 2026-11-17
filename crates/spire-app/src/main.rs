@@ -25,8 +25,11 @@ fn main() -> eframe::Result {
         options,
         Box::new(move |cc| {
             // SPIRE_LOOK overrides the saved appearance (for reviews and screenshots).
-            let saved = spire_data::store::Store::default_location().settings().look;
-            let look = std::env::var("SPIRE_LOOK").ok().or(saved);
+            let settings = spire_data::store::Store::default_location().settings();
+            // SPIRE_LARGE=1 forces Larger text on (screenshots); else the saved choice.
+            let large = std::env::var("SPIRE_LARGE").map_or(settings.large_text, |v| v == "1");
+            spire_app::style::set_large(&cc.egui_ctx, large);
+            let look = std::env::var("SPIRE_LOOK").ok().or(settings.look);
             spire_app::style::set_look(&cc.egui_ctx, look.as_deref().unwrap_or(spire_app::style::DEFAULT_LOOK));
             let idle = std::env::var("SPIRE_IDLE_CHECK").ok().and_then(|s| s.parse::<f64>().ok());
             let app: Box<dyn eframe::App> = match (bench, idle) {

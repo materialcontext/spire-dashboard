@@ -1,5 +1,9 @@
 //! Visual language and frame-cost tuning.
 //!
+//! **Larger text** is a readability option independent of the look: +10%
+//! type, roomier spacing, filled chips and brighter tertiary text, applied
+//! on top of whichever look is chosen.
+//!
 //! **Looks.** Every visual treatment is one entry in [`LOOKS`]: a palette,
 //! a typeface, sizes, border weight, and a few switches (light/dark,
 //! glowing borders, an accent that follows the current character). Adding
@@ -72,14 +76,13 @@ pub struct LookDef {
     /// Accent follows the current character's colour.
     pub character_accent: bool,
     pub tinted_chips: bool,
-    pub roomy: bool,
 }
 
 const fn rgb(r: u8, g: u8, b: u8) -> Color32 {
     Color32::from_rgb(r, g, b)
 }
 
-/// High-contrast dark base shared by Bright, Large and Spirebound.
+/// High-contrast dark base (Spirebound, and the template for new looks).
 const BRIGHT: Palette = Palette {
     bg: rgb(13, 15, 19),
     surface: rgb(27, 30, 38),
@@ -109,26 +112,9 @@ const BASE: LookDef = LookDef {
     glow: false,
     character_accent: false,
     tinted_chips: false,
-    roomy: false,
 };
 
 pub const LOOKS: &[LookDef] = &[
-    LookDef {
-        name: "bright",
-        label: "Bright",
-        blurb: "High contrast in the classic font.",
-        typeface: Typeface::Ubuntu,
-        ..BASE
-    },
-    LookDef {
-        name: "large",
-        label: "Large",
-        blurb: "High contrast in Inter, bigger and roomier.",
-        sizes: (22.0, 16.5, 13.5),
-        tinted_chips: true,
-        roomy: true,
-        ..BASE
-    },
     LookDef {
         name: "spirebound",
         label: "Spirebound",
@@ -240,6 +226,24 @@ pub const DEFAULT_LOOK: &str = "spirebound";
 static LOOK: AtomicUsize = AtomicUsize::new(0);
 /// Current character colour (RGBA), or 0 for none; drives `character_accent`.
 static CHARACTER: AtomicU32 = AtomicU32::new(0);
+/// The "Larger text" readability option, applied on top of any look.
+static LARGE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether "Larger text" is on.
+pub fn large() -> bool {
+    LARGE.load(Ordering::Relaxed)
+}
+
+/// Turns the "Larger text" option on or off and re-applies the look.
+pub fn set_large(ctx: &egui::Context, on: bool) {
+    LARGE.store(on, Ordering::Relaxed);
+    configure(ctx);
+}
+
+/// Chips get a tinted fill with the look's own setting or Larger text.
+pub fn tinted_chips() -> bool {
+    current().tinted_chips || large()
+}
 
 pub fn current() -> &'static LookDef {
     &LOOKS[LOOK.load(Ordering::Relaxed).min(LOOKS.len() - 1)]
@@ -262,7 +266,15 @@ pub mod color {
             }
         )*};
     }
-    accessors!(bg, surface, surface_hi, input, border, border_hi, text, text_dim, text_faint, good, warn, bad, info);
+    accessors!(bg, surface, surface_hi, input, border, border_hi, text, text_dim, good, warn, bad, info);
+
+    /// Faint (tertiary) text. Larger text lifts it to the dimmed level so
+    /// nothing on screen is low-contrast.
+    #[inline]
+    pub fn text_faint() -> Color32 {
+        let p = &super::current().palette;
+        if super::large() { p.text_dim } else { p.text_faint }
+    }
 
     /// The look's accent, or the current character's colour on looks that
     /// follow the character.
@@ -404,7 +416,10 @@ pub fn configure(ctx: &egui::Context) {
     ctx.set_theme(if look.light { egui::Theme::Light } else { egui::Theme::Dark });
     ctx.all_styles_mut(|style| {
         use FontFamily::{Monospace, Proportional};
-        let (heading, body, small) = look.sizes;
+        // Larger text: every size up 10% (rounded to half points).
+        let scale = |v: f32| if large() { (v * 1.1 * 2.0).round() / 2.0 } else { v };
+        let (heading, body, small) = (scale(look.sizes.0), scale(look.sizes.1), scale(look.sizes.2));
+        let roomy = large();
         style.text_styles = [
             (TextStyle::Heading, FontId::new(heading, strong_family())),
             (TextStyle::Body, FontId::new(body, Proportional)),
@@ -413,9 +428,9 @@ pub fn configure(ctx: &egui::Context) {
             (TextStyle::Monospace, FontId::new(body - 1.0, Monospace)),
         ]
         .into();
-        style.spacing.item_spacing = if look.roomy { egui::vec2(10.0, 8.0) } else { egui::vec2(8.0, 6.0) };
-        style.spacing.button_padding = egui::vec2(10.0, if look.roomy { 5.0 } else { 4.0 });
-        style.spacing.interact_size.y = if look.roomy { 28.0 } else { 24.0 };
+        style.spacing.item_spacing = if roomy { egui::vec2(10.0, 8.0) } else { egui::vec2(8.0, 6.0) };
+        style.spacing.button_padding = egui::vec2(10.0, if roomy { 5.0 } else { 4.0 });
+        style.spacing.interact_size.y = if roomy { 28.0 } else { 24.0 };
         style.animation_time = 0.0;
 
         let strong_fg = if look.light { Color32::BLACK } else { Color32::WHITE };

@@ -42,6 +42,18 @@ pub fn window(
                 }
             });
             ui.label(RichText::new(crate::style::current().blurb).small().color(text_dim()));
+            ui.add_space(4.0);
+            let mut large = crate::style::large();
+            if ui.checkbox(&mut large, "Larger text").changed() {
+                out.push(Action::SetLargeText(large));
+            }
+            ui.label(
+                RichText::new(
+                    "Bigger type, roomier spacing, filled chips and brighter secondary text. Works with any look.",
+                )
+                .small()
+                .color(text_faint()),
+            );
             ui.add_space(10.0);
 
             ui.label(eyebrow("Game data"));

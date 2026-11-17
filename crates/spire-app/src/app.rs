@@ -260,6 +260,13 @@ impl SpireApp {
                     self.note(format!("Could not save settings: {e}"));
                 }
             }
+            Action::SetLargeText(on) => {
+                crate::style::set_large(ctx, on);
+                self.settings.large_text = on;
+                if let Err(e) = self.store.save_settings(&self.settings) {
+                    self.note(format!("Could not save settings: {e}"));
+                }
+            }
             Action::SetChannel(channel) => {
                 if let Source::SpireCodex { channel: c, .. } = &mut self.settings.source {
                     *c = channel;

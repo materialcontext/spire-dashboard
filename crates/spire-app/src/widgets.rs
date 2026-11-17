@@ -56,7 +56,7 @@ pub fn chip(ui: &mut Ui, text: impl Into<String>, color: Color32) -> egui::Respo
     let (rect, response) = ui.allocate_exact_size(galley.size() + 2.0 * PAD, Sense::hover());
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
-        if crate::style::current().tinted_chips {
+        if crate::style::tinted_chips() {
             painter.rect_filled(rect, 0.0, color.gamma_multiply(0.18));
         }
         painter.rect_stroke(rect, 0.0, Stroke::new(1.0, color.gamma_multiply(0.7)), StrokeKind::Inside);

@@ -21,6 +21,8 @@ pub struct Settings {
     pub source: Source,
     /// Appearance (a look name from the app's style table).
     pub look: Option<String>,
+    /// The "Larger text" readability option.
+    pub large_text: bool,
 }
 
 /// The app's data directory. All reads tolerate missing files.
