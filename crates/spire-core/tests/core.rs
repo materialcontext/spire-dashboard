@@ -749,3 +749,28 @@ fn timeline_tracks_floors_fights_and_elites() {
     // Replaying to a point's event index gives that floor's state.
     assert_eq!(run.state_at(t.points[1].event_index).hp, 40);
 }
+
+#[test]
+fn upgrades_change_cost_text_and_keywords() {
+    let mut zap = card("ZAP", CardType::Skill, Rarity::Basic, "Channel 1 Lightning.");
+    zap.upgrade = Upgrade { cost: Some(0), ..Default::default() };
+    zap.upgrade_text = Some(String::new());
+    assert_eq!((zap.cost_label_at(false), zap.cost_label_at(true)), ("1".to_string(), "0".to_string()));
+    assert_eq!(zap.text_at(true), "Channel 1 Lightning.", "an empty upgrade text keeps the base text");
+    assert_eq!(zap.upgrade_changes(), vec!["Cost 1 to 0".to_string()]);
+
+    let mut bash = card("BASH", CardType::Attack, Rarity::Basic, "Deal 8 damage.");
+    bash.upgrade_text = Some("Deal 10 damage.".into());
+    bash.vars.insert("damage".into(), 8);
+    bash.keywords = vec!["Exhaust".into()];
+    bash.upgrade = Upgrade {
+        deltas: [("damage".to_string(), 2)].into_iter().collect(),
+        adds: vec!["Innate".into()],
+        removes: vec!["Exhaust".into()],
+        ..Default::default()
+    };
+    assert_eq!(bash.text_at(true), "Deal 10 damage.");
+    assert_eq!(bash.keywords_at(false), vec!["Exhaust"]);
+    assert_eq!(bash.keywords_at(true), vec!["Innate"]);
+    assert_eq!(bash.upgrade_changes(), vec!["Damage 8 to 10", "Gains Innate", "Loses Exhaust"]);
+}

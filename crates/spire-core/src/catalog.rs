@@ -147,6 +147,30 @@ pub struct Card {
     pub channels: Vec<OrbChannel>,
 }
 
+/// A readable name for a card variable key (`"ostydamage"` to `"Osty damage"`).
+pub fn var_label(key: &str) -> String {
+    let named = match key {
+        "cards" => "Cards drawn",
+        "hitcount" => "Hits",
+        "ostydamage" => "Osty damage",
+        "starcost" => "Star cost",
+        "calculationbase" => "Base amount",
+        "calculationextra" => "Extra per stack",
+        "extradamage" => "Extra damage",
+        "hploss" => "HP loss",
+        "maxhp" => "Max HP",
+        "poisonperturn" => "Poison per turn",
+        "strengthloss" => "Strength loss",
+        _ => "",
+    };
+    if !named.is_empty() {
+        return named.into();
+    }
+    let k = key.strip_suffix("power").unwrap_or(key);
+    let mut c = k.chars();
+    c.next().map(|f| f.to_ascii_uppercase().to_string() + c.as_str()).unwrap_or_default()
+}
+
 /// What an upgrade changes. Deltas are keyed like [`Card::vars`].
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -228,11 +252,64 @@ impl Card {
     }
 
     pub fn cost_label(&self) -> String {
-        match (self.x_cost, self.cost) {
+        self.cost_label_at(false)
+    }
+
+    /// Cost as shown on the card, with the upgrade applied.
+    pub fn cost_label_at(&self, upgraded: bool) -> String {
+        match (self.x_cost, self.cost_at(upgraded)) {
             (true, _) => "X".into(),
             (false, Some(c)) => c.to_string(),
             (false, None) => "-".into(),
         }
+    }
+
+    /// Card text, upgraded or not. Upgrades that only change the cost or
+    /// keywords keep the base text.
+    pub fn text_at(&self, upgraded: bool) -> &str {
+        match &self.upgrade_text {
+            Some(t) if upgraded && !t.trim().is_empty() => t,
+            _ => &self.text,
+        }
+    }
+
+    /// Keywords, with the upgrade's additions and removals applied.
+    pub fn keywords_at(&self, upgraded: bool) -> Vec<&str> {
+        let mut out: Vec<&str> = self
+            .keywords
+            .iter()
+            .map(String::as_str)
+            .filter(|k| !upgraded || !self.upgrade.removes.iter().any(|r| r.eq_ignore_ascii_case(k)))
+            .collect();
+        if upgraded {
+            for k in &self.upgrade.adds {
+                if !out.iter().any(|x| x.eq_ignore_ascii_case(k)) {
+                    out.push(k);
+                }
+            }
+        }
+        out
+    }
+
+    /// What upgrading changes, one plain line each ("Cost 1 to 0", "Damage 8 to 10").
+    pub fn upgrade_changes(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        if let Some(c) = self.upgrade.cost
+            && Some(c) != self.cost
+        {
+            out.push(format!("Cost {} to {c}", self.cost_label()));
+        }
+        for (key, delta) in &self.upgrade.deltas {
+            let base = self.value(key, false);
+            if base != 0 || self.vars.contains_key(key) {
+                out.push(format!("{} {base} to {}", var_label(key), base + delta));
+            } else {
+                out.push(format!("{} {delta:+}", var_label(key)));
+            }
+        }
+        out.extend(self.upgrade.adds.iter().map(|k| format!("Gains {k}")));
+        out.extend(self.upgrade.removes.iter().map(|k| format!("Loses {k}")));
+        out
     }
 }
 
