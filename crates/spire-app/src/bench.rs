@@ -49,10 +49,14 @@ pub enum Scenario {
     Resize,
     /// Commit a node, then undo, alternating: recompute + save.
     CommitUndo,
+    /// Card catalog with a card selected.
+    CardsTab,
+    /// Enemy catalog with an elite selected.
+    EnemiesTab,
 }
 
 impl Scenario {
-    pub const ALL: [Scenario; 12] = [
+    pub const ALL: [Scenario; 14] = [
         Scenario::Start,
         Scenario::Idle,
         Scenario::IdleLate,
@@ -65,6 +69,8 @@ impl Scenario {
         Scenario::ComboOpen,
         Scenario::Resize,
         Scenario::CommitUndo,
+        Scenario::CardsTab,
+        Scenario::EnemiesTab,
     ];
 
     pub fn name(self) -> &'static str {
@@ -81,6 +87,8 @@ impl Scenario {
             Scenario::ComboOpen => "combo-open",
             Scenario::Resize => "resize",
             Scenario::CommitUndo => "commit-undo",
+            Scenario::CardsTab => "cards",
+            Scenario::EnemiesTab => "enemies",
         }
     }
 
@@ -118,6 +126,12 @@ impl Scenario {
         }
         if self == Scenario::DataWindow {
             app.ui_state().show_data = true;
+        }
+        if self == Scenario::CardsTab {
+            app.open("cards", Some("BASH"));
+        }
+        if self == Scenario::EnemiesTab {
+            app.open("enemies", Some("KNIGHTS_ELITE"));
         }
         app
     }

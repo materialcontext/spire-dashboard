@@ -35,6 +35,10 @@ pub struct UiState {
     pub updating: bool,
     /// "Abandon this run?" confirmation is open.
     pub confirm_abandon: bool,
+    /// Which top-level tab is showing.
+    pub tab: crate::views::Tab,
+    pub cards: crate::views::cards::CardBrowser,
+    pub enemies: crate::views::enemies::EnemyBrowser,
     /// The End run dialog is open, with the fight to blame for a death.
     pub end_run_open: bool,
     pub end_encounter: Option<spire_core::EncounterId>,
@@ -95,6 +99,9 @@ impl SpireApp {
                 messages,
                 updating: false,
                 confirm_abandon: false,
+                tab: crate::views::Tab::Run,
+                cards: Default::default(),
+                enemies: Default::default(),
                 end_run_open: false,
                 end_encounter: None,
             },
@@ -187,6 +194,22 @@ impl SpireApp {
         self.state = self.run.state();
         self.recompute();
         self.draft = NodeDraft::for_next(&self.state, &self.catalog);
+    }
+
+    /// Opens a tab with an item selected (`SPIRE_TAB` / `SPIRE_SELECT`, for
+    /// screenshots and docs). Unknown names are ignored.
+    pub fn open(&mut self, tab: &str, select: Option<&str>) {
+        match tab {
+            "cards" => {
+                self.ui.tab = crate::views::Tab::Cards;
+                self.ui.cards.selected = select.map(Into::into);
+            }
+            "enemies" => {
+                self.ui.tab = crate::views::Tab::Enemies;
+                self.ui.enemies.selected = select.map(Into::into);
+            }
+            _ => {}
+        }
     }
 
     pub fn ui_state(&mut self) -> &mut UiState {
@@ -283,6 +306,16 @@ impl SpireApp {
                 if let Err(e) = self.store.save_settings(&self.settings) {
                     self.note(format!("Could not save settings: {e}"));
                 }
+            }
+            Action::SetPersonalRoles { card, roles } => {
+                match roles {
+                    Some(r) => self.playbook.personal_roles.insert(card, r),
+                    None => self.playbook.personal_roles.remove(&card),
+                };
+                if let Err(e) = self.store.save_personal_roles(&self.playbook.personal_roles) {
+                    self.note(format!("Could not save your roles: {e}"));
+                }
+                self.recompute();
             }
             Action::SetLargeText(on) => {
                 crate::style::set_large(ctx, on);

@@ -105,7 +105,7 @@ pub fn slots(ui: &mut Ui, held: usize, total: u32) {
 }
 
 /// A row of mutually exclusive options; returns true when changed.
-pub fn segmented<T: PartialEq + Copy>(ui: &mut Ui, value: &mut T, options: &[(T, &str)]) -> bool {
+pub fn segmented<T: PartialEq + Clone>(ui: &mut Ui, value: &mut T, options: &[(T, &str)]) -> bool {
     let mut changed = false;
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
@@ -116,7 +116,7 @@ pub fn segmented<T: PartialEq + Copy>(ui: &mut Ui, value: &mut T, options: &[(T,
                 .fill(if selected { accent() } else { Color32::TRANSPARENT })
                 .stroke(Stroke::new(1.0, if selected { accent() } else { border() }));
             if ui.add(button).clicked() && !selected {
-                *value = *opt;
+                *value = opt.clone();
                 changed = true;
             }
         }

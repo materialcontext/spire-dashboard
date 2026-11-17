@@ -38,7 +38,13 @@ fn main() -> eframe::Result {
                     SpireApp::from_store(spire_data::store::Store::default_location()),
                     secs,
                 )),
-                (None, None) => Box::new(SpireApp::from_store(spire_data::store::Store::default_location())),
+                (None, None) => {
+                    let mut app = SpireApp::from_store(spire_data::store::Store::default_location());
+                    if let Ok(tab) = std::env::var("SPIRE_TAB") {
+                        app.open(&tab, std::env::var("SPIRE_SELECT").ok().as_deref());
+                    }
+                    Box::new(app)
+                }
             };
             Ok(app)
         }),

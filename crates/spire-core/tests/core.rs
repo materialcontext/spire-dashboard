@@ -600,3 +600,21 @@ fn ending_a_run_records_outcome_and_summary() {
     assert_eq!(sum.ended_at.as_deref(), Some("2026-11-17T09:00:00Z"));
     assert_eq!(run.state_at(1).act, None, "scrubbing to the start is before entering an act");
 }
+
+#[test]
+fn role_source_explains_rules_and_overrides() {
+    use spire_core::playbook::RoleSource;
+    let cat = catalog();
+    let mut pb = playbook();
+    let inflame = &cat.cards[&CardId::new("INFLAME")];
+    match pb.role_source(inflame) {
+        RoleSource::Rules(m) => assert_eq!(m, vec![(Role::ScalingDamage, "applies Strength".to_string())]),
+        other => panic!("expected rules, got {other:?}"),
+    }
+    pb.card_roles.insert(inflame.id.clone(), vec![Role::Consistency]);
+    assert!(matches!(pb.role_source(inflame), RoleSource::Playbook(_)));
+    pb.personal_roles.insert(inflame.id.clone(), vec![Role::FrontloadDamage]);
+    assert_eq!(pb.roles_of(inflame), vec![Role::FrontloadDamage], "personal overrides win");
+    let rule = Condition::All(vec![Condition::CardType(CardType::Power), Condition::TextContains("block".into())]);
+    assert_eq!(rule.describe(), "is a Power and mentions \"block\"");
+}

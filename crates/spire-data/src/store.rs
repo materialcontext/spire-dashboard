@@ -15,6 +15,7 @@ const PLAYBOOK: &str = "playbook.json";
 const SETTINGS: &str = "settings.json";
 const RUN: &str = "run.json";
 const RUNS_DIR: &str = "runs";
+const MY_ROLES: &str = "my_roles.json";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -105,7 +106,25 @@ impl Store {
             }
             None => bundled_playbook(),
         };
+        let mut playbook = playbook;
+        match self
+            .read(MY_ROLES)
+            .map(|r| r.and_then(|s| serde_json::from_str(&s).map_err(|e| DataError::Parse(e.to_string()))))
+        {
+            Some(Ok(roles)) => playbook.personal_roles = roles,
+            Some(Err(e)) => warnings.push(format!("Ignored {MY_ROLES}: {e}")),
+            None => {}
+        }
         Loaded { catalog: Catalog::from_layers(layers), playbook, warnings }
+    }
+
+    /// Saves the player's personal role overrides (a separate layer on top
+    /// of the shipped playbook).
+    pub fn save_personal_roles(
+        &self,
+        roles: &std::collections::BTreeMap<spire_core::CardId, Vec<spire_core::playbook::Role>>,
+    ) -> Result<(), DataError> {
+        self.write_json(MY_ROLES, roles)
     }
 
     pub fn save_downloaded(&self, pack: &DataPack) -> Result<(), DataError> {
@@ -330,6 +349,22 @@ mod tests {
         // Same start time twice gets a distinct id.
         let again = store.archive_run(&listed[0].1).unwrap();
         assert_ne!(again, ids[1]);
+    }
+
+    #[test]
+    fn personal_roles_layer_over_the_playbook() {
+        use spire_core::playbook::{Role, RoleSource};
+        let store = temp_store("roles");
+        let cat = Catalog::from_layers([bundled_pack()]);
+        let strike = cat.cards.values().find(|c| c.name == "Strike").unwrap().clone();
+        let mut roles = std::collections::BTreeMap::new();
+        roles.insert(strike.id.clone(), vec![Role::Consistency]);
+        store.save_personal_roles(&roles).unwrap();
+        let loaded = store.load();
+        assert_eq!(loaded.playbook.roles_of(&strike), vec![Role::Consistency]);
+        assert!(matches!(loaded.playbook.role_source(&strike), RoleSource::Personal(_)));
+        // The shipped playbook file is untouched.
+        assert!(bundled_playbook().personal_roles.is_empty());
     }
 
     #[test]
