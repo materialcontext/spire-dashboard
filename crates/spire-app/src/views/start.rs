@@ -15,12 +15,12 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
         ui.add_space(((ui.available_width() - width) / 2.0).max(0.0));
         ui.vertical(|ui| {
             ui.set_width(width);
-            ui.label(RichText::new("New run").size(28.0).color(TEXT));
+            ui.label(RichText::new("New run").size(28.0).color(text()));
             ui.label(
                 RichText::new(
                     "Pick a character and ascension. After each floor, log what changed and the dashboard updates.",
                 )
-                .color(TEXT_DIM),
+                .color(text_dim()),
             );
             ui.add_space(18.0);
 
@@ -53,10 +53,14 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
             segmented(ui, &mut st.new_ascension, &options);
             if let Some(level) = v.catalog.ascensions.get(&st.new_ascension) {
                 ui.add_space(4.0);
-                ui.label(RichText::new(&level.name).strong().color(if st.new_ascension > 0 { ACCENT } else { TEXT }));
-                ui.label(RichText::new(&level.text).small().color(TEXT_DIM));
+                ui.label(RichText::new(&level.name).strong().color(if st.new_ascension > 0 {
+                    accent()
+                } else {
+                    text()
+                }));
+                ui.label(RichText::new(&level.text).small().color(text_dim()));
                 if st.new_ascension > 1 {
-                    ui.label(RichText::new("Includes every lower level.").small().color(TEXT_FAINT));
+                    ui.label(RichText::new("Includes every lower level.").small().color(text_faint()));
                 }
             }
 
@@ -86,9 +90,9 @@ fn character_card(
         let border = if picked {
             accent
         } else if response.hovered() {
-            BORDER_HI
+            border_hi()
         } else {
-            BORDER
+            border()
         };
         painter.rect_stroke(rect, 0.0, Stroke::new(if picked { 2.0 } else { 1.0 }, border), StrokeKind::Inside);
         painter.rect_filled(egui::Rect::from_min_size(rect.min, vec2(4.0, rect.height())), 0.0, accent);
@@ -98,22 +102,22 @@ fn character_card(
             egui::pos2(x, rect.min.y + 12.0),
             egui::Align2::LEFT_TOP,
             name,
-            egui::FontId::proportional(18.0),
-            TEXT,
+            egui::FontId::new(18.0, style::strong_family()),
+            text(),
         );
         let relic = c.starting_relics.first().map(|r| v.catalog.relic_name(r)).unwrap_or_default();
         painter.text(
             egui::pos2(x, rect.min.y + 40.0),
             egui::Align2::LEFT_TOP,
             format!("{} HP  ·  {} gold  ·  {} cards", c.max_hp, c.gold, c.starting_deck.len()),
-            egui::FontId::proportional(12.0),
-            TEXT_DIM,
+            egui::FontId::proportional(13.0),
+            text_dim(),
         );
         painter.text(
             egui::pos2(x, rect.min.y + 60.0),
             egui::Align2::LEFT_TOP,
             relic,
-            egui::FontId::proportional(12.0),
+            egui::FontId::proportional(13.0),
             accent,
         );
     }
@@ -131,19 +135,19 @@ pub fn act_picker(ui: &mut Ui, v: &ViewCtx, index: u8, out: &mut Vec<Action>) {
     let acts: Vec<_> = v.catalog.acts_at(index).collect();
     panel(ui, &format!("Enter Act {}", index + 1), Some("Pick the act, then its boss from the map"), |ui| {
         if acts.is_empty() {
-            ui.label(RichText::new("No act data for this act. Update data from the Data window.").color(TEXT_DIM));
+            ui.label(RichText::new("No act data for this act. Update data from the Data window.").color(text_dim()));
             return;
         }
         for act in acts {
             ui.add_space(4.0);
-            ui.label(RichText::new(&act.name).heading().color(TEXT));
+            ui.label(RichText::new(&act.name).heading().color(text()));
             ui.horizontal_wrapped(|ui| {
                 for boss in &act.bosses {
                     if ui.button(v.catalog.encounter_name(boss)).clicked() {
                         out.push(Action::EnterAct { act: act.id.clone(), index, boss: Some(boss.clone()) });
                     }
                 }
-                if ui.button(RichText::new("Boss not shown yet").color(TEXT_DIM)).clicked() {
+                if ui.button(RichText::new("Boss not shown yet").color(text_dim())).clicked() {
                     out.push(Action::EnterAct { act: act.id.clone(), index, boss: None });
                 }
             });

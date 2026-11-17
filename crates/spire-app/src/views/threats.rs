@@ -18,22 +18,22 @@ pub fn preview_body(ui: &mut Ui, t: &ThreatPreview) {
         // A single monster's lineup would just repeat the encounter name.
         [_] if t.profile.enemies <= 1 => {}
         [(only, _)] => {
-            ui.label(RichText::new(only).color(TEXT_DIM));
+            ui.label(RichText::new(only).color(text_dim()));
         }
         many => {
             for (label, share) in many.iter().take(LINEUPS_SHOWN) {
-                ui.label(RichText::new(format!("{:>3.0}%  {label}", share * 100.0)).small().color(TEXT_DIM));
+                ui.label(RichText::new(format!("{:>3.0}%  {label}", share * 100.0)).small().color(text_dim()));
             }
             if many.len() > LINEUPS_SHOWN {
                 let rest: Vec<String> =
                     many[LINEUPS_SHOWN..].iter().map(|(l, s)| format!("{:.0}%  {l}", s * 100.0)).collect();
-                ui.label(RichText::new(format!("+{} more lineups", rest.len())).small().color(TEXT_FAINT))
+                ui.label(RichText::new(format!("+{} more lineups", rest.len())).small().color(text_faint()))
                     .on_hover_text(rest.join("\n"));
             }
         }
     }
     if !t.spawns.is_empty() {
-        ui.label(RichText::new(format!("Joins mid-fight: {}", t.spawns.join(", "))).small().color(TEXT_DIM));
+        ui.label(RichText::new(format!("Joins mid-fight: {}", t.spawns.join(", "))).small().color(text_dim()));
     }
 
     let p = &t.profile;
@@ -49,7 +49,7 @@ pub fn preview_body(ui: &mut Ui, t: &ThreatPreview) {
             facts.push(word.into());
         }
     }
-    ui.label(RichText::new(facts.join("  ·  ")).small().color(TEXT_DIM));
+    ui.label(RichText::new(facts.join("  ·  ")).small().color(text_dim()));
     if let Some(s) = &t.stats {
         ui.label(
             RichText::new(format!(
@@ -57,7 +57,7 @@ pub fn preview_body(ui: &mut Ui, t: &ThreatPreview) {
                 s.avg_damage_taken, s.avg_turns
             ))
             .small()
-            .color(TEXT_FAINT),
+            .color(text_faint()),
         )
         .on_hover_ui(|ui| {
             ui.label(format!("From {} community-submitted fights (Spire Codex).", s.fights));
@@ -78,7 +78,7 @@ fn status_word(c: Option<Coverage>) -> (&'static str, egui::Color32) {
         Some(Coverage::Missing) => ("Gap", coverage_color(Coverage::Missing)),
         Some(Coverage::Thin) => ("Thin", coverage_color(Coverage::Thin)),
         Some(Coverage::Covered) => ("Ready", coverage_color(Coverage::Covered)),
-        None => ("No demands", TEXT_FAINT),
+        None => ("No demands", text_faint()),
     }
 }
 
@@ -97,16 +97,20 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState) {
         let list =
             v.dash.threats.iter().find(|(k, _)| *k == st.threat_tab).map(|(_, l)| l.as_slice()).unwrap_or_default();
         if list.is_empty() {
-            ui.label(RichText::new("Nothing known for this act.").color(TEXT_DIM));
+            ui.label(RichText::new("Nothing known for this act.").color(text_dim()));
         }
         for t in list {
             culled(ui, ("threat", v.generation, st.threat_tab, &t.encounter), |ui| {
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
-                    let name = RichText::new(&t.name).strong().color(if t.seen { TEXT_DIM } else { TEXT });
+                    let name = RichText::new(&t.name).family(crate::style::strong_family()).color(if t.seen {
+                        text_dim()
+                    } else {
+                        text()
+                    });
                     ui.label(name);
                     if t.seen {
-                        ui.label(RichText::new("fought").small().color(TEXT_FAINT));
+                        ui.label(RichText::new("fought").small().color(text_faint()));
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let (word, color) = status_word(t.worst());

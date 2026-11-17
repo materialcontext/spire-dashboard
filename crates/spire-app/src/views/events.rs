@@ -14,7 +14,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
         let wants: Vec<_> = v.dash.needs.iter().filter(|n| n.weight >= 2).collect();
         if !wants.is_empty() {
             ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new("This run wants").small().color(TEXT_DIM));
+                ui.label(RichText::new("This run wants").small().color(text_dim()));
                 for n in wants {
                     chip(ui, n.opportunity.label(), opportunity_color(n.opportunity)).on_hover_text(&n.reason);
                 }
@@ -34,7 +34,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
                 .id_salt("seen-events")
                 .show(ui, |ui| {
                     for e in seen {
-                        ui.label(RichText::new(&e.name).color(TEXT_FAINT));
+                        ui.label(RichText::new(&e.name).color(text_faint()));
                     }
                 });
         }
@@ -45,22 +45,22 @@ fn event_entry(ui: &mut Ui, v: &ViewCtx, e: &EventWatch) {
     ui.add_space(6.0);
     ui.horizontal(|ui| {
         // Options are only laid out while hovered.
-        ui.label(RichText::new(&e.name).strong().color(TEXT)).on_hover_ui(|ui| {
+        ui.label(RichText::new(&e.name).family(crate::style::strong_family()).color(text())).on_hover_ui(|ui| {
             for o in v.catalog.events.get(&e.event).map_or(&[][..], |ev| ev.options.as_slice()) {
                 ui.label(RichText::new(&o.title).strong());
-                ui.label(RichText::new(&o.text).small().color(TEXT_DIM));
+                ui.label(RichText::new(&o.text).small().color(text_dim()));
             }
         });
         if e.score > 0 {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(RichText::new(format!("fit {}", e.score)).small().strong().color(ACCENT));
+                ui.label(RichText::new(format!("fit {}", e.score)).small().strong().color(accent()));
             });
         }
     });
     ui.horizontal_wrapped(|ui| {
         for o in &e.opportunities {
             let hit = e.matches.iter().find(|n| n.opportunity == *o);
-            let color = if hit.is_some() { opportunity_color(*o) } else { TEXT_FAINT };
+            let color = if hit.is_some() { opportunity_color(*o) } else { text_faint() };
             let r = chip(ui, o.label(), color);
             if let Some(n) = hit {
                 r.on_hover_text(&n.reason);

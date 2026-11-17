@@ -16,29 +16,29 @@ fn describe(v: &ViewCtx, c: &Change) -> (String, egui::Color32) {
         if d.upgraded { format!("{name}+") } else { name }
     };
     match c {
-        Change::AddCard(d) => (format!("Add {}", card(d)), GOOD),
-        Change::RemoveCard(d) => (format!("Remove {}", card(d)), BAD),
-        Change::UpgradeCard(d) => (format!("Upgrade {}", card(d)), GOOD),
+        Change::AddCard(d) => (format!("Add {}", card(d)), good()),
+        Change::RemoveCard(d) => (format!("Remove {}", card(d)), bad()),
+        Change::UpgradeCard(d) => (format!("Upgrade {}", card(d)), good()),
         Change::Enchant { card: d, enchantment } => {
-            (format!("Enchant {} with {}", card(d), v.catalog.enchantment_name(enchantment)), INFO)
+            (format!("Enchant {} with {}", card(d), v.catalog.enchantment_name(enchantment)), info())
         }
-        Change::Transform { from, to } => (format!("Transform {} into {}", card(from), card(to)), INFO),
-        Change::AddRelic(r) => (format!("Gain {}", v.catalog.relic_name(r)), ACCENT),
-        Change::RemoveRelic(r) => (format!("Lose {}", v.catalog.relic_name(r)), BAD),
-        Change::AddPotion(p) => (format!("Gain {}", v.catalog.potion_name(p)), INFO),
-        Change::RemovePotion(p) => (format!("Use {}", v.catalog.potion_name(p)), TEXT_DIM),
-        Change::SetHp(n) => (format!("Set HP to {n}"), TEXT_DIM),
-        Change::SetMaxHp(n) => (format!("Set max HP to {n}"), TEXT_DIM),
-        Change::SetGold(n) => (format!("Set gold to {n}"), TEXT_DIM),
-        Change::SetFloor(n) => (format!("Set floor to {n}"), TEXT_DIM),
-        Change::SetPotionSlots(n) => (format!("Set potion slots to {n}"), TEXT_DIM),
+        Change::Transform { from, to } => (format!("Transform {} into {}", card(from), card(to)), info()),
+        Change::AddRelic(r) => (format!("Gain {}", v.catalog.relic_name(r)), accent()),
+        Change::RemoveRelic(r) => (format!("Lose {}", v.catalog.relic_name(r)), bad()),
+        Change::AddPotion(p) => (format!("Gain {}", v.catalog.potion_name(p)), info()),
+        Change::RemovePotion(p) => (format!("Use {}", v.catalog.potion_name(p)), text_dim()),
+        Change::SetHp(n) => (format!("Set HP to {n}"), text_dim()),
+        Change::SetMaxHp(n) => (format!("Set max HP to {n}"), text_dim()),
+        Change::SetGold(n) => (format!("Set gold to {n}"), text_dim()),
+        Change::SetFloor(n) => (format!("Set floor to {n}"), text_dim()),
+        Change::SetPotionSlots(n) => (format!("Set potion slots to {n}"), text_dim()),
     }
 }
 
 fn step(ui: &mut Ui, n: u32, title: &str) {
     ui.add_space(10.0);
     ui.horizontal(|ui| {
-        ui.label(RichText::new(n.to_string()).small().strong().color(ACCENT));
+        ui.label(RichText::new(n.to_string()).small().strong().color(accent()));
         ui.label(eyebrow(title));
     });
 }
@@ -46,8 +46,8 @@ fn step(ui: &mut Ui, n: u32, title: &str) {
 pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) {
     let s = v.state;
     ui.add_space(8.0);
-    ui.label(RichText::new(format!("Log floor {}", s.floor + 1)).heading().color(TEXT));
-    ui.label(RichText::new("After finishing a floor, record what happened.").small().color(TEXT_FAINT));
+    ui.label(RichText::new(format!("Log floor {}", s.floor + 1)).heading().color(text()));
+    ui.label(RichText::new("After finishing a floor, record what happened.").small().color(text_faint()));
     hairline(ui);
 
     step(ui, 1, "Room");
@@ -102,20 +102,20 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
 
     step(ui, 3, "After the floor");
     egui::Grid::new("vitals").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
-        ui.label(RichText::new("HP").color(TEXT_DIM));
+        ui.label(RichText::new("HP").color(text_dim()));
         ui.add(egui::DragValue::new(&mut d.hp).range(0..=d.max_hp.max(1)));
         ui.end_row();
-        ui.label(RichText::new("Max HP").color(TEXT_DIM));
+        ui.label(RichText::new("Max HP").color(text_dim()));
         ui.add(egui::DragValue::new(&mut d.max_hp).range(1..=999));
         ui.end_row();
-        ui.label(RichText::new("Gold").color(TEXT_DIM));
+        ui.label(RichText::new("Gold").color(text_dim()));
         ui.add(egui::DragValue::new(&mut d.gold).range(0..=9999));
         ui.end_row();
     });
 
     step(ui, 4, "Gained");
     ui.horizontal(|ui| {
-        ui.label(RichText::new("Card").color(TEXT_DIM));
+        ui.label(RichText::new("Card").color(text_dim()));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.checkbox(&mut d.add_upgraded, RichText::new("upgraded").small());
         });
@@ -133,12 +133,12 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
         let card = DeckCard { card: id.into(), upgraded: d.add_upgraded, enchantment: None };
         d.changes.push(Change::AddCard(card));
     }
-    ui.label(RichText::new("Relic").color(TEXT_DIM));
+    ui.label(RichText::new("Relic").color(text_dim()));
     let relics = v.catalog.relics.values().map(|r| (r.id.as_str(), r.name.as_str(), r.text.as_str()));
     if let Some(id) = search_pick(ui, &mut d.relic_query, "Search relics", relics) {
         d.changes.push(Change::AddRelic(id.into()));
     }
-    ui.label(RichText::new("Potion").color(TEXT_DIM));
+    ui.label(RichText::new("Potion").color(text_dim()));
     let potions = v.catalog.potions.values().map(|p| (p.id.as_str(), p.name.as_str(), p.text.as_str()));
     if let Some(id) = search_pick(ui, &mut d.potion_query, "Search potions", potions) {
         d.changes.push(Change::AddPotion(id.into()));
@@ -149,7 +149,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
         ui.label(
             RichText::new("No card, relic or potion changes. Use + and x in the deck list to upgrade or remove.")
                 .small()
-                .color(TEXT_FAINT),
+                .color(text_faint()),
         );
     }
     let mut remove = None;
@@ -182,7 +182,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
         {
             out.push(Action::Record(d.to_adjustment(s)));
         }
-        if ui.add(egui::Button::new(RichText::new("Clear").color(TEXT_DIM)).frame_when_inactive(false)).clicked() {
+        if ui.add(egui::Button::new(RichText::new("Clear").color(text_dim())).frame_when_inactive(false)).clicked() {
             *d = NodeDraft::from_state(s);
         }
     });

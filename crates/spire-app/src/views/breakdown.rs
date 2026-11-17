@@ -41,7 +41,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
         ui.label(
             RichText::new("Roles · bright: cards you added · faded: starter Strikes/Defends · tick: target this act")
                 .small()
-                .color(TEXT_FAINT),
+                .color(text_faint()),
         );
         let target = |r: Role| plan.and_then(|p| p.targets.iter().find(|t| t.role == r)).map(|t| t.min);
         let max_role =
@@ -49,13 +49,13 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
         for r in Role::ALL {
             bar(ui, r.label(), d.role(r), d.starter_role(r), max_role, target(r), style::role_color(r));
         }
-        bar(ui, "Area damage", d.aoe, 0, max_role, plan.map(|p| p.needs_aoe).filter(|n| *n > 0), ACCENT);
+        bar(ui, "Area damage", d.aoe, 0, max_role, plan.map(|p| p.needs_aoe).filter(|n| *n > 0), accent());
 
         ui.add_space(4.0);
         ui.label(
             RichText::new(format!("{} upgraded · {} with no role · {} unknown", d.upgraded, d.no_role, d.unknown))
                 .small()
-                .color(TEXT_FAINT),
+                .color(text_faint()),
         );
     });
 }

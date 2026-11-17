@@ -24,7 +24,11 @@ fn main() -> eframe::Result {
         "spire-dashboard",
         options,
         Box::new(move |cc| {
-            spire_app::style::configure(&cc.egui_ctx);
+            let look = std::env::var("SPIRE_LOOK")
+                .ok()
+                .and_then(|s| spire_app::style::Look::parse(&s))
+                .unwrap_or(spire_app::style::Look::Standard);
+            spire_app::style::set_look(&cc.egui_ctx, look);
             let idle = std::env::var("SPIRE_IDLE_CHECK").ok().and_then(|s| s.parse::<f64>().ok());
             let app: Box<dyn eframe::App> = match (bench, idle) {
                 (Some(b), _) => Box::new(b.into_app()),

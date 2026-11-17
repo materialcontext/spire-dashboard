@@ -16,7 +16,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
     ui.add_space(8.0);
     ui.horizontal(|ui| {
         ui.label(eyebrow("Deck"));
-        ui.label(RichText::new(s.deck.len().to_string()).small().color(TEXT_FAINT));
+        ui.label(RichText::new(s.deck.len().to_string()).small().color(text_faint()));
     });
     hairline(ui);
 
@@ -51,12 +51,12 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
 
     section(ui, "Potions", s.potions.len());
     if s.potions.is_empty() {
-        ui.label(RichText::new(format!("{} empty slots", s.potion_slots)).small().color(TEXT_FAINT));
+        ui.label(RichText::new(format!("{} empty slots", s.potion_slots)).small().color(text_faint()));
     }
     for p in &s.potions {
         ui.horizontal(|ui| {
             let text = v.catalog.potions.get(p).map_or("", |x| x.text.as_str());
-            ui.label(RichText::new(v.catalog.potion_name(p)).color(INFO)).on_hover_text(text);
+            ui.label(RichText::new(v.catalog.potion_name(p)).color(info())).on_hover_text(text);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.add(row_button("Use")).on_hover_text("Mark as used").clicked() {
                     out.push(Action::Draft(Change::RemovePotion(p.clone())));
@@ -71,7 +71,7 @@ fn section(ui: &mut Ui, title: &str, count: usize) {
     ui.add_space(14.0);
     ui.horizontal(|ui| {
         ui.label(eyebrow(title));
-        ui.label(RichText::new(count.to_string()).small().color(TEXT_FAINT));
+        ui.label(RichText::new(count.to_string()).small().color(text_faint()));
     });
     hairline(ui);
 }
@@ -93,13 +93,13 @@ fn card_row(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
         ui.spacing_mut().item_spacing.x = 6.0;
         stripe(ui, style::card_type_color(row.card_type), 18.0);
         let cost = v.catalog.cards.get(&row.card.card).map_or("?".to_string(), |c| c.cost_label());
-        ui.add_sized([14.0, 18.0], egui::Label::new(RichText::new(cost).small().color(ACCENT)));
+        ui.add_sized([14.0, 18.0], egui::Label::new(RichText::new(cost).small().color(accent())));
         let name = if row.count > 1 { format!("{}× {}", row.count, row.name) } else { row.name.clone() };
-        let color = if row.card.upgraded { GOOD } else { TEXT };
+        let color = if row.card.upgraded { good() } else { text() };
         // Tooltip text is only built while hovered.
         ui.label(RichText::new(name).color(color)).on_hover_ui(|ui| card_tooltip(ui, v, row));
         if let Some(e) = &row.card.enchantment {
-            ui.label(RichText::new(v.catalog.enchantment_name(e)).small().color(INFO));
+            ui.label(RichText::new(v.catalog.enchantment_name(e)).small().color(info()));
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
@@ -127,7 +127,7 @@ fn role_marks(ui: &mut Ui, roles: &[Role]) {
 }
 
 fn row_button(text: &str) -> egui::Button<'_> {
-    egui::Button::new(RichText::new(text).small().color(TEXT_FAINT)).frame_when_inactive(false)
+    egui::Button::new(RichText::new(text).small().color(text_faint())).frame_when_inactive(false)
 }
 
 fn card_tooltip(ui: &mut Ui, v: &ViewCtx, row: &DeckRow) {
@@ -137,7 +137,7 @@ fn card_tooltip(ui: &mut Ui, v: &ViewCtx, row: &DeckRow) {
             ui.label(
                 RichText::new(format!("{} · {:?} · cost {}", card.card_type.label(), card.rarity, card.cost_label()))
                     .small()
-                    .color(TEXT_DIM),
+                    .color(text_dim()),
             );
             let text = if row.card.upgraded { card.upgrade_text.as_ref().unwrap_or(&card.text) } else { &card.text };
             ui.label(text);

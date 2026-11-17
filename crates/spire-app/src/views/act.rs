@@ -24,13 +24,13 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
     let note = if double { Some("Two bosses at this ascension") } else { None };
     panel(ui, &title, note, |ui| {
         for boss in &v.dash.bosses {
-            ui.label(RichText::new(&boss.name).heading().color(TEXT));
+            ui.label(RichText::new(&boss.name).heading().color(text()));
             threats::preview_body(ui, boss);
             ui.add_space(6.0);
         }
         if let Some(act) = act {
             let pick = |ui: &mut Ui, label: &str, second: bool, out: &mut Vec<Action>| {
-                ui.label(RichText::new(label).color(TEXT_DIM));
+                ui.label(RichText::new(label).color(text_dim()));
                 ui.horizontal_wrapped(|ui| {
                     for b in act.bosses.iter().filter(|b| Some(*b) != s.boss.as_ref()) {
                         if ui.button(v.catalog.encounter_name(b)).clicked() {
@@ -52,13 +52,13 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
     ui.add_space(12.0);
     panel(ui, "Priorities", None, |ui| {
         if v.dash.advice.is_empty() {
-            ui.label(RichText::new("Nothing pressing.").color(TEXT_DIM));
+            ui.label(RichText::new("Nothing pressing.").color(text_dim()));
         }
         for a in &v.dash.advice {
             let (color, text_color) = match a.severity {
-                Severity::Urgent => (BAD, TEXT),
-                Severity::Watch => (WARN, TEXT),
-                Severity::Info => (BORDER_HI, TEXT_DIM),
+                Severity::Urgent => (bad(), text()),
+                Severity::Watch => (warn(), text()),
+                Severity::Info => (border_hi(), text_dim()),
             };
             ui.horizontal(|ui| {
                 stripe(ui, color, 18.0);
@@ -72,7 +72,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
                 .default_open(false)
                 .show(ui, |ui| {
                     for e in &s.encounters_seen {
-                        ui.label(RichText::new(v.catalog.encounter_name(e)).color(TEXT_DIM));
+                        ui.label(RichText::new(v.catalog.encounter_name(e)).color(text_dim()));
                     }
                 });
         }

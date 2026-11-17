@@ -11,8 +11,8 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &UiState, out: &mut Vec<Action>) {
     let s = v.state;
     ui.add_space(6.0);
     ui.horizontal(|ui| {
-        ui.label(RichText::new("SPIRE").strong().color(ACCENT));
-        ui.label(RichText::new("DASHBOARD").color(TEXT_DIM));
+        ui.label(RichText::new("SPIRE").strong().color(accent()));
+        ui.label(RichText::new("DASHBOARD").color(text_dim()));
         ui.add_space(16.0);
 
         if let Some(c) = s.character.as_ref().and_then(|c| v.catalog.characters.get(c)) {
@@ -20,36 +20,36 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &UiState, out: &mut Vec<Action>) {
             ui.label(RichText::new(c.name.trim_start_matches("The ")).heading().color(accent));
             let asc = v.catalog.ascensions.get(&s.ascension).map_or(String::new(), |a| a.name.clone());
             ui.label(RichText::new(format!("A{}", s.ascension)).strong().color(if s.ascension > 0 {
-                ACCENT
+                crate::style::color::accent()
             } else {
-                TEXT_DIM
+                text_dim()
             }))
             .on_hover_text(asc);
             ui.add_space(18.0);
 
             let act = s.act.as_ref().and_then(|a| v.catalog.acts.get(a));
-            stat(ui, &format!("Act {}", s.act_index + 1), act.map_or("Not started", |a| a.name.as_str()), TEXT);
+            stat(ui, &format!("Act {}", s.act_index + 1), act.map_or("Not started", |a| a.name.as_str()), text());
             ui.add_space(10.0);
-            stat(ui, "Floor", s.floor.to_string(), TEXT);
+            stat(ui, "Floor", s.floor.to_string(), text());
             ui.add_space(10.0);
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 2.0;
-                ui.label(RichText::new("HP").small().color(TEXT_FAINT));
+                ui.label(RichText::new("HP").small().color(text_faint()));
                 hp_bar(ui, s.hp, s.max_hp, 140.0);
             });
             ui.add_space(10.0);
-            stat(ui, "Gold", s.gold.to_string(), ACCENT);
+            stat(ui, "Gold", s.gold.to_string(), crate::style::color::accent());
             ui.add_space(10.0);
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 4.0;
-                ui.label(RichText::new("POTIONS").small().color(TEXT_FAINT));
+                ui.label(RichText::new("POTIONS").small().color(text_faint()));
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 3.0;
                     slots(ui, s.potions.len(), s.potion_slots);
                 });
             });
             ui.add_space(10.0);
-            stat(ui, "Deck", s.deck.len().to_string(), TEXT);
+            stat(ui, "Deck", s.deck.len().to_string(), text());
         }
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -70,13 +70,13 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &UiState, out: &mut Vec<Action>) {
                 }
             }
             if let Some(version) = v.catalog.layers.last().and_then(|l| l.game_version.as_ref()) {
-                ui.label(RichText::new(version).small().color(TEXT_FAINT));
+                ui.label(RichText::new(version).small().color(text_faint()));
             }
         });
     });
     match st.messages.last() {
         Some(msg) => {
-            ui.label(RichText::new(msg).small().color(TEXT_FAINT));
+            ui.label(RichText::new(msg).small().color(text_faint()));
         }
         None => ui.add_space(4.0),
     }
