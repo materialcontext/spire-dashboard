@@ -71,6 +71,10 @@ struct WRoom {
 /// One fight from one run.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Fight {
+    /// Index of the run within the input (groups fights by run).
+    pub run: usize,
+    /// 0-based act within the run.
+    pub act: usize,
     pub encounter: String,
     /// Sorted monster ids, prefix stripped, duplicates kept.
     pub monsters: Vec<String>,
@@ -97,8 +101,14 @@ pub fn fights(jsonl: &str) -> Vec<Fight> {
         .lines()
         .filter_map(|line| serde_json::from_str::<WRun>(line).ok())
         .filter(|run| run.players.len() == 1 && is_empty_value(&run.modifiers))
-        .flat_map(|run| run.map_point_history.into_iter().flatten())
-        .flat_map(|point| {
+        .enumerate()
+        .flat_map(|(r, run)| {
+            run.map_point_history
+                .into_iter()
+                .enumerate()
+                .flat_map(move |(a, points)| points.into_iter().map(move |p| (r, a, p)))
+        })
+        .flat_map(|(run, act, point)| {
             let damage = match point.player_stats.as_slice() {
                 [only] => only.damage_taken,
                 _ => None,
@@ -107,6 +117,8 @@ pub fn fights(jsonl: &str) -> Vec<Fight> {
                 let mut monsters: Vec<String> = room.monster_ids.iter().map(|m| strip(m).to_string()).collect();
                 monsters.sort();
                 Fight {
+                    run,
+                    act,
                     encounter: strip(&room.model_id).to_string(),
                     monsters,
                     damage_taken: damage,
@@ -117,10 +129,57 @@ pub fn fights(jsonl: &str) -> Vec<Fight> {
         .collect()
 }
 
+/// Fights from several export pages, with run indices kept unique across
+/// pages (each page numbers its runs from zero).
+pub fn fights_from_pages(pages: &[String]) -> Vec<Fight> {
+    let mut out: Vec<Fight> = Vec::new();
+    for page in pages {
+        let offset = out.last().map_or(0, |f| f.run + 1);
+        out.extend(fights(page).into_iter().map(|mut f| {
+            f.run += offset;
+            f
+        }));
+    }
+    out
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct EnrichSummary {
     pub fights: usize,
     pub encounters: usize,
+    /// `(act index, weak fights)` measured per act.
+    pub weak_fights: Vec<(u8, u32)>,
+}
+
+/// The usual number of weak-pool hallway fights in each act index, from
+/// acts that reached their boss (so short, dead runs don't skew it).
+pub fn weak_fights_per_act(pack: &DataPack, fights: &[Fight]) -> Vec<(u8, u32)> {
+    use spire_core::catalog::RoomType;
+    let encounters: BTreeMap<&str, (RoomType, bool)> =
+        pack.encounters.iter().map(|e| (e.id.as_str(), (e.room, e.weak))).collect();
+    // (run, act) -> (weak count, reached boss)
+    let mut acts: BTreeMap<(usize, usize), (u32, bool)> = BTreeMap::new();
+    for f in fights {
+        if let Some((room, weak)) = encounters.get(f.encounter.as_str()) {
+            let e = acts.entry((f.run, f.act)).or_default();
+            e.0 += u32::from(*room == RoomType::Monster && *weak);
+            e.1 |= *room == RoomType::Boss;
+        }
+    }
+    let mut by_act: BTreeMap<usize, BTreeMap<u32, usize>> = BTreeMap::new();
+    for ((_, act), (weak, boss)) in acts {
+        if boss {
+            *by_act.entry(act).or_default().entry(weak).or_default() += 1;
+        }
+    }
+    by_act
+        .into_iter()
+        .filter(|(_, counts)| counts.values().sum::<usize>() >= MIN_FIGHTS)
+        .filter_map(|(act, counts)| {
+            let (mode, _) = counts.into_iter().max_by_key(|(_, n)| *n)?;
+            Some((u8::try_from(act).ok()?, mode))
+        })
+        .collect()
 }
 
 fn count_of(monsters: &[String], id: &str) -> usize {
@@ -250,7 +309,13 @@ pub fn enrich(pack: &mut DataPack, fights: &[Fight]) -> EnrichSummary {
         }
     }
 
-    let mut summary = EnrichSummary { fights: total, encounters: 0 };
+    let weak = weak_fights_per_act(pack, fights);
+    for act in &mut pack.acts {
+        if let Some((_, n)) = weak.iter().find(|(i, _)| *i == act.index) {
+            act.weak_fights = Some(*n);
+        }
+    }
+    let mut summary = EnrichSummary { fights: total, encounters: 0, weak_fights: weak };
     for e in &mut pack.encounters {
         if let Some(r) = readings.remove(e.id.as_str()) {
             e.lineups = r.lineups;
@@ -324,6 +389,15 @@ mod tests {
         let o = obs(&[(&["A"], 5)]);
         let refs: Vec<&[String]> = o.iter().map(|v| v.as_slice()).collect();
         assert!(read_encounter(&refs, false).is_none());
+    }
+
+    #[test]
+    fn run_indices_stay_unique_across_pages() {
+        let run = r#"{"players":[{}],"modifiers":[],"map_point_history":[[{"rooms":[{"model_id":"ENCOUNTER.X","monster_ids":["MONSTER.A"]}]}]]}"#;
+        let page = format!("{run}\n{run}");
+        let f = fights_from_pages(&[page.clone(), page]);
+        let runs: Vec<usize> = f.iter().map(|f| f.run).collect();
+        assert_eq!(runs, [0, 1, 2, 3]);
     }
 
     #[test]

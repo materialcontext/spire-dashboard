@@ -56,12 +56,13 @@ impl NodeKind {
 
     pub fn label(self) -> &'static str {
         match self {
-            NodeKind::Monster => "Monster",
+            // StS2's own room names.
+            NodeKind::Monster => "Enemy",
             NodeKind::Elite => "Elite",
             NodeKind::Boss => "Boss",
-            NodeKind::Unknown => "? Event",
+            NodeKind::Unknown => "Event",
             NodeKind::Shop => "Shop",
-            NodeKind::Rest => "Rest",
+            NodeKind::Rest => "Rest Site",
             NodeKind::Treasure => "Treasure",
             NodeKind::Ancient => "Ancient",
         }
@@ -122,6 +123,9 @@ pub enum RunEvent {
         gold: i32,
         deck: Vec<CardId>,
         relics: Vec<RelicId>,
+        /// Absent in runs saved before ascension rules were modelled.
+        #[serde(default)]
+        potion_slots: Option<u32>,
     },
     EnterAct {
         act: ActId,
@@ -130,22 +134,30 @@ pub enum RunEvent {
         boss: Option<EncounterId>,
     },
     SetBoss(EncounterId),
+    /// The second boss of a double-boss act (A10, act 3).
+    SetSecondBoss(EncounterId),
     Node(NodeReport),
     /// Corrections outside a node.
     Adjust(Vec<Change>),
 }
 
 impl RunEvent {
-    /// A `Start` event for a character, resolved from the catalog.
+    /// A `Start` event for a character, resolved from the catalog and its
+    /// ascension rules (fewer potion slots, a starting curse).
     pub fn start(catalog: &Catalog, character: &CharacterId, ascension: u32) -> Option<RunEvent> {
         let c = catalog.characters.get(character)?;
+        let rules = &catalog.rules;
+        let ascension = ascension.min(rules.max_ascension);
+        let mut deck = c.starting_deck.clone();
+        deck.extend(rules.start_curse(ascension).filter(|id| catalog.cards.contains_key(*id)).cloned());
         Some(RunEvent::Start {
             character: c.id.clone(),
             ascension,
             max_hp: c.max_hp as i32,
             gold: c.gold as i32,
-            deck: c.starting_deck.clone(),
+            deck,
             relics: c.starting_relics.clone(),
+            potion_slots: Some(rules.potion_slots(ascension)),
         })
     }
 }
@@ -157,6 +169,8 @@ pub struct RunState {
     pub act: Option<ActId>,
     pub act_index: u8,
     pub boss: Option<EncounterId>,
+    /// Second boss of a double-boss act.
+    pub second_boss: Option<EncounterId>,
     pub floor: u32,
     pub hp: i32,
     pub max_hp: i32,
@@ -180,6 +194,7 @@ impl Default for RunState {
             act: None,
             act_index: 0,
             boss: None,
+            second_boss: None,
             floor: 0,
             hp: 0,
             max_hp: 0,
@@ -197,6 +212,11 @@ impl Default for RunState {
 }
 
 impl RunState {
+    /// The known bosses of the current act (one, or two at A10 act 3).
+    pub fn bosses(&self) -> impl Iterator<Item = &EncounterId> {
+        self.boss.iter().chain(self.second_boss.iter())
+    }
+
     pub fn hp_fraction(&self) -> f32 {
         if self.max_hp <= 0 { 0.0 } else { (self.hp as f32 / self.max_hp as f32).clamp(0.0, 1.0) }
     }
@@ -260,7 +280,7 @@ pub fn apply_change(mut s: RunState, change: &Change) -> RunState {
 /// The single state-transition function.
 pub fn apply(s: RunState, event: &RunEvent) -> RunState {
     match event {
-        RunEvent::Start { character, ascension, max_hp, gold, deck, relics } => RunState {
+        RunEvent::Start { character, ascension, max_hp, gold, deck, relics, potion_slots } => RunState {
             character: Some(character.clone()),
             ascension: *ascension,
             hp: *max_hp,
@@ -268,12 +288,19 @@ pub fn apply(s: RunState, event: &RunEvent) -> RunState {
             gold: *gold,
             deck: deck.iter().cloned().map(DeckCard::new).collect(),
             relics: relics.clone(),
+            potion_slots: potion_slots.unwrap_or(RunState::default().potion_slots),
             ..RunState::default()
         },
-        RunEvent::EnterAct { act, index, boss } => {
-            RunState { act: Some(act.clone()), act_index: *index, boss: boss.clone(), hallway_fights_in_act: 0, ..s }
-        }
+        RunEvent::EnterAct { act, index, boss } => RunState {
+            act: Some(act.clone()),
+            act_index: *index,
+            boss: boss.clone(),
+            second_boss: None,
+            hallway_fights_in_act: 0,
+            ..s
+        },
         RunEvent::SetBoss(boss) => RunState { boss: Some(boss.clone()), ..s },
+        RunEvent::SetSecondBoss(boss) => RunState { second_boss: Some(boss.clone()), ..s },
         RunEvent::Node(report) => {
             let mut s = report.changes.iter().fold(s, apply_change);
             s.floor += 1;

@@ -25,5 +25,6 @@ pub enum Action {
     ExportPlaybook,
     ReloadData,
     SetSourceUrl(String),
+    SetChannel(spire_data::codex::Channel),
     ToggleDataWindow,
 }

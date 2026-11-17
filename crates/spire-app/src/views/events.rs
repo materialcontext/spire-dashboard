@@ -1,65 +1,71 @@
 //! `?` event watchlist.
 
 use eframe::egui::{self, RichText, Ui};
-
 use spire_core::analysis::EventWatch;
 
 use crate::app::ViewCtx;
-use crate::widgets::{chip, culled, opportunity_color, section};
+use crate::style::color::*;
+use crate::widgets::{chip, culled, eyebrow, opportunity_color, panel};
 
 pub fn show(ui: &mut Ui, v: &ViewCtx) {
-    section(ui, "? events to look for", |ui| {
-        if !v.dash.needs.is_empty() {
-            ui.label(RichText::new("This run wants").strong());
+    let (fresh, seen): (Vec<_>, Vec<_>) = v.dash.events.iter().partition(|e| !e.seen);
+    let note = format!("{} possible this act", fresh.len());
+    panel(ui, "Event watchlist", Some(&note), |ui| {
+        let wants: Vec<_> = v.dash.needs.iter().filter(|n| n.weight >= 2).collect();
+        if !wants.is_empty() {
             ui.horizontal_wrapped(|ui| {
-                for n in v.dash.needs.iter().filter(|n| n.weight >= 2) {
-                    chip(ui, n.opportunity.label(), opportunity_color(ui, n.opportunity)).on_hover_text(&n.reason);
+                ui.label(RichText::new("This run wants").small().color(TEXT_DIM));
+                for n in wants {
+                    chip(ui, n.opportunity.label(), opportunity_color(n.opportunity)).on_hover_text(&n.reason);
                 }
             });
             ui.add_space(4.0);
         }
-
-        let (fresh, seen): (Vec<_>, Vec<_>) = v.dash.events.iter().partition(|e| !e.seen);
         for e in &fresh {
             // The watchlist is long and mostly below the fold: skip layout
             // of entries that are scrolled out of view.
             culled(ui, ("event", v.generation, &e.event), |ui| event_entry(ui, v, e));
         }
         if !seen.is_empty() {
-            egui::CollapsingHeader::new(format!("Already seen ({})", seen.len())).show(ui, |ui| {
-                for e in seen {
-                    ui.label(RichText::new(&e.name).weak());
-                }
-            });
+            ui.add_space(6.0);
+            egui::CollapsingHeader::new(eyebrow(&format!("Already seen · {}", seen.len())))
+                .id_salt("seen-events")
+                .show(ui, |ui| {
+                    for e in seen {
+                        ui.label(RichText::new(&e.name).color(TEXT_FAINT));
+                    }
+                });
         }
     });
 }
 
 fn event_entry(ui: &mut Ui, v: &ViewCtx, e: &EventWatch) {
-    ui.add_space(3.0);
+    ui.add_space(6.0);
     ui.horizontal(|ui| {
-        let name = RichText::new(&e.name).strong();
         // Options are only laid out while hovered.
-        ui.label(name).on_hover_ui(|ui| {
+        ui.label(RichText::new(&e.name).strong().color(TEXT)).on_hover_ui(|ui| {
             for o in v.catalog.events.get(&e.event).map_or(&[][..], |ev| ev.options.as_slice()) {
-                ui.label(format!("{}: {}", o.title, o.text));
+                ui.label(RichText::new(&o.title).strong());
+                ui.label(RichText::new(&o.text).small().color(TEXT_DIM));
             }
         });
         if e.score > 0 {
-            ui.label(RichText::new(format!("fit {}", e.score)).small().color(ui.visuals().hyperlink_color));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(RichText::new(format!("fit {}", e.score)).small().strong().color(ACCENT));
+            });
         }
     });
     ui.horizontal_wrapped(|ui| {
         for o in &e.opportunities {
             let hit = e.matches.iter().find(|n| n.opportunity == *o);
-            let color = if hit.is_some() { opportunity_color(ui, *o) } else { ui.visuals().weak_text_color() };
+            let color = if hit.is_some() { opportunity_color(*o) } else { TEXT_FAINT };
             let r = chip(ui, o.label(), color);
             if let Some(n) = hit {
                 r.on_hover_text(&n.reason);
             }
         }
         for r in &e.risks {
-            chip(ui, r.label(), opportunity_color(ui, *r));
+            chip(ui, r.label(), opportunity_color(*r));
         }
     });
 }

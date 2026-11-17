@@ -7,7 +7,7 @@ use std::time::Duration;
 use spire_core::DataPack;
 use ureq::tls::{RootCerts, TlsConfig};
 
-use crate::codex::{self, Responses};
+use crate::codex::{self, Channel, Responses};
 use crate::{DataError, codex_runs, now_rfc3339, rfc3339, unix_now};
 
 /// Default pages of community runs (1000 runs each) read per update.
@@ -30,6 +30,9 @@ pub enum Source {
         base_url: String,
         #[serde(default = "default_run_pages")]
         run_pages: u32,
+        /// Game branch; beta unless set.
+        #[serde(default)]
+        channel: Channel,
     },
     /// A URL serving a complete `DataPack` JSON document.
     PackUrl { url: String },
@@ -37,14 +40,20 @@ pub enum Source {
 
 impl Default for Source {
     fn default() -> Self {
-        Source::SpireCodex { base_url: codex::DEFAULT_BASE_URL.into(), run_pages: DEFAULT_RUN_PAGES }
+        Source::SpireCodex {
+            base_url: codex::DEFAULT_BASE_URL.into(),
+            run_pages: DEFAULT_RUN_PAGES,
+            channel: Channel::Beta,
+        }
     }
 }
 
 impl Source {
     pub fn describe(&self) -> String {
         match self {
-            Source::SpireCodex { base_url, .. } => format!("Spire Codex ({base_url})"),
+            Source::SpireCodex { base_url, channel, .. } => {
+                format!("Spire Codex, {} branch ({base_url})", channel.label())
+            }
             Source::PackUrl { url } => format!("Data pack ({url})"),
         }
     }
@@ -73,15 +82,21 @@ fn get(agent: &ureq::Agent, url: &str) -> Result<String, DataError> {
 }
 
 /// Downloads every Codex endpoint the adapter needs.
-pub fn codex_responses(base_url: &str) -> Result<(Responses, Option<String>), DataError> {
+pub fn codex_responses(base_url: &str, channel: Channel) -> Result<(Responses, Option<String>), DataError> {
     let agent = agent();
     let base = base_url.trim_end_matches('/');
     let mut responses = Responses::new();
     for endpoint in codex::ENDPOINTS {
-        responses.insert(endpoint, get(&agent, &format!("{base}/api/{endpoint}"))?);
+        responses.insert(endpoint, get(&agent, &format!("{base}/api/{endpoint}{}", channel.query()))?);
     }
     // The version is informational; don't fail the update without it.
-    let version = get(&agent, &format!("{base}/api/versions")).ok().and_then(|b| codex::latest_stable_version(&b));
+    let version = match channel {
+        Channel::Beta => get(&agent, &format!("{base}/api/beta/version")).ok().and_then(|b| codex::beta_version(&b)),
+        Channel::Stable => {
+            get(&agent, &format!("{base}/api/versions")).ok().and_then(|b| codex::latest_stable_version(&b))
+        }
+    }
+    .map(|v| format!("{v} ({})", channel.label()));
     Ok((responses, version))
 }
 
@@ -133,17 +148,20 @@ pub struct Fetched {
 
 /// Adds community lineups and stats to a Codex pack. Never fails the update.
 pub fn add_community_data(pack: &mut DataPack, pages: &[String], notes: &mut Vec<String>) {
-    let fights: Vec<_> = pages.iter().flat_map(|p| codex_runs::fights(p)).collect();
+    let fights = codex_runs::fights_from_pages(pages);
     let s = codex_runs::enrich(pack, &fights);
-    notes.push(format!("Community runs: {} fights read, {} encounters with exact lineups.", s.fights, s.encounters));
+    notes.push(format!(
+        "Community runs: {} fights read, {} encounters with exact lineups, weak fights per act {:?}.",
+        s.fights, s.encounters, s.weak_fights
+    ));
 }
 
 /// Fetches and converts a full data pack from a source. Blocking: run it off
 /// the UI thread.
 pub fn fetch(source: &Source) -> Result<Fetched, DataError> {
     match source {
-        Source::SpireCodex { base_url, run_pages } => {
-            let (responses, version) = codex_responses(base_url)?;
+        Source::SpireCodex { base_url, run_pages, channel } => {
+            let (responses, version) = codex_responses(base_url, *channel)?;
             let mut pack = codex::to_pack(&responses, version, Some(now_rfc3339()))?;
             let mut notes = Vec::new();
             if *run_pages > 0 {

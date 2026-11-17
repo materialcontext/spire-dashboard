@@ -243,12 +243,20 @@ impl SpireApp {
                 self.settings.source = if url.trim_end_matches('/').ends_with(".json") {
                     Source::PackUrl { url }
                 } else {
-                    let run_pages = match &self.settings.source {
-                        Source::SpireCodex { run_pages, .. } => *run_pages,
-                        Source::PackUrl { .. } => fetch::DEFAULT_RUN_PAGES,
+                    let (run_pages, channel) = match &self.settings.source {
+                        Source::SpireCodex { run_pages, channel, .. } => (*run_pages, *channel),
+                        Source::PackUrl { .. } => (fetch::DEFAULT_RUN_PAGES, Default::default()),
                     };
-                    Source::SpireCodex { base_url: url, run_pages }
+                    Source::SpireCodex { base_url: url, run_pages, channel }
                 };
+                if let Err(e) = self.store.save_settings(&self.settings) {
+                    self.note(format!("Could not save settings: {e}"));
+                }
+            }
+            Action::SetChannel(channel) => {
+                if let Source::SpireCodex { channel: c, .. } = &mut self.settings.source {
+                    *c = channel;
+                }
                 if let Err(e) = self.store.save_settings(&self.settings) {
                     self.note(format!("Could not save settings: {e}"));
                 }

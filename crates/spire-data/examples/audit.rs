@@ -53,7 +53,7 @@ fn main() {
             let mut rows: Vec<String> = cat
                 .encounters_in(&act.id, room)
                 .map(|e| {
-                    let t = threat_profile(e, &cat, &pb);
+                    let t = threat_profile(e, &cat, &pb, Default::default());
                     format!("{}{}:{}hp/{}dmg", e.name, if e.weak { "(w)" } else { "" }, t.hp_min, t.worst_turn)
                 })
                 .collect();

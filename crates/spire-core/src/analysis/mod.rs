@@ -23,7 +23,8 @@ pub struct Dashboard {
     pub rows: Vec<DeckRow>,
     pub needs: Vec<Need>,
     pub events: Vec<EventWatch>,
-    pub boss: Option<ThreatPreview>,
+    /// The act's known bosses (two in a double-boss act).
+    pub bosses: Vec<ThreatPreview>,
     pub advice: Vec<Advice>,
     /// Threat previews for each fight node kind.
     pub threats: Vec<(NodeKind, Vec<ThreatPreview>)>,
@@ -36,12 +37,12 @@ impl Dashboard {
         let rows = deck::deck_rows(&classified);
         let needs = events::needs(state, &deck, playbook);
         let events = events::watchlist(state, catalog, playbook, &needs);
-        let boss = advice::boss_preview(state, catalog, playbook, &deck);
+        let bosses = advice::boss_previews(state, catalog, playbook, &deck);
         let advice = advice::advise(state, catalog, playbook, &deck);
         let threats = [NodeKind::Monster, NodeKind::Elite, NodeKind::Boss]
             .into_iter()
             .map(|k| (k, threats::next_threats(state, k, catalog, playbook, &deck)))
             .collect();
-        Dashboard { deck, rows, needs, events, boss, advice, threats }
+        Dashboard { deck, rows, needs, events, bosses, advice, threats }
     }
 }

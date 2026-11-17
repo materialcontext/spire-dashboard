@@ -1,58 +1,61 @@
-//! Deck breakdown by card type and by macro role.
+//! Deck composition: by card type (one stacked bar) and by macro role.
 
-use eframe::egui::{RichText, Ui};
+use eframe::egui::{RichText, Sense, Ui, vec2};
 use spire_core::catalog::CardType;
 use spire_core::playbook::Role;
 
 use crate::app::ViewCtx;
-use crate::widgets::{bar, section};
+use crate::style::{self, color::*};
+use crate::widgets::{bar, panel};
 
 pub fn show(ui: &mut Ui, v: &ViewCtx) {
     let d = &v.dash.deck;
     let plan = v.playbook.act(v.state.act_index);
-    section(ui, "Deck breakdown", |ui| {
-        ui.label(RichText::new("By type").strong());
-        let max_type = d.by_type.values().copied().max().unwrap_or(1);
+    panel(ui, "Deck composition", Some(&format!("{} cards", d.total)), |ui| {
+        // Card types as one proportional bar with a legend underneath.
+        let width = ui.available_width();
+        let (rect, _) = ui.allocate_exact_size(vec2(width, 12.0), Sense::hover());
+        let total = d.total.max(1) as f32;
+        let mut x = rect.min.x;
         for t in CardType::ALL {
             let n = d.of_type(t);
-            if n > 0 || matches!(t, CardType::Attack | CardType::Skill | CardType::Power | CardType::Curse) {
-                let color = if t == CardType::Curse && n > 0 {
-                    ui.visuals().error_fg_color
-                } else {
-                    ui.visuals().selection.bg_fill
-                };
-                bar(ui, t.label(), n, 0, max_type, None, color);
+            if n == 0 {
+                continue;
             }
+            let w = rect.width() * n as f32 / total;
+            let seg =
+                eframe::egui::Rect::from_min_size(eframe::egui::pos2(x, rect.min.y), vec2(w - 1.0, rect.height()));
+            ui.painter().rect_filled(seg, 0.0, style::card_type_color(t));
+            x += w;
         }
+        ui.horizontal_wrapped(|ui| {
+            for t in CardType::ALL {
+                let n = d.of_type(t);
+                if n > 0 {
+                    ui.label(RichText::new(format!("{} {n}", t.label())).small().color(style::card_type_color(t)));
+                }
+            }
+        });
 
-        ui.add_space(6.0);
-        ui.label(RichText::new("By role").strong());
+        ui.add_space(8.0);
         ui.label(
-            RichText::new("Solid: cards you added. Faded: starter Strikes/Defends. Tick: target for this act.")
+            RichText::new("Roles · bright: cards you added · faded: starter Strikes/Defends · tick: target this act")
                 .small()
-                .weak(),
+                .color(TEXT_FAINT),
         );
         let target = |r: Role| plan.and_then(|p| p.targets.iter().find(|t| t.role == r)).map(|t| t.min);
         let max_role =
             Role::ALL.iter().map(|r| (d.role(*r) + d.starter_role(*r)).max(target(*r).unwrap_or(0))).max().unwrap_or(1);
         for r in Role::ALL {
-            bar(ui, r.label(), d.role(r), d.starter_role(r), max_role, target(r), ui.visuals().hyperlink_color);
+            bar(ui, r.label(), d.role(r), d.starter_role(r), max_role, target(r), style::role_color(r));
         }
-        bar(
-            ui,
-            "Area damage",
-            d.aoe,
-            0,
-            max_role,
-            plan.map(|p| p.needs_aoe).filter(|n| *n > 0),
-            ui.visuals().hyperlink_color,
-        );
+        bar(ui, "Area damage", d.aoe, 0, max_role, plan.map(|p| p.needs_aoe).filter(|n| *n > 0), ACCENT);
 
         ui.add_space(4.0);
         ui.label(
             RichText::new(format!("{} upgraded · {} with no role · {} unknown", d.upgraded, d.no_role, d.unknown))
                 .small()
-                .weak(),
+                .color(TEXT_FAINT),
         );
     });
 }
