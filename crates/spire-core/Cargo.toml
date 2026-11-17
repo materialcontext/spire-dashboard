@@ -3,6 +3,7 @@ name = "spire-core"
 description = "Pure domain model and analysis for the StS2 macro dashboard. No IO, no UI."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 serde.workspace = true

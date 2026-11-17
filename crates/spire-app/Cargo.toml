@@ -3,6 +3,7 @@ name = "spire-app"
 description = "egui dashboard for planning Slay the Spire 2 runs."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 
 [[bin]]
 name = "spire-dashboard"

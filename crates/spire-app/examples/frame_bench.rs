@@ -138,7 +138,7 @@ fn shape_breakdown(scenario: Scenario) {
                 v += m.vertices.len();
                 // Pixels the rasteriser shades: sum of triangle areas (clipped
                 // coarsely to the primitive's clip rect).
-                for t in m.indices.chunks_exact(3) {
+                for t in m.indices.as_chunks::<3>().0 {
                     let [a, b, c] = [0, 1, 2].map(|i| m.vertices[t[i] as usize].pos);
                     let tri = ((b - a).x * (c - a).y - (b - a).y * (c - a).x).abs() as f64 / 2.0;
                     let bb = egui::Rect::from_points(&[a, b, c]);
