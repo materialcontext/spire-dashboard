@@ -132,9 +132,87 @@ pub struct Card {
     pub energy: Option<u32>,
     #[serde(default)]
     pub powers: Vec<PowerAmount>,
+    /// The source's numeric card variables with lowercased keys
+    /// (`damage`, `ostydamage`, `stars`, `aimpower`, ...).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub vars: BTreeMap<String, i32>,
+    /// What upgrading changes, as data.
+    #[serde(default, skip_serializing_if = "Upgrade::is_empty")]
+    pub upgrade: Upgrade,
+    /// Stars the card costs on top of energy (Regent).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub star_cost: Option<u8>,
+    /// Orbs the card channels (Defect).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub channels: Vec<OrbChannel>,
+}
+
+/// What an upgrade changes. Deltas are keyed like [`Card::vars`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Upgrade {
+    /// The new energy cost, if the upgrade changes it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost: Option<u8>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub deltas: BTreeMap<String, i32>,
+    /// Keywords the upgrade adds (`Innate`, `Retain`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub adds: Vec<String>,
+    /// Keywords the upgrade removes (`Exhaust`, `Ethereal`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub removes: Vec<String>,
+}
+
+impl Upgrade {
+    pub fn is_empty(&self) -> bool {
+        self == &Upgrade::default()
+    }
+}
+
+/// `count` orbs of one kind channeled per play; `x` means once per energy.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct OrbChannel {
+    pub orb: OrbId,
+    pub count: u8,
+    #[serde(default)]
+    pub x: bool,
 }
 
 impl Card {
+    /// A numeric variable (lowercase key), with the upgrade's delta applied.
+    /// The card's dedicated fields stand in for packs without `vars`.
+    pub fn value(&self, key: &str, upgraded: bool) -> i32 {
+        let field = |v: Option<u32>| v.map(|n| n as i32);
+        let base = self.vars.get(key).copied().or_else(|| match key {
+            "damage" => field(self.damage),
+            "block" => field(self.block),
+            "cards" => field(self.draw),
+            "energy" => field(self.energy),
+            "hitcount" => field(self.hits),
+            _ => None,
+        });
+        let delta = if upgraded { self.upgrade.deltas.get(key).copied().unwrap_or(0) } else { 0 };
+        base.map_or(0, |b| b + delta)
+    }
+
+    /// Energy cost, with the upgrade applied. `None` means unplayable.
+    pub fn cost_at(&self, upgraded: bool) -> Option<u8> {
+        if upgraded && let Some(c) = self.upgrade.cost {
+            return Some(c);
+        }
+        self.cost
+    }
+
+    /// Whether the card has a keyword, with the upgrade applied.
+    pub fn has_keyword(&self, keyword: &str, upgraded: bool) -> bool {
+        let eq = |k: &String| k.eq_ignore_ascii_case(keyword);
+        if upgraded && self.upgrade.removes.iter().any(eq) {
+            return false;
+        }
+        self.keywords.iter().any(eq) || upgraded && self.upgrade.adds.iter().any(eq)
+    }
+
     /// Eternal cards cannot be removed or transformed (e.g. Ascender's Bane).
     pub fn is_eternal(&self) -> bool {
         self.keywords.iter().any(|k| k.eq_ignore_ascii_case("Eternal"))
@@ -158,6 +236,39 @@ impl Card {
     }
 }
 
+/// What an orb's passive or evoke does.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OrbEffect {
+    Damage,
+    DamageAll,
+    Block,
+    Energy,
+    /// Grows the orb's evoke value (Dark).
+    Grow,
+    #[default]
+    #[serde(other)]
+    Other,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Orb {
+    pub id: OrbId,
+    pub name: String,
+    pub text: String,
+    pub passive: i32,
+    pub passive_effect: OrbEffect,
+    pub evoke: i32,
+    pub evoke_effect: OrbEffect,
+    /// Whether Focus changes this orb's values.
+    #[serde(default = "yes")]
+    pub focus: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Character {
     pub id: CharacterId,
@@ -173,6 +284,12 @@ pub struct Character {
     pub starting_relics: Vec<RelicId>,
     #[serde(default)]
     pub description: String,
+    /// Orb slots at the start of a fight (Defect).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orb_slots: Option<u32>,
+    /// Arrows at the start of a fight (the Fool).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arrow_slots: Option<u32>,
 }
 
 impl Character {
@@ -589,6 +706,7 @@ pub struct DataPack {
     pub events: Vec<Event>,
     pub acts: Vec<Act>,
     pub ascensions: Vec<AscensionLevel>,
+    pub orbs: Vec<Orb>,
     /// Game rules, when the source knows them; otherwise StS2 defaults.
     pub rules: Option<GameRules>,
 }
@@ -633,6 +751,7 @@ pub struct Catalog {
     pub events: BTreeMap<EventId, Event>,
     pub acts: BTreeMap<ActId, Act>,
     pub ascensions: BTreeMap<u32, AscensionLevel>,
+    pub orbs: BTreeMap<OrbId, Orb>,
     pub rules: GameRules,
 }
 
@@ -661,6 +780,7 @@ impl Catalog {
             merge(&mut cat.events, pack.events, |v| v.id.clone());
             merge(&mut cat.acts, pack.acts, |v| v.id.clone());
             merge(&mut cat.ascensions, pack.ascensions, |v| v.level);
+            merge(&mut cat.orbs, pack.orbs, |v| v.id.clone());
             if let Some(rules) = pack.rules {
                 cat.rules = rules;
             }

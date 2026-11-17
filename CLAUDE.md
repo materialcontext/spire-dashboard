@@ -9,7 +9,7 @@ Slay the Spire 2 macro dashboard: Rust workspace, egui UI. Read `docs/ARCHITECTU
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo fmt --all --check`
 - `cargo run -p spire-data --bin refresh-bundle`: regenerate `data/catalog.json` from Spire Codex
-- `cargo run -p spire-data --example audit [-- --cards]`: see how the playbook reads the data
+- `cargo run -p spire-data --example audit [-- --cards | --sim]`: see how the playbook reads the data, or simulate every starter deck
 
 fmt, clippy and test must pass before pushing (CI runs them).
 

@@ -4,7 +4,9 @@ pub mod advice;
 pub mod deck;
 pub mod events;
 pub mod floors;
+pub mod sim;
 pub mod threats;
+pub mod timeline;
 
 use crate::catalog::Catalog;
 use crate::playbook::Playbook;

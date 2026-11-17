@@ -107,7 +107,10 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
                     st.end_encounter = s.encounters_seen.last().cloned();
                 }
             }
-            if let Some(version) = v.catalog.layers.last().and_then(|l| l.game_version.as_ref()) {
+            // The data version is a nicety: shown only when the header has room.
+            if let Some(version) = v.catalog.layers.last().and_then(|l| l.game_version.as_ref())
+                && ui.available_width() > 130.0
+            {
                 ui.label(RichText::new(version).small().color(text_faint()));
             }
         });

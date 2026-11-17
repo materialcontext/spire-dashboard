@@ -1,5 +1,6 @@
 //! Writes a sample run into a data folder, for screenshots and manual
-//! testing: `seed_run <data-dir> <mid|late|fool>`.
+//! testing: `seed_run <data-dir> <mid|late|fool|history>`. `history` files
+//! three finished runs in the run history and leaves the current run alone.
 
 use spire_core::catalog::{Catalog, RoomType};
 use spire_core::ids::*;
@@ -69,6 +70,13 @@ fn main() {
     let (dir, kind) = (args.get(1).expect("data dir"), args.get(2).map_or("late", String::as_str));
     let store = Store::at(dir);
     let cat = store.load().catalog;
+    if kind == "history" {
+        for run in spire_app::bench::archived_runs(&cat) {
+            store.archive_run(&run).expect("archive run");
+        }
+        println!("filed sample runs in {dir}");
+        return;
+    }
     let run = match kind {
         "mid" => spire_app::bench::mid_run(&cat),
         "fool" => fool_run(&cat),

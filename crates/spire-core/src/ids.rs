@@ -41,4 +41,4 @@ macro_rules! id_types {
     )*};
 }
 
-id_types!(CardId, CharacterId, RelicId, PotionId, EnchantmentId, MonsterId, EncounterId, EventId, ActId,);
+id_types!(CardId, CharacterId, RelicId, PotionId, EnchantmentId, MonsterId, EncounterId, EventId, ActId, OrbId,);

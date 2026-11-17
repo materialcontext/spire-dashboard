@@ -4,6 +4,8 @@ use std::sync::mpsc::{Receiver, channel};
 
 use eframe::egui;
 use spire_core::analysis::Dashboard;
+use spire_core::analysis::sim::{DeckSim, simulate};
+use spire_core::analysis::timeline::{Timeline, timeline};
 use spire_core::run::{Change, Outcome, RunEvent, RunState};
 use spire_core::{Catalog, Playbook, Run};
 use spire_data::fetch::{self, Source};
@@ -22,6 +24,15 @@ pub struct ViewCtx<'a> {
     pub can_undo: bool,
     /// Bumped whenever `dash` is recomputed; keys layout caches.
     pub generation: u64,
+    /// Run analytics, computed only while the Analytics tab is open.
+    pub analytics: Option<&'a Analytics>,
+}
+
+/// The live run's charts and deck simulation. Costlier than the dashboard
+/// (a few milliseconds), so built lazily for the Analytics tab.
+pub struct Analytics {
+    pub timeline: Timeline,
+    pub sim: DeckSim,
 }
 
 /// UI-only state that never touches the run.
@@ -44,6 +55,9 @@ pub struct UiState {
     /// The End run dialog is open, with the fight to blame for a death.
     pub end_run_open: bool,
     pub end_encounter: Option<spire_core::EncounterId>,
+    pub history: crate::views::history::HistoryBrowser,
+    /// Analytics: list every card's draw odds, not just the top ones.
+    pub show_all_odds: bool,
 }
 
 pub struct Toast {
@@ -65,6 +79,8 @@ pub struct SpireApp {
     state: RunState,
     dash: Dashboard,
     generation: u64,
+    /// Analytics and the generation they were built for.
+    analytics: Option<(u64, Analytics)>,
     draft: NodeDraft,
     ui: UiState,
     update_rx: Option<Receiver<Result<fetch::Fetched, String>>>,
@@ -101,6 +117,7 @@ impl SpireApp {
             state,
             dash,
             generation: 0,
+            analytics: None,
             ui: UiState {
                 threat_tab: spire_core::run::NodeKind::Monster,
                 show_data: false,
@@ -116,6 +133,8 @@ impl SpireApp {
                 enemies: Default::default(),
                 end_run_open: false,
                 end_encounter: None,
+                history: Default::default(),
+                show_all_odds: false,
             },
             update_rx: None,
         }
@@ -136,6 +155,7 @@ impl SpireApp {
             Err(e) => self.note(format!("Could not save the run to history: {e}")),
         }
         self.run = Run::default();
+        self.ui.history.invalidate();
         self.run_changed();
     }
 
@@ -219,6 +239,13 @@ impl SpireApp {
             "enemies" => {
                 self.ui.tab = crate::views::Tab::Enemies;
                 self.ui.enemies.selected = select.map(Into::into);
+            }
+            "analytics" => self.ui.tab = crate::views::Tab::Analytics,
+            "history" => {
+                self.ui.tab = crate::views::Tab::History;
+                if let Some(id) = select {
+                    self.ui.history.select(id);
+                }
             }
             _ => {}
         }
@@ -380,6 +407,7 @@ impl SpireApp {
         if self.ui.toast.as_ref().is_some_and(|t| ctx.input(|i| i.time) > t.until) {
             self.ui.toast = None;
         }
+        self.prepare_tab();
         {
             let view = ViewCtx {
                 catalog: &self.catalog,
@@ -388,6 +416,7 @@ impl SpireApp {
                 dash: &self.dash,
                 can_undo: self.run.events.len() > 1,
                 generation: self.generation,
+                analytics: self.analytics.as_ref().filter(|(g, _)| *g == self.generation).map(|(_, a)| a),
             };
             views::root(ui, &view, &mut self.draft, &mut self.ui, &mut actions);
             if self.ui.show_data {
@@ -401,10 +430,28 @@ impl SpireApp {
 }
 
 impl SpireApp {
+    /// Builds what the open tab needs and nothing else: analytics for the
+    /// live run, or the archived runs read from disk.
+    fn prepare_tab(&mut self) {
+        match self.ui.tab {
+            crate::views::Tab::Analytics if self.analytics.as_ref().is_none_or(|(g, _)| *g != self.generation) => {
+                let a = Analytics {
+                    timeline: timeline(&self.run, &self.catalog, &self.playbook),
+                    sim: simulate(&self.state, &self.catalog, &self.playbook.simulation),
+                };
+                self.analytics = Some((self.generation, a));
+            }
+            crate::views::Tab::History if self.ui.history.needs_load() => {
+                self.ui.history.load(self.store.archived_runs());
+            }
+            _ => {}
+        }
+    }
+
     /// Keyboard accelerators. Ignored while a text field has focus, so
     /// typing a search never triggers them; everything also works by mouse.
     ///
-    /// 1–8 room · Ctrl+Enter commit · Ctrl+Z undo · Ctrl+1/2/3 tabs · Esc close.
+    /// 1–8 room · Ctrl+Enter commit · Ctrl+Z undo · Ctrl+1–5 tabs · Esc close.
     fn keys(&mut self, ctx: &egui::Context) -> Vec<Action> {
         use egui::{Key, Modifiers};
         let mut out = Vec::new();

@@ -6,6 +6,7 @@
 //! when there is room.
 
 pub mod act;
+pub mod analytics;
 pub mod breakdown;
 pub mod cards;
 pub mod data;
@@ -13,6 +14,7 @@ pub mod deck;
 pub mod dialogs;
 pub mod enemies;
 pub mod events;
+pub mod history;
 pub mod log;
 pub mod start;
 pub mod threats;
@@ -31,16 +33,20 @@ const GAP: f32 = 12.0;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tab {
     Run,
+    Analytics,
+    History,
     Cards,
     Enemies,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 3] = [Tab::Run, Tab::Cards, Tab::Enemies];
+    pub const ALL: [Tab; 5] = [Tab::Run, Tab::Analytics, Tab::History, Tab::Cards, Tab::Enemies];
 
     pub fn label(self) -> &'static str {
         match self {
             Tab::Run => "Run",
+            Tab::Analytics => "Analytics",
+            Tab::History => "History",
             Tab::Cards => "Cards",
             Tab::Enemies => "Enemies",
         }
@@ -53,8 +59,29 @@ pub fn root(ui: &mut Ui, v: &ViewCtx, draft: &mut NodeDraft, st: &mut UiState, o
     dialogs::show(ui, v, st, out);
     toast(ui, st, out);
 
+    let center = egui::Frame::new().inner_margin(egui::Margin::same(GAP as i8));
     match st.tab {
         Tab::Run => {}
+        Tab::Analytics => {
+            egui::CentralPanel::default().frame(center).show(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| match v.analytics {
+                    Some(a) => analytics::show(ui, v, a, st),
+                    None => {
+                        ui.label("Preparing analytics…");
+                    }
+                });
+            });
+            return;
+        }
+        Tab::History => {
+            egui::Panel::left("history-list").frame(side).resizable(true).default_size(300.0).show(ui, |ui| {
+                history::list(ui, v, &mut st.history);
+            });
+            egui::CentralPanel::default().frame(center).show(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| history::detail(ui, v, &mut st.history));
+            });
+            return;
+        }
         Tab::Cards => {
             egui::Panel::left("card-filters").frame(side).resizable(true).default_size(260.0).show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| cards::filters(ui, v, &mut st.cards));
@@ -94,7 +121,6 @@ pub fn root(ui: &mut Ui, v: &ViewCtx, draft: &mut NodeDraft, st: &mut UiState, o
     egui::Panel::right("log").frame(side).resizable(true).default_size(330.0).min_size(280.0).show(ui, |ui| {
         egui::ScrollArea::vertical().show(ui, |ui| log::show(ui, v, draft, out));
     });
-    let center = egui::Frame::new().inner_margin(egui::Margin::same(GAP as i8));
     egui::CentralPanel::default().frame(center).show(ui, |ui| {
         egui::ScrollArea::vertical().show(ui, |ui| {
             if v.state.act.is_none() {

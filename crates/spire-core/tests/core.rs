@@ -3,7 +3,7 @@
 use spire_core::analysis::deck::{Coverage, coverage, deck_profile};
 use spire_core::analysis::events::{needs, watchlist};
 use spire_core::analysis::threats::next_threats;
-use spire_core::analysis::{Dashboard, Severity};
+use spire_core::analysis::{Dashboard, Severity, sim, timeline};
 use spire_core::catalog::*;
 use spire_core::playbook::*;
 use spire_core::run::*;
@@ -29,6 +29,10 @@ fn card(id: &str, t: CardType, rarity: Rarity, text: &str) -> Card {
         draw: None,
         energy: None,
         powers: vec![],
+        vars: Default::default(),
+        upgrade: Default::default(),
+        star_cost: None,
+        channels: vec![],
     }
 }
 
@@ -93,6 +97,8 @@ fn catalog() -> Catalog {
             starting_deck: vec!["STRIKE".into(), "STRIKE".into(), "DEFEND".into()],
             starting_relics: vec!["BLOOD".into()],
             description: String::new(),
+            orb_slots: None,
+            arrow_slots: None,
         }],
         cards: vec![strike, defend, cleave, inflame, curse],
         monsters: vec![
@@ -617,4 +623,129 @@ fn role_source_explains_rules_and_overrides() {
     assert_eq!(pb.roles_of(inflame), vec![Role::FrontloadDamage], "personal overrides win");
     let rule = Condition::All(vec![Condition::CardType(CardType::Power), Condition::TextContains("block".into())]);
     assert_eq!(rule.describe(), "is a Power and mentions \"block\"");
+}
+
+// ---------------------------------------------------------------- deck simulation
+
+fn sim_state(cat: &Catalog, deck: &[(&str, bool)]) -> RunState {
+    let start = RunEvent::start(cat, &CharacterId::new("HERO"), 0).expect("hero starts");
+    let mut s = run::apply(RunState::default(), &start);
+    s.deck =
+        deck.iter().map(|(id, up)| DeckCard { card: CardId::new(*id), upgraded: *up, enchantment: None }).collect();
+    s
+}
+
+fn quick() -> SimAssumptions {
+    SimAssumptions { trials: 200, ..SimAssumptions::default() }
+}
+
+#[test]
+fn sim_is_deterministic_and_bounded_by_energy() {
+    let cat = catalog();
+    let deck = [("STRIKE", false); 5].into_iter().chain([("DEFEND", false); 5]).collect::<Vec<_>>();
+    let s = sim_state(&cat, &deck);
+    let a = sim::simulate(&s, &cat, &quick());
+    assert_eq!(a, sim::simulate(&s, &cat, &quick()), "same deck, same numbers");
+    assert_eq!(a.turns.len(), 5);
+    // Three energy, one-cost cards: at most three Strikes or three Defends a turn.
+    for t in &a.turns {
+        assert!(t.damage.mean > 6.0 && t.damage.mean <= 18.0, "damage {:?}", t.damage);
+        assert!(t.block.mean > 5.0 && t.block.mean <= 15.0, "block {:?}", t.block);
+        assert!(t.damage.low <= t.damage.mean && t.damage.mean <= t.damage.high + 0.01);
+    }
+    // Ten cards, five a turn: the deck cycles in two turns.
+    assert!((a.turnover - 2.0).abs() < 0.01, "turnover {}", a.turnover);
+    assert_eq!(a.dead_draws, 0.0);
+    // Five cards in hand, three played: two energy's worth left behind.
+    assert!((a.stranded_energy - 2.0).abs() < 0.01, "stranded {}", a.stranded_energy);
+}
+
+#[test]
+fn sim_counts_dead_draws_and_upgrades() {
+    let cat = catalog();
+    let plain = sim_state(&cat, &[("STRIKE", false), ("STRIKE", false), ("REGRET", false), ("REGRET", false)]);
+    let sim = sim::simulate(&plain, &cat, &quick());
+    assert!((sim.dead_draws - 0.5).abs() < 0.01, "half the deck is dead: {}", sim.dead_draws);
+    assert!(sim.odds.iter().all(|o| o.by_turn[0] > 0.99), "a four-card deck is drawn on turn one");
+
+    let mut upgraded = cat.clone();
+    let strike = upgraded.cards.get_mut(&CardId::new("STRIKE")).unwrap();
+    strike.upgrade.deltas.insert("damage".into(), 3);
+    let up = sim_state(&upgraded, &[("STRIKE", true), ("STRIKE", true)]);
+    let base = sim_state(&upgraded, &[("STRIKE", false), ("STRIKE", false)]);
+    let (up, base) = (sim::simulate(&up, &upgraded, &quick()), sim::simulate(&base, &upgraded, &quick()));
+    assert_eq!(base.turns[0].damage.mean, 12.0);
+    assert_eq!(up.turns[0].damage.mean, 18.0);
+}
+
+#[test]
+fn sim_carries_strength_and_orbs_between_turns() {
+    let mut cat = catalog();
+    // Inflame: a power that gains 2 Strength, played before attacking.
+    cat.cards.get_mut(&CardId::new("INFLAME")).unwrap().vars.insert("strengthpower".into(), 2);
+    let deck = [("INFLAME", false)].into_iter().chain([("STRIKE", false); 9]).collect::<Vec<_>>();
+    let sim = sim::simulate(&sim_state(&cat, &deck), &cat, &quick());
+    let (first, last) = (sim.turns[0].damage.mean, sim.turns[4].damage.mean);
+    assert!(last > first + 2.0, "Strength scales later turns: {first} then {last}");
+
+    // A zero-cost Zap that channels Lightning, with three orb slots.
+    let mut zap = cat.cards[&CardId::new("STRIKE")].clone();
+    zap.id = CardId::new("ZAP");
+    zap.damage = None;
+    zap.card_type = CardType::Skill;
+    zap.text = "Channel 1 Lightning.".into();
+    zap.channels = vec![OrbChannel { orb: OrbId::new("LIGHTNING"), count: 1, x: false }];
+    cat.cards.insert(zap.id.clone(), zap);
+    cat.orbs.insert(
+        OrbId::new("LIGHTNING"),
+        Orb {
+            id: OrbId::new("LIGHTNING"),
+            name: "Lightning".into(),
+            text: String::new(),
+            passive: 3,
+            passive_effect: OrbEffect::Damage,
+            evoke: 8,
+            evoke_effect: OrbEffect::Damage,
+            focus: true,
+        },
+    );
+    cat.characters.get_mut(&CharacterId::new("HERO")).unwrap().orb_slots = Some(3);
+    let sim = sim::simulate(&sim_state(&cat, &[("ZAP", false); 6]), &cat, &quick());
+    assert!(sim.resources.iter().any(|(r, n)| *r == sim::Resource::Orbs && *n > 2.0), "{:?}", sim.resources);
+    // Turn one: three Zaps, three passives (9). Later turns evoke as well.
+    assert_eq!(sim.turns[0].damage.mean, 9.0);
+    assert!(sim.turns[1].damage.mean > 9.0);
+}
+
+#[test]
+fn timeline_tracks_floors_fights_and_elites() {
+    let cat = catalog();
+    let pb = playbook();
+    let mut run = Run::default();
+    run.push(RunEvent::start(&cat, &CharacterId::new("HERO"), 0).unwrap());
+    run.push(RunEvent::EnterAct { act: ActId::new("ACT1"), index: 0, boss: None });
+    let node = |kind, enc: &str, hp| {
+        RunEvent::Node(NodeReport {
+            kind,
+            encounter: Some(EncounterId::new(enc)),
+            event: None,
+            changes: vec![Change::SetHp(hp)],
+        })
+    };
+    run.push(node(NodeKind::Monster, "SLIMES_WEAK", 70));
+    run.push(node(NodeKind::Elite, "BRUTE_ELITE", 40));
+    run.push(RunEvent::Node(NodeReport {
+        kind: NodeKind::Rest,
+        encounter: None,
+        event: None,
+        changes: vec![Change::SetHp(64)],
+    }));
+    let t = timeline::timeline(&run, &cat, &pb);
+    assert_eq!(t.points.len(), 3);
+    assert_eq!(t.points.iter().map(|p| p.hp_lost).collect::<Vec<_>>(), vec![10, 30, -24]);
+    assert_eq!(t.fights().count(), 2);
+    assert_eq!(t.elites_by_act, vec![1]);
+    assert_eq!(t.points[1].floor, 2);
+    // Replaying to a point's event index gives that floor's state.
+    assert_eq!(run.state_at(t.points[1].event_index).hp, 40);
 }
