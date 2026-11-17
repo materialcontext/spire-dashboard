@@ -14,7 +14,7 @@ fn keys_pick_rooms_commit_and_undo() {
     let ctx = egui::Context::default();
     let mut app = s.app();
     let floor = app.run().state().floor;
-    let mut frame = |events: Vec<Event>, app: &mut spire_app::app::SpireApp| {
+    let frame = |events: Vec<Event>, app: &mut spire_app::app::SpireApp| {
         let mut input = s.raw_input(0, 0.0);
         input.events = events;
         ctx.run_ui(input, |ui| app.frame(ui)).textures_delta.clear();
