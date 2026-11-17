@@ -1,5 +1,7 @@
 //! The node report being filled in, before it is committed to the run.
 
+use spire_core::Catalog;
+use spire_core::analysis::floors::expected_room;
 use spire_core::ids::*;
 use spire_core::run::{Change, NodeKind, NodeReport, RunEvent, RunState};
 
@@ -16,6 +18,8 @@ pub struct NodeDraft {
     pub relic_query: String,
     pub potion_query: String,
     pub add_upgraded: bool,
+    /// The room this floor always has, when the act layout fixes it.
+    pub expected: Option<NodeKind>,
 }
 
 impl NodeDraft {
@@ -33,7 +37,32 @@ impl NodeDraft {
             relic_query: String::new(),
             potion_query: String::new(),
             add_upgraded: false,
+            expected: None,
         }
+    }
+
+    /// A draft for the next floor with the room pre-selected when the act's
+    /// layout fixes it, the boss pre-filled on boss floors and the act's
+    /// Ancient pre-filled when there is only one.
+    pub fn for_next(s: &RunState, catalog: &Catalog) -> Self {
+        let mut d = Self::from_state(s);
+        d.expected = expected_room(s, catalog);
+        if let Some(kind) = d.expected {
+            d.kind = kind;
+        }
+        match d.kind {
+            NodeKind::Boss => {
+                d.encounter = s.bosses().find(|b| !s.encounters_seen.contains(b)).cloned();
+            }
+            NodeKind::Ancient => {
+                let ancients = s.act.as_ref().and_then(|a| catalog.acts.get(a)).map(|a| a.ancients.as_slice());
+                if let Some([only]) = ancients {
+                    d.event = Some(only.clone());
+                }
+            }
+            _ => {}
+        }
+        d
     }
 
     /// Queued changes plus any edited numbers, in a safe order

@@ -9,6 +9,7 @@ pub mod act;
 pub mod breakdown;
 pub mod data;
 pub mod deck;
+pub mod dialogs;
 pub mod events;
 pub mod log;
 pub mod start;
@@ -27,6 +28,7 @@ const GAP: f32 = 12.0;
 pub fn root(ui: &mut Ui, v: &ViewCtx, draft: &mut NodeDraft, st: &mut UiState, out: &mut Vec<Action>) {
     let side = egui::Frame::new().inner_margin(egui::Margin { left: 14, right: 14, top: 0, bottom: 0 });
     egui::Panel::top("top").frame(side).show(ui, |ui| top::show(ui, v, st, out));
+    dialogs::show(ui, v, st, out);
 
     if !v.state.started() {
         egui::CentralPanel::default().frame(side).show(ui, |ui| {

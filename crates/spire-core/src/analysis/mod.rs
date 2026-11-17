@@ -3,6 +3,7 @@
 pub mod advice;
 pub mod deck;
 pub mod events;
+pub mod floors;
 pub mod threats;
 
 use crate::catalog::Catalog;

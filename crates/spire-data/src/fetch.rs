@@ -150,6 +150,9 @@ pub struct Fetched {
 pub fn add_community_data(pack: &mut DataPack, pages: &[String], notes: &mut Vec<String>) {
     let fights = codex_runs::fights_from_pages(pages);
     let s = codex_runs::enrich(pack, &fights);
+    let layouts: Vec<_> = pages.iter().flat_map(|p| codex_runs::layouts(p)).collect();
+    let acts = codex_runs::enrich_layouts(pack, &layouts);
+    notes.push(format!("Community runs: room layouts measured for {acts} act numbers."));
     notes.push(format!(
         "Community runs: {} fights read, {} encounters with exact lineups, weak fights per act {:?}.",
         s.fights, s.encounters, s.weak_fights

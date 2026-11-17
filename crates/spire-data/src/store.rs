@@ -14,6 +14,7 @@ const USER_PACK: &str = "user.json";
 const PLAYBOOK: &str = "playbook.json";
 const SETTINGS: &str = "settings.json";
 const RUN: &str = "run.json";
+const RUNS_DIR: &str = "runs";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -144,6 +145,50 @@ impl Store {
         self.write_json(RUN, run)
     }
 
+    /// Saves a finished run into the history folder and returns its id.
+    pub fn archive_run(&self, run: &Run) -> Result<String, DataError> {
+        let dir = self.dir.join(RUNS_DIR);
+        fs::create_dir_all(&dir)?;
+        let stamp = run.started_at.clone().unwrap_or_else(crate::now_rfc3339);
+        let base: String = stamp.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
+        let mut id = base.clone();
+        let mut n = 1;
+        while dir.join(format!("{id}.json")).exists() {
+            n += 1;
+            id = format!("{base}-{n}");
+        }
+        let json = serde_json::to_string_pretty(run).map_err(|e| DataError::Parse(e.to_string()))?;
+        let tmp = dir.join(format!("{id}.json.tmp"));
+        fs::write(&tmp, json)?;
+        fs::rename(&tmp, dir.join(format!("{id}.json")))?;
+        Ok(id)
+    }
+
+    /// Archived runs, newest first. Unreadable files are skipped.
+    pub fn archived_runs(&self) -> Vec<(String, Run)> {
+        let Ok(entries) = fs::read_dir(self.dir.join(RUNS_DIR)) else { return Vec::new() };
+        let mut runs: Vec<(String, Run)> = entries
+            .filter_map(Result::ok)
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|x| x == "json"))
+            .filter_map(|p| {
+                let id = p.file_stem()?.to_string_lossy().into_owned();
+                let run: Run = serde_json::from_str(&fs::read_to_string(&p).ok()?).ok()?;
+                Some((id, run))
+            })
+            .collect();
+        runs.sort_by(|a, b| b.0.cmp(&a.0));
+        runs
+    }
+
+    /// Forgets the in-progress run (after archiving it).
+    pub fn clear_run(&self) -> Result<(), DataError> {
+        match fs::remove_file(self.path(RUN)) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.into()),
+            _ => Ok(()),
+        }
+    }
+
     /// A writer thread for this store's run file (see [`RunSaver`]).
     pub fn run_saver(&self) -> RunSaver {
         RunSaver::spawn(self.clone())
@@ -264,6 +309,27 @@ mod tests {
             }
         }
         assert_eq!(store.load_run().unwrap().unwrap(), run);
+    }
+
+    #[test]
+    fn archived_runs_list_newest_first() {
+        let store = temp_store("archive");
+        let cat = Catalog::from_layers([bundled_pack()]);
+        let character = cat.characters.keys().next().unwrap().clone();
+        let mut ids = Vec::new();
+        for (i, at) in ["2026-01-01T00:00:00Z", "2026-02-01T00:00:00Z"].into_iter().enumerate() {
+            let mut run = Run { started_at: Some(at.into()), ..Run::default() };
+            run.push(RunEvent::start(&cat, &character, i as u32).unwrap());
+            run.push(RunEvent::End { outcome: spire_core::run::Outcome::Abandoned, at: None });
+            ids.push(store.archive_run(&run).unwrap());
+        }
+        let listed = store.archived_runs();
+        assert_eq!(listed.len(), 2);
+        assert_eq!(listed[0].0, ids[1], "newest first");
+        assert_eq!(listed[0].1.summary().ascension, 1);
+        // Same start time twice gets a distinct id.
+        let again = store.archive_run(&listed[0].1).unwrap();
+        assert_ne!(again, ids[1]);
     }
 
     #[test]

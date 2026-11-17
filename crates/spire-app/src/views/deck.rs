@@ -105,7 +105,11 @@ fn card_row(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
             ui.spacing_mut().item_spacing.x = 2.0;
             // Frameless until hovered: framed buttons on every row were ~70
             // filled rects per frame for little visual value.
-            if ui.add(row_button("x")).on_hover_text("Remove from deck").clicked() {
+            if row.eternal {
+                // Eternal: can't be removed or transformed.
+                ui.label(RichText::new("Eternal").small().color(text_faint()))
+                    .on_hover_text("Can't be removed or transformed");
+            } else if ui.add(row_button("x")).on_hover_text("Remove from deck").clicked() {
                 out.push(Action::Draft(Change::RemoveCard(row.card.clone())));
             }
             if !row.card.upgraded && ui.add(row_button("+")).on_hover_text("Upgrade").clicked() {

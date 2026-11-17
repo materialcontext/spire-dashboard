@@ -8,7 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::catalog::{Catalog, RoomType};
+use crate::catalog::Catalog;
 use crate::ids::*;
 
 /// A card as it sits in the deck.
@@ -27,56 +27,7 @@ impl DeckCard {
     }
 }
 
-/// The kind of map node just completed (or about to be entered).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum NodeKind {
-    Monster,
-    Elite,
-    Boss,
-    /// A `?` node. What it turned into is recorded by the encounter/event.
-    Unknown,
-    Shop,
-    Rest,
-    Treasure,
-    Ancient,
-}
-
-impl NodeKind {
-    pub const ALL: [NodeKind; 8] = [
-        NodeKind::Monster,
-        NodeKind::Elite,
-        NodeKind::Unknown,
-        NodeKind::Rest,
-        NodeKind::Shop,
-        NodeKind::Treasure,
-        NodeKind::Boss,
-        NodeKind::Ancient,
-    ];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            // StS2's own room names.
-            NodeKind::Monster => "Enemy",
-            NodeKind::Elite => "Elite",
-            NodeKind::Boss => "Boss",
-            NodeKind::Unknown => "Event",
-            NodeKind::Shop => "Shop",
-            NodeKind::Rest => "Rest Site",
-            NodeKind::Treasure => "Treasure",
-            NodeKind::Ancient => "Ancient",
-        }
-    }
-
-    pub fn room(self) -> Option<RoomType> {
-        match self {
-            NodeKind::Monster => Some(RoomType::Monster),
-            NodeKind::Elite => Some(RoomType::Elite),
-            NodeKind::Boss => Some(RoomType::Boss),
-            _ => None,
-        }
-    }
-}
+pub use crate::catalog::NodeKind;
 
 /// One atomic change to the run. Card changes match by value (the first
 /// equal card in the deck), so they stay valid however the deck is ordered.
@@ -111,6 +62,28 @@ pub struct NodeReport {
     pub changes: Vec<Change>,
 }
 
+/// How a run ended.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Outcome {
+    Victory,
+    Died {
+        #[serde(default)]
+        encounter: Option<EncounterId>,
+    },
+    Abandoned,
+}
+
+impl Outcome {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Outcome::Victory => "Victory",
+            Outcome::Died { .. } => "Died",
+            Outcome::Abandoned => "Abandoned",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RunEvent {
@@ -134,6 +107,12 @@ pub enum RunEvent {
         boss: Option<EncounterId>,
     },
     SetBoss(EncounterId),
+    /// Ends the run. `at` is an RFC 3339 timestamp supplied by the app.
+    End {
+        outcome: Outcome,
+        #[serde(default)]
+        at: Option<String>,
+    },
     /// The second boss of a double-boss act (A10, act 3).
     SetSecondBoss(EncounterId),
     Node(NodeReport),
@@ -172,6 +151,8 @@ pub struct RunState {
     /// Second boss of a double-boss act.
     pub second_boss: Option<EncounterId>,
     pub floor: u32,
+    /// Floors finished in the current act (0 on entering it).
+    pub act_floor: u32,
     pub hp: i32,
     pub max_hp: i32,
     pub gold: i32,
@@ -184,6 +165,7 @@ pub struct RunState {
     pub encounters_seen: Vec<EncounterId>,
     pub events_seen: Vec<EventId>,
     pub nodes: Vec<NodeKind>,
+    pub outcome: Option<Outcome>,
 }
 
 impl Default for RunState {
@@ -196,6 +178,7 @@ impl Default for RunState {
             boss: None,
             second_boss: None,
             floor: 0,
+            act_floor: 0,
             hp: 0,
             max_hp: 0,
             gold: 0,
@@ -207,6 +190,7 @@ impl Default for RunState {
             encounters_seen: Vec::new(),
             events_seen: Vec::new(),
             nodes: Vec::new(),
+            outcome: None,
         }
     }
 }
@@ -296,14 +280,17 @@ pub fn apply(s: RunState, event: &RunEvent) -> RunState {
             act_index: *index,
             boss: boss.clone(),
             second_boss: None,
+            act_floor: 0,
             hallway_fights_in_act: 0,
             ..s
         },
         RunEvent::SetBoss(boss) => RunState { boss: Some(boss.clone()), ..s },
         RunEvent::SetSecondBoss(boss) => RunState { second_boss: Some(boss.clone()), ..s },
+        RunEvent::End { outcome, .. } => RunState { outcome: Some(outcome.clone()), ..s },
         RunEvent::Node(report) => {
             let mut s = report.changes.iter().fold(s, apply_change);
             s.floor += 1;
+            s.act_floor += 1;
             s.nodes.push(report.kind);
             if let Some(enc) = &report.encounter {
                 s.encounters_seen.push(enc.clone());
@@ -326,11 +313,54 @@ pub fn apply(s: RunState, event: &RunEvent) -> RunState {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Run {
     pub events: Vec<RunEvent>,
+    /// RFC 3339 time the run was started (set by the app).
+    #[serde(default)]
+    pub started_at: Option<String>,
+}
+
+/// One line of run history.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RunSummary {
+    pub character: Option<CharacterId>,
+    pub ascension: u32,
+    pub floor: u32,
+    pub act_index: u8,
+    pub outcome: Option<Outcome>,
+    pub started_at: Option<String>,
+    pub ended_at: Option<String>,
+    pub deck_size: usize,
 }
 
 impl Run {
     pub fn state(&self) -> RunState {
         replay(&self.events)
+    }
+
+    /// The state after the first `n` events (for scrubbing through history).
+    pub fn state_at(&self, n: usize) -> RunState {
+        replay(&self.events[..n.min(self.events.len())])
+    }
+
+    pub fn ended(&self) -> bool {
+        self.events.iter().any(|e| matches!(e, RunEvent::End { .. }))
+    }
+
+    pub fn summary(&self) -> RunSummary {
+        let s = self.state();
+        let ended_at = self.events.iter().rev().find_map(|e| match e {
+            RunEvent::End { at, .. } => at.clone(),
+            _ => None,
+        });
+        RunSummary {
+            character: s.character,
+            ascension: s.ascension,
+            floor: s.floor,
+            act_index: s.act_index,
+            outcome: s.outcome,
+            started_at: self.started_at.clone(),
+            ended_at,
+            deck_size: s.deck.len(),
+        }
     }
 
     /// The state with extra, not-yet-committed events applied (for previews).
