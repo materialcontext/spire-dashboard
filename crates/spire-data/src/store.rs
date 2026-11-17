@@ -19,6 +19,8 @@ const RUN: &str = "run.json";
 #[serde(default)]
 pub struct Settings {
     pub source: Source,
+    /// Appearance (a look name from the app's style table).
+    pub look: Option<String>,
 }
 
 /// The app's data directory. All reads tolerate missing files.

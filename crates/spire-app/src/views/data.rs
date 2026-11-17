@@ -19,13 +19,32 @@ pub fn window(
     out: &mut Vec<Action>,
 ) {
     let mut open = true;
-    egui::Window::new(RichText::new("Game data").strong())
+    egui::Window::new(RichText::new("Settings").family(crate::style::strong_family()))
         .open(&mut open)
         .default_width(520.0)
         .resizable(false)
         .collapsible(false)
         .show(ctx, |ui| {
-            ui.label(eyebrow("Loaded"));
+            ui.label(eyebrow("Appearance"));
+            hairline(ui);
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                let current = crate::style::current().name;
+                for look in crate::style::LOOKS {
+                    let selected = look.name == current;
+                    let label = RichText::new(look.label).color(if selected { bg() } else { text() });
+                    let button = egui::Button::new(label)
+                        .fill(if selected { accent() } else { egui::Color32::TRANSPARENT })
+                        .stroke(egui::Stroke::new(1.0, if selected { accent() } else { border() }));
+                    if ui.add(button).on_hover_text(look.blurb).clicked() && !selected {
+                        out.push(Action::SetLook(look.name));
+                    }
+                }
+            });
+            ui.label(RichText::new(crate::style::current().blurb).small().color(text_dim()));
+            ui.add_space(10.0);
+
+            ui.label(eyebrow("Game data"));
             hairline(ui);
             for (i, l) in v.catalog.layers.iter().enumerate() {
                 let role = if i == 0 {

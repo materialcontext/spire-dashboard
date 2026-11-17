@@ -10,8 +10,9 @@ use crate::style::color::*;
 /// and a hairline under the header. Outlined rather than filled: borders
 /// cost a few pixels to draw, fills cost their whole area.
 pub fn panel<R>(ui: &mut Ui, title: &str, note: Option<&str>, add: impl FnOnce(&mut Ui) -> R) -> R {
-    egui::Frame::new()
-        .stroke(Stroke::new(1.0, border()))
+    let look = crate::style::current();
+    let shown = egui::Frame::new()
+        .stroke(Stroke::new(look.border, border()))
         .inner_margin(egui::Margin { left: 14, right: 14, top: 10, bottom: 12 })
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -25,8 +26,13 @@ pub fn panel<R>(ui: &mut Ui, title: &str, note: Option<&str>, add: impl FnOnce(&
             });
             hairline(ui);
             add(ui)
-        })
-        .inner
+        });
+    if look.glow {
+        // One faint outer outline: reads as a glow for a few hundred pixels.
+        let rect = shown.response.rect.expand(2.0);
+        ui.painter().rect_stroke(rect, 0.0, Stroke::new(2.0, border_hi().gamma_multiply(0.35)), StrokeKind::Outside);
+    }
+    shown.inner
 }
 
 /// Uppercase, small, dimmed label used for section titles.
@@ -50,7 +56,7 @@ pub fn chip(ui: &mut Ui, text: impl Into<String>, color: Color32) -> egui::Respo
     let (rect, response) = ui.allocate_exact_size(galley.size() + 2.0 * PAD, Sense::hover());
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
-        if crate::style::look().tinted_chips() {
+        if crate::style::current().tinted_chips {
             painter.rect_filled(rect, 0.0, color.gamma_multiply(0.18));
         }
         painter.rect_stroke(rect, 0.0, Stroke::new(1.0, color.gamma_multiply(0.7)), StrokeKind::Inside);
@@ -81,7 +87,7 @@ pub fn hp_bar(ui: &mut Ui, hp: i32, max: i32, width: f32) {
         egui::Align2::CENTER_CENTER,
         format!("{hp} / {max}"),
         egui::TextStyle::Small.resolve(ui.style()),
-        Color32::WHITE,
+        text(),
     );
 }
 

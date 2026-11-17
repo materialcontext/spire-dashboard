@@ -9,6 +9,12 @@ use crate::widgets::{hp_bar, slots, stat};
 
 pub fn show(ui: &mut Ui, v: &ViewCtx, st: &UiState, out: &mut Vec<Action>) {
     let s = v.state;
+    if crate::style::current().character_accent && s.started() {
+        // Spirebound: a band in the character's colour across the top.
+        let r = ui.max_rect();
+        let band = egui::Rect::from_min_size(egui::pos2(r.min.x - 14.0, r.min.y), egui::vec2(r.width() + 28.0, 3.0));
+        ui.painter().rect_filled(band, 0.0, accent());
+    }
     ui.add_space(6.0);
     ui.horizontal(|ui| {
         ui.label(RichText::new("SPIRE").strong().color(accent()));
@@ -53,7 +59,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &UiState, out: &mut Vec<Action>) {
         }
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let data_label = if st.updating { "Updating data…" } else { "Data" };
+            let data_label = if st.updating { "Updating data…" } else { "Settings" };
             if ui.button(data_label).clicked() {
                 out.push(Action::ToggleDataWindow);
             }
