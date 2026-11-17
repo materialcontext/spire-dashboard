@@ -57,13 +57,16 @@ pub fn preview_body(ui: &mut Ui, t: &ThreatPreview) {
             .small()
             .weak(),
         )
-        .on_hover_text(format!("From {} community-submitted fights (Spire Codex).", s.fights));
+        .on_hover_ui(|ui| {
+            ui.label(format!("From {} community-submitted fights (Spire Codex).", s.fights));
+        });
     }
     ui.horizontal_wrapped(|ui| {
         for c in &t.checks {
             let color = coverage_color(ui, c.coverage);
-            chip(ui, format!("{} ({})", c.demand.capability.label(), c.coverage.label()), color)
-                .on_hover_text(format!("{}. You have {}.", c.demand.reason, c.have));
+            chip(ui, format!("{} ({})", c.demand.capability.label(), c.coverage.label()), color).on_hover_ui(|ui| {
+                ui.label(format!("{}. You have {}.", c.demand.reason, c.have));
+            });
         }
     });
 }

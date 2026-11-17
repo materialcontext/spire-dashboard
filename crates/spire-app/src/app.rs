@@ -7,7 +7,7 @@ use spire_core::analysis::Dashboard;
 use spire_core::run::{Change, RunEvent, RunState};
 use spire_core::{Catalog, Playbook, Run};
 use spire_data::fetch::{self, Source};
-use spire_data::store::{Settings, Store};
+use spire_data::store::{RunSaver, Settings, Store};
 
 use crate::actions::Action;
 use crate::draft::NodeDraft;
@@ -20,6 +20,8 @@ pub struct ViewCtx<'a> {
     pub state: &'a RunState,
     pub dash: &'a Dashboard,
     pub can_undo: bool,
+    /// Bumped whenever `dash` is recomputed; keys layout caches.
+    pub generation: u64,
 }
 
 /// UI-only state that never touches the run.
@@ -35,20 +37,22 @@ pub struct UiState {
 
 pub struct SpireApp {
     store: Store,
+    saver: RunSaver,
     catalog: Catalog,
     playbook: Playbook,
     settings: Settings,
     run: Run,
     state: RunState,
     dash: Dashboard,
+    generation: u64,
     draft: NodeDraft,
     ui: UiState,
     update_rx: Option<Receiver<Result<fetch::Fetched, String>>>,
 }
 
 impl SpireApp {
-    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        let store = Store::default_location();
+    /// Loads data, settings and the saved run from `store`.
+    pub fn from_store(store: Store) -> Self {
         let loaded = store.load();
         let settings = store.settings();
         let mut messages = loaded.warnings;
@@ -68,6 +72,7 @@ impl SpireApp {
         };
         Self {
             draft: NodeDraft::from_state(&state),
+            saver: store.run_saver(),
             store,
             catalog: loaded.catalog,
             playbook: loaded.playbook,
@@ -75,6 +80,7 @@ impl SpireApp {
             run,
             state,
             dash,
+            generation: 0,
             ui: UiState {
                 threat_tab: spire_core::run::NodeKind::Monster,
                 show_data: false,
@@ -100,13 +106,14 @@ impl SpireApp {
         self.state = self.run.state();
         self.recompute();
         self.draft = NodeDraft::from_state(&self.state);
-        if let Err(e) = self.store.save_run(&self.run) {
+        if let Err(e) = self.saver.save(&self.run).or_else(|_| self.store.save_run(&self.run)) {
             self.note(format!("Could not save the run: {e}"));
         }
     }
 
     fn recompute(&mut self) {
         self.dash = Dashboard::compute(&self.state, &self.catalog, &self.playbook);
+        self.generation += 1;
     }
 
     fn reload_data(&mut self) {
@@ -155,7 +162,31 @@ impl SpireApp {
         }
     }
 
-    fn apply(&mut self, action: Action, ctx: &egui::Context) {
+    /// Replaces the run (bench and tests); does not save.
+    pub fn set_run(&mut self, run: Run) {
+        self.run = run;
+        self.state = self.run.state();
+        self.recompute();
+        self.draft = NodeDraft::from_state(&self.state);
+    }
+
+    pub fn ui_state(&mut self) -> &mut UiState {
+        &mut self.ui
+    }
+
+    pub fn draft(&mut self) -> &mut NodeDraft {
+        &mut self.draft
+    }
+
+    pub fn catalog(&self) -> &Catalog {
+        &self.catalog
+    }
+
+    pub fn run(&self) -> &Run {
+        &self.run
+    }
+
+    pub fn apply(&mut self, action: Action, ctx: &egui::Context) {
         match action {
             Action::NewRun { character, ascension } => match RunEvent::start(&self.catalog, &character, ascension) {
                 Some(start) => {
@@ -227,9 +258,13 @@ impl SpireApp {
     }
 }
 
-impl eframe::App for SpireApp {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+impl SpireApp {
+    /// One frame of UI: layout, then apply the actions it produced.
+    pub fn frame(&mut self, ui: &mut egui::Ui) {
         self.poll_update();
+        for e in self.saver.take_errors() {
+            self.note(format!("Could not save the run: {e}"));
+        }
         let ctx = ui.ctx().clone();
         let mut actions = Vec::new();
         {
@@ -239,6 +274,7 @@ impl eframe::App for SpireApp {
                 state: &self.state,
                 dash: &self.dash,
                 can_undo: self.run.events.len() > 1,
+                generation: self.generation,
             };
             views::root(ui, &view, &mut self.draft, &mut self.ui, &mut actions);
             if self.ui.show_data {
@@ -248,5 +284,15 @@ impl eframe::App for SpireApp {
         for action in actions {
             self.apply(action, &ctx);
         }
+    }
+}
+
+impl eframe::App for SpireApp {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.frame(ui);
+    }
+
+    fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
+        crate::style::clear_color(visuals)
     }
 }

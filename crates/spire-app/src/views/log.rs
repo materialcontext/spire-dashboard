@@ -26,11 +26,11 @@ fn describe(v: &ViewCtx, c: &Change) -> String {
         Change::RemoveRelic(r) => format!("Lose {}", v.catalog.relic_name(r)),
         Change::AddPotion(p) => format!("Gain {}", v.catalog.potion_name(p)),
         Change::RemovePotion(p) => format!("Use {}", v.catalog.potion_name(p)),
-        Change::SetHp(n) => format!("HP → {n}"),
-        Change::SetMaxHp(n) => format!("Max HP → {n}"),
-        Change::SetGold(n) => format!("Gold → {n}"),
-        Change::SetFloor(n) => format!("Floor → {n}"),
-        Change::SetPotionSlots(n) => format!("Potion slots → {n}"),
+        Change::SetHp(n) => format!("Set HP to {n}"),
+        Change::SetMaxHp(n) => format!("Set max HP to {n}"),
+        Change::SetGold(n) => format!("Set gold to {n}"),
+        Change::SetFloor(n) => format!("Set floor to {n}"),
+        Change::SetPotionSlots(n) => format!("Set potion slots to {n}"),
     }
 }
 

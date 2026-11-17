@@ -2,8 +2,10 @@
 
 use eframe::egui::{self, RichText, Ui};
 
+use spire_core::analysis::EventWatch;
+
 use crate::app::ViewCtx;
-use crate::widgets::{chip, opportunity_color, section};
+use crate::widgets::{chip, culled, opportunity_color, section};
 
 pub fn show(ui: &mut Ui, v: &ViewCtx) {
     section(ui, "? events to look for", |ui| {
@@ -19,33 +21,9 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
 
         let (fresh, seen): (Vec<_>, Vec<_>) = v.dash.events.iter().partition(|e| !e.seen);
         for e in &fresh {
-            ui.add_space(3.0);
-            ui.horizontal(|ui| {
-                let name = RichText::new(&e.name).strong();
-                let event = v.catalog.events.get(&e.event);
-                let options = event
-                    .map(|ev| {
-                        ev.options.iter().map(|o| format!("{}: {}", o.title, o.text)).collect::<Vec<_>>().join("\n")
-                    })
-                    .unwrap_or_default();
-                ui.label(name).on_hover_text(options);
-                if e.score > 0 {
-                    ui.label(RichText::new(format!("fit {}", e.score)).small().color(ui.visuals().hyperlink_color));
-                }
-            });
-            ui.horizontal_wrapped(|ui| {
-                for o in &e.opportunities {
-                    let hit = e.matches.iter().find(|n| n.opportunity == *o);
-                    let color = if hit.is_some() { opportunity_color(ui, *o) } else { ui.visuals().weak_text_color() };
-                    let r = chip(ui, o.label(), color);
-                    if let Some(n) = hit {
-                        r.on_hover_text(&n.reason);
-                    }
-                }
-                for r in &e.risks {
-                    chip(ui, r.label(), opportunity_color(ui, *r));
-                }
-            });
+            // The watchlist is long and mostly below the fold: skip layout
+            // of entries that are scrolled out of view.
+            culled(ui, ("event", v.generation, &e.event), |ui| event_entry(ui, v, e));
         }
         if !seen.is_empty() {
             egui::CollapsingHeader::new(format!("Already seen ({})", seen.len())).show(ui, |ui| {
@@ -53,6 +31,35 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
                     ui.label(RichText::new(&e.name).weak());
                 }
             });
+        }
+    });
+}
+
+fn event_entry(ui: &mut Ui, v: &ViewCtx, e: &EventWatch) {
+    ui.add_space(3.0);
+    ui.horizontal(|ui| {
+        let name = RichText::new(&e.name).strong();
+        // Options are only laid out while hovered.
+        ui.label(name).on_hover_ui(|ui| {
+            for o in v.catalog.events.get(&e.event).map_or(&[][..], |ev| ev.options.as_slice()) {
+                ui.label(format!("{}: {}", o.title, o.text));
+            }
+        });
+        if e.score > 0 {
+            ui.label(RichText::new(format!("fit {}", e.score)).small().color(ui.visuals().hyperlink_color));
+        }
+    });
+    ui.horizontal_wrapped(|ui| {
+        for o in &e.opportunities {
+            let hit = e.matches.iter().find(|n| n.opportunity == *o);
+            let color = if hit.is_some() { opportunity_color(ui, *o) } else { ui.visuals().weak_text_color() };
+            let r = chip(ui, o.label(), color);
+            if let Some(n) = hit {
+                r.on_hover_text(&n.reason);
+            }
+        }
+        for r in &e.risks {
+            chip(ui, r.label(), opportunity_color(ui, *r));
         }
     });
 }

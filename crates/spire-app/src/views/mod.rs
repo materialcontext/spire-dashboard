@@ -16,6 +16,7 @@ use eframe::egui::{self, Ui};
 use crate::actions::Action;
 use crate::app::{UiState, ViewCtx};
 use crate::draft::NodeDraft;
+use crate::widgets::culled;
 
 pub fn root(ui: &mut Ui, v: &ViewCtx, draft: &mut NodeDraft, st: &mut UiState, out: &mut Vec<Action>) {
     egui::Panel::top("top").show(ui, |ui| top::show(ui, v, st, out));
@@ -40,10 +41,11 @@ pub fn root(ui: &mut Ui, v: &ViewCtx, draft: &mut NodeDraft, st: &mut UiState, o
             let wide = ui.available_width() > 680.0;
             if wide {
                 ui.columns(2, |cols| {
-                    act::show(&mut cols[0], v, out);
+                    let g = v.generation;
+                    culled(&mut cols[0], ("act", g), |ui| act::show(ui, v, out));
                     cols[0].add_space(8.0);
-                    breakdown::show(&mut cols[0], v);
-                    threats::show(&mut cols[1], v, st);
+                    culled(&mut cols[0], ("breakdown", g), |ui| breakdown::show(ui, v));
+                    culled(&mut cols[1], ("threats", g, st.threat_tab), |ui| threats::show(ui, v, st));
                     cols[1].add_space(8.0);
                     events::show(&mut cols[1], v);
                 });

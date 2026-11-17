@@ -10,7 +10,7 @@ use crate::playbook::Playbook;
 use crate::run::{NodeKind, RunState};
 
 pub use advice::{Advice, Severity};
-pub use deck::{ClassifiedCard, Coverage, DeckProfile};
+pub use deck::{ClassifiedCard, Coverage, DeckProfile, DeckRow};
 pub use events::{EventWatch, Need};
 pub use threats::{ThreatPreview, ThreatProfile};
 
@@ -19,6 +19,8 @@ pub use threats::{ThreatPreview, ThreatProfile};
 #[derive(Clone, Debug)]
 pub struct Dashboard {
     pub deck: DeckProfile,
+    /// The deck grouped for display.
+    pub rows: Vec<DeckRow>,
     pub needs: Vec<Need>,
     pub events: Vec<EventWatch>,
     pub boss: Option<ThreatPreview>,
@@ -29,7 +31,9 @@ pub struct Dashboard {
 
 impl Dashboard {
     pub fn compute(state: &RunState, catalog: &Catalog, playbook: &Playbook) -> Dashboard {
-        let deck = deck::deck_profile(&state.deck, catalog, playbook);
+        let classified = deck::classify(&state.deck, catalog, playbook);
+        let deck = deck::profile(&classified);
+        let rows = deck::deck_rows(&classified);
         let needs = events::needs(state, &deck, playbook);
         let events = events::watchlist(state, catalog, playbook, &needs);
         let boss = advice::boss_preview(state, catalog, playbook, &deck);
@@ -38,6 +42,6 @@ impl Dashboard {
             .into_iter()
             .map(|k| (k, threats::next_threats(state, k, catalog, playbook, &deck)))
             .collect();
-        Dashboard { deck, needs, events, boss, advice, threats }
+        Dashboard { deck, rows, needs, events, boss, advice, threats }
     }
 }

@@ -13,5 +13,8 @@ spire-core.workspace = true
 spire-data.workspace = true
 eframe.workspace = true
 
+[dev-dependencies]
+serde_json.workspace = true
+
 [lints]
 workspace = true

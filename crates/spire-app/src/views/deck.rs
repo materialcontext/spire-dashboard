@@ -1,61 +1,48 @@
 //! Left panel: the deck, relics and potions as they stand.
 
-use std::collections::BTreeMap;
-
 use eframe::egui::{self, RichText, Ui};
-use spire_core::analysis::deck::classify;
-use spire_core::catalog::CardType;
-use spire_core::run::{Change, DeckCard};
+use spire_core::analysis::DeckRow;
+use spire_core::playbook::Role;
+use spire_core::run::Change;
 
 use crate::actions::Action;
 use crate::app::ViewCtx;
+use crate::widgets::culled;
 
 pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
     let s = v.state;
     ui.heading(format!("Deck ({})", s.deck.len()));
     ui.label(RichText::new("Hover a card for text. Buttons queue changes on the node log.").small().weak());
 
-    // Group identical cards: (type, name) → (deck card, count, roles).
-    let classified = classify(&s.deck, v.catalog, v.playbook);
-    let mut groups: BTreeMap<(CardType, String), (DeckCard, u32, String, String)> = BTreeMap::new();
-    for c in &classified {
-        let name = c.name();
-        let entry = groups.entry((c.card_type(), name)).or_insert_with(|| {
-            let roles: Vec<&str> = c.roles.iter().map(|r| r.short()).collect();
-            let text = c.card.map_or_else(
-                || "Not in the catalog".to_string(),
-                |card| format!("{} · cost {}\n{}", card.card_type.label(), card.cost_label(), card.text),
-            );
-            (c.deck.clone(), 0, roles.join(", "), text)
-        });
-        entry.1 += 1;
-    }
-
+    // Rows are grouped once per run change (Dashboard::rows), not per frame.
     let mut current = None;
-    for ((t, name), (deck_card, count, roles, text)) in &groups {
-        if current != Some(*t) {
-            current = Some(*t);
+    for row in &v.dash.rows {
+        if current != Some(row.card_type) {
+            current = Some(row.card_type);
             ui.add_space(4.0);
-            ui.label(RichText::new(t.label()).strong());
+            ui.label(RichText::new(row.card_type.label()).strong());
         }
-        ui.horizontal(|ui| {
-            let label = if *count > 1 { format!("{count}× {name}") } else { name.clone() };
-            let label = match &deck_card.enchantment {
-                Some(e) => format!("{label} [{}]", v.catalog.enchantment_name(e)),
-                None => label,
-            };
-            let hover = if roles.is_empty() { text.clone() } else { format!("{text}\n\nRoles: {roles}") };
-            ui.label(label).on_hover_text(hover);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("x").on_hover_text("Remove").clicked() {
-                    out.push(Action::Draft(Change::RemoveCard(deck_card.clone())));
+        culled(ui, ("deck-row", v.generation, &row.name, &row.card.enchantment), |ui| {
+            ui.horizontal(|ui| {
+                let mut label = if row.count > 1 { format!("{}× {}", row.count, row.name) } else { row.name.clone() };
+                if let Some(e) = &row.card.enchantment {
+                    label = format!("{label} [{}]", v.catalog.enchantment_name(e));
                 }
-                if !deck_card.upgraded && ui.small_button("+").on_hover_text("Upgrade").clicked() {
-                    out.push(Action::Draft(Change::UpgradeCard(deck_card.clone())));
-                }
-                if !roles.is_empty() {
-                    ui.label(RichText::new(roles).small().weak());
-                }
+                // Tooltip text is only built while hovered.
+                ui.label(label).on_hover_ui(|ui| card_tooltip(ui, v, row));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    // Frameless until hovered: two framed buttons per row were
+                    // ~70 rounded fills per frame for little visual value.
+                    if ui.add(row_button("x")).on_hover_text("Remove").clicked() {
+                        out.push(Action::Draft(Change::RemoveCard(row.card.clone())));
+                    }
+                    if !row.card.upgraded && ui.add(row_button("+")).on_hover_text("Upgrade").clicked() {
+                        out.push(Action::Draft(Change::UpgradeCard(row.card.clone())));
+                    }
+                    if !row.roles.is_empty() {
+                        ui.label(RichText::new(roles_label(&row.roles)).small().weak());
+                    }
+                });
             });
         });
     }
@@ -68,7 +55,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
             let text = v.catalog.relics.get(r).map_or("", |x| x.text.as_str());
             ui.label(v.catalog.relic_name(r)).on_hover_text(text);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("x").on_hover_text("Lose relic").clicked() {
+                if ui.add(row_button("x")).on_hover_text("Lose relic").clicked() {
                     out.push(Action::Draft(Change::RemoveRelic(r.clone())));
                 }
             });
@@ -83,10 +70,34 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
             let text = v.catalog.potions.get(p).map_or("", |x| x.text.as_str());
             ui.label(v.catalog.potion_name(p)).on_hover_text(text);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("used").clicked() {
+                if ui.add(row_button("used")).clicked() {
                     out.push(Action::Draft(Change::RemovePotion(p.clone())));
                 }
             });
         });
+    }
+}
+
+fn row_button(text: &str) -> egui::Button<'_> {
+    egui::Button::new(text).small().frame_when_inactive(false)
+}
+
+fn roles_label(roles: &[Role]) -> String {
+    roles.iter().map(|r| r.short()).collect::<Vec<_>>().join(", ")
+}
+
+fn card_tooltip(ui: &mut Ui, v: &ViewCtx, row: &DeckRow) {
+    match v.catalog.cards.get(&row.card.card) {
+        Some(card) => {
+            ui.label(format!("{} · cost {}", card.card_type.label(), card.cost_label()));
+            let text = if row.card.upgraded { card.upgrade_text.as_ref().unwrap_or(&card.text) } else { &card.text };
+            ui.label(text);
+        }
+        None => {
+            ui.label("Not in the catalog");
+        }
+    }
+    if !row.roles.is_empty() {
+        ui.label(format!("Roles: {}", roles_label(&row.roles)));
     }
 }

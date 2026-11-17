@@ -377,3 +377,25 @@ fn known_lineups_count_every_monster() {
     assert!(t.summons);
     assert_eq!(cat.lineup_label(&enc.lineups[0]), "3× SLIME");
 }
+
+#[test]
+fn deck_rows_group_identical_cards() {
+    use spire_core::analysis::deck::{classify, deck_rows};
+    let cat = catalog();
+    let pb = playbook();
+    let mut up = DeckCard::new("STRIKE".into());
+    up.upgraded = true;
+    let deck = vec![DeckCard::new("STRIKE".into()), DeckCard::new("STRIKE".into()), up, DeckCard::new("DEFEND".into())];
+    let rows = deck_rows(&classify(&deck, &cat, &pb));
+    let view: Vec<(&str, u32)> = rows.iter().map(|r| (r.name.as_str(), r.count)).collect();
+    assert_eq!(view, [("STRIKE", 2), ("STRIKE+", 1), ("DEFEND", 1)]);
+}
+
+#[test]
+fn case_insensitive_contains_matches_without_allocating() {
+    use spire_core::playbook::contains_ci;
+    assert!(contains_ci("Gain 5 Block.", "block"));
+    assert!(contains_ci("A Pair of Nibbits", "PAIR"));
+    assert!(!contains_ci("Deal 6 damage.", "block"));
+    assert!(contains_ci("anything", ""));
+}
