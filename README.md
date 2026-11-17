@@ -52,6 +52,10 @@ The app ships with a full snapshot of the game data (cards, characters, relics,
 potions, enchantments, monsters, encounters, events, acts), taken from the
 [Spire Codex](https://spire-codex.com) API. It works offline.
 
+Exact enemy lineups ("3× Corpse Slug", "3 of 5 Ruby Raiders", "Fogmog +
+Eye With Teeth mid-fight") and average damage taken per fight are aggregated
+from recent community-submitted runs on Spire Codex.
+
 To refresh it, open **Data…** and press **Update data now**. Nothing updates
 automatically. The download is saved locally and layered over the bundled
 snapshot. If anything fails, the current data is kept. **Revert to bundled**

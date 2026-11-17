@@ -5,7 +5,7 @@ use std::sync::mpsc::{Receiver, channel};
 use eframe::egui;
 use spire_core::analysis::Dashboard;
 use spire_core::run::{Change, RunEvent, RunState};
-use spire_core::{Catalog, DataPack, Playbook, Run};
+use spire_core::{Catalog, Playbook, Run};
 use spire_data::fetch::{self, Source};
 use spire_data::store::{Settings, Store};
 
@@ -43,7 +43,7 @@ pub struct SpireApp {
     dash: Dashboard,
     draft: NodeDraft,
     ui: UiState,
-    update_rx: Option<Receiver<Result<DataPack, String>>>,
+    update_rx: Option<Receiver<Result<fetch::Fetched, String>>>,
 }
 
 impl SpireApp {
@@ -63,7 +63,7 @@ impl SpireApp {
         let state = run.state();
         let dash = Dashboard::compute(&state, &loaded.catalog, &loaded.playbook);
         let source_url = match &settings.source {
-            Source::SpireCodex { base_url } => base_url.clone(),
+            Source::SpireCodex { base_url, .. } => base_url.clone(),
             Source::PackUrl { url } => url.clone(),
         };
         Self {
@@ -140,12 +140,15 @@ impl SpireApp {
         let Ok(result) = rx.try_recv() else { return };
         self.update_rx = None;
         self.ui.updating = false;
-        match result.map_err(|e| e.to_string()).and_then(|pack| {
-            let summary = pack.summary();
-            self.store.save_downloaded(&pack).map(|_| summary).map_err(|e| e.to_string())
+        match result.and_then(|fetched| {
+            let summary = fetched.pack.summary();
+            self.store.save_downloaded(&fetched.pack).map(|_| (summary, fetched.notes)).map_err(|e| e.to_string())
         }) {
-            Ok(summary) => {
+            Ok((summary, notes)) => {
                 self.reload_data();
+                for n in notes {
+                    self.note(n);
+                }
                 self.note(format!("Data updated: {summary}"));
             }
             Err(e) => self.note(format!("Update failed, keeping current data. {e}")),
@@ -209,7 +212,11 @@ impl SpireApp {
                 self.settings.source = if url.trim_end_matches('/').ends_with(".json") {
                     Source::PackUrl { url }
                 } else {
-                    Source::SpireCodex { base_url: url }
+                    let run_pages = match &self.settings.source {
+                        Source::SpireCodex { run_pages, .. } => *run_pages,
+                        Source::PackUrl { .. } => fetch::DEFAULT_RUN_PAGES,
+                    };
+                    Source::SpireCodex { base_url: url, run_pages }
                 };
                 if let Err(e) = self.store.save_settings(&self.settings) {
                     self.note(format!("Could not save settings: {e}"));

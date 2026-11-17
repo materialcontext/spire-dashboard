@@ -450,6 +450,9 @@ pub fn to_pack(
                 weak: e.is_weak.unwrap_or(false),
                 monsters: e.monsters.into_iter().map(|m| MonsterId(m.id)).collect(),
                 tags: e.tags.unwrap_or_default(),
+                lineups: Vec::new(),
+                spawns: Vec::new(),
+                stats: None,
                 id: EncounterId(e.id),
                 name: e.name,
             })

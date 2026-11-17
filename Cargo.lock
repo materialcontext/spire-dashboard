@@ -2304,6 +2304,7 @@ name = "spire-data"
 version = "0.1.0"
 dependencies = [
  "directories",
+ "flate2",
  "serde",
  "serde_json",
  "spire-core",

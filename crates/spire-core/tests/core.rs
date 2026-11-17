@@ -58,6 +58,9 @@ fn encounter(id: &str, room: RoomType, weak: bool, monsters: &[&str]) -> Encount
         act: Some(ActId::new("ACT1")),
         monsters: monsters.iter().map(|m| MonsterId::new(*m)).collect(),
         tags: vec![],
+        lineups: vec![],
+        spawns: vec![],
+        stats: None,
     }
 }
 
@@ -351,4 +354,26 @@ fn run_log_round_trips_through_json() {
     let json = serde_json::to_string(&run).unwrap();
     let back: Run = serde_json::from_str(&json).unwrap();
     assert_eq!(back, run);
+}
+
+#[test]
+fn known_lineups_count_every_monster() {
+    use spire_core::analysis::threats::threat_profile;
+    let cat = catalog();
+    let pb = playbook();
+    let mut enc = cat.encounters[&EncounterId::new("SLIMES_WEAK")].clone();
+    let before = threat_profile(&enc, &cat, &pb);
+    assert_eq!(before.enemies, 1);
+
+    enc.lineups = vec![
+        Lineup { monsters: vec!["SLIME".into(), "SLIME".into(), "SLIME".into()], share: 0.6 },
+        Lineup { monsters: vec!["SLIME".into(), "CULTIST".into()], share: 0.4 },
+    ];
+    enc.spawns = vec!["CULTIST".into()];
+    let t = threat_profile(&enc, &cat, &pb);
+    assert_eq!(t.enemies, 3);
+    assert_eq!((t.hp_min, t.hp_max), (60, 70), "3 slimes = 60, slime + cultist = 70");
+    assert_eq!(t.worst_turn, 15);
+    assert!(t.summons);
+    assert_eq!(cat.lineup_label(&enc.lineups[0]), "3× SLIME");
 }

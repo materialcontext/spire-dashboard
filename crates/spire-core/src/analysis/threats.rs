@@ -9,9 +9,9 @@ use crate::run::{NodeKind, RunState};
 /// Numbers that describe how an encounter pressures a deck.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ThreatProfile {
-    /// Distinct monster types. Real counts can be higher (see `group`).
+    /// Enemies at the start of the fight (largest known lineup).
     pub enemies: u32,
-    /// The encounter name suggests several enemies of one type.
+    /// No lineup is known, but the encounter name suggests a group.
     pub group: bool,
     pub hp_min: u32,
     pub hp_max: u32,
@@ -25,27 +25,51 @@ pub struct ThreatProfile {
     pub statuses: bool,
 }
 
+fn lineup_profile<'a>(monsters: impl Iterator<Item = &'a crate::catalog::Monster>) -> ThreatProfile {
+    monsters.fold(ThreatProfile::default(), |mut t, m| {
+        t.enemies += 1;
+        t.hp_min += m.hp_min;
+        t.hp_max += m.hp_max.unwrap_or(m.hp_min);
+        let biggest = m.moves.iter().map(|mv| mv.total_damage()).max().unwrap_or(0);
+        t.max_hit = t.max_hit.max(biggest);
+        t.worst_turn += biggest;
+        t.buffs |= m.moves.iter().any(|mv| mv.intent_has("buff"));
+        t.summons |= m.moves.iter().any(|mv| mv.intent_has("summon"));
+        t.debuffs |= m.moves.iter().any(|mv| mv.intent_has("debuff"));
+        t.statuses |= m.moves.iter().any(|mv| mv.intent_has("status"));
+        t
+    })
+}
+
+/// Reads an encounter as numbers. With known lineups, counts every monster
+/// instance and spans all variants (HP from the smallest to the largest
+/// lineup, the worst turn of any). Without them, falls back to one of each
+/// listed type plus the playbook's name heuristic for groups.
 pub fn threat_profile(enc: &Encounter, catalog: &Catalog, playbook: &Playbook) -> ThreatProfile {
-    let monsters = enc.monsters.iter().filter_map(|id| catalog.monsters.get(id));
-    monsters.fold(
-        ThreatProfile {
-            enemies: enc.monsters.len() as u32,
-            group: playbook.sounds_like_group(&enc.name),
-            ..Default::default()
-        },
-        |mut t, m| {
-            t.hp_min += m.hp_min;
-            t.hp_max += m.hp_max.unwrap_or(m.hp_min);
-            let biggest = m.moves.iter().map(|mv| mv.total_damage()).max().unwrap_or(0);
-            t.max_hit = t.max_hit.max(biggest);
-            t.worst_turn += biggest;
-            t.buffs |= m.moves.iter().any(|mv| mv.intent_has("buff"));
-            t.summons |= m.moves.iter().any(|mv| mv.intent_has("summon"));
-            t.debuffs |= m.moves.iter().any(|mv| mv.intent_has("debuff"));
-            t.statuses |= m.moves.iter().any(|mv| mv.intent_has("status"));
-            t
-        },
-    )
+    let resolve =
+        |ids: &'_ [crate::ids::MonsterId]| ids.iter().filter_map(|id| catalog.monsters.get(id)).collect::<Vec<_>>();
+    let mut t = if enc.lineups.is_empty() {
+        let mut t = lineup_profile(resolve(&enc.monsters).into_iter());
+        t.group = playbook.sounds_like_group(&enc.name);
+        t
+    } else {
+        let profiles: Vec<ThreatProfile> =
+            enc.lineups.iter().map(|l| lineup_profile(resolve(&l.monsters).into_iter())).collect();
+        profiles.iter().fold(ThreatProfile { hp_min: u32::MAX, ..Default::default() }, |acc, p| ThreatProfile {
+            enemies: acc.enemies.max(p.enemies),
+            group: false,
+            hp_min: acc.hp_min.min(p.hp_min),
+            hp_max: acc.hp_max.max(p.hp_max),
+            max_hit: acc.max_hit.max(p.max_hit),
+            worst_turn: acc.worst_turn.max(p.worst_turn),
+            buffs: acc.buffs || p.buffs,
+            summons: acc.summons || p.summons,
+            debuffs: acc.debuffs || p.debuffs,
+            statuses: acc.statuses || p.statuses,
+        })
+    };
+    t.summons |= !enc.spawns.is_empty();
+    t
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -61,8 +85,8 @@ pub fn demands(t: &ThreatProfile, room: RoomType, plan: Option<&ActPlan>) -> Vec
 
     if t.enemies >= 2 || t.group || t.summons {
         let why = match (t.summons, t.enemies) {
-            (true, _) => "summons adds".to_string(),
-            (false, n) if n >= 2 => format!("{n} enemy types"),
+            (_, n) if n >= 2 => format!("{n} enemies"),
+            (true, _) => "adds join mid-fight".to_string(),
             _ => "several enemies".to_string(),
         };
         push(Capability::Aoe, why);
@@ -105,6 +129,11 @@ pub struct ThreatPreview {
     pub seen: bool,
     pub profile: ThreatProfile,
     pub checks: Vec<DemandCheck>,
+    /// Starting lineups as labels with their share, most common first.
+    pub lineups: Vec<(String, f32)>,
+    /// Names of monsters that can join mid-fight.
+    pub spawns: Vec<String>,
+    pub stats: Option<crate::catalog::EncounterStats>,
 }
 
 impl ThreatPreview {
@@ -132,7 +161,17 @@ pub fn preview(
             demand: d,
         })
         .collect();
-    ThreatPreview { encounter: enc.id.clone(), name: enc.name.clone(), room: enc.room, seen, profile, checks }
+    ThreatPreview {
+        encounter: enc.id.clone(),
+        name: enc.name.clone(),
+        room: enc.room,
+        seen,
+        profile,
+        checks,
+        lineups: enc.lineups.iter().map(|l| (catalog.lineup_label(l), l.share)).collect(),
+        spawns: enc.spawns.iter().map(|m| catalog.monster_name(m)).collect(),
+        stats: enc.stats.clone(),
+    }
 }
 
 /// Encounters a node of `kind` could hold in the current act, unseen first.

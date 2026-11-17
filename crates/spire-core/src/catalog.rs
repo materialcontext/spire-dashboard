@@ -266,9 +266,51 @@ pub struct Encounter {
     pub weak: bool,
     #[serde(default)]
     pub act: Option<ActId>,
+    /// Monster types that can take part, each listed once.
     pub monsters: Vec<MonsterId>,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Exact starting lineups (duplicates = counts), most common first.
+    /// Empty when unknown; then only `monsters` is available.
+    #[serde(default)]
+    pub lineups: Vec<Lineup>,
+    /// Monsters that can join mid-fight (summons, splits, on-death spawns).
+    #[serde(default)]
+    pub spawns: Vec<MonsterId>,
+    /// Community outcomes for this fight, if known.
+    #[serde(default)]
+    pub stats: Option<EncounterStats>,
+}
+
+/// One starting lineup and how often it occurs.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Lineup {
+    /// Every monster at the start of the fight; repeats mean several.
+    pub monsters: Vec<MonsterId>,
+    /// Fraction of observed fights with this lineup (0–1).
+    pub share: f32,
+}
+
+impl Lineup {
+    /// `[(monster, count)]` in first-seen order.
+    pub fn counts(&self) -> Vec<(&MonsterId, u32)> {
+        let mut out: Vec<(&MonsterId, u32)> = Vec::new();
+        for m in &self.monsters {
+            match out.iter_mut().find(|(id, _)| *id == m) {
+                Some((_, n)) => *n += 1,
+                None => out.push((m, 1)),
+            }
+        }
+        out
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct EncounterStats {
+    /// Fights the averages are based on.
+    pub fights: u32,
+    pub avg_damage_taken: f32,
+    pub avg_turns: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -427,6 +469,20 @@ impl Catalog {
 
     pub fn event_name(&self, id: &EventId) -> String {
         self.events.get(id).map_or_else(|| id.to_string(), |e| e.name.clone())
+    }
+
+    pub fn monster_name(&self, id: &MonsterId) -> String {
+        self.monsters.get(id).map_or_else(|| id.to_string(), |m| m.name.clone())
+    }
+
+    /// "2× Nibbit + Leaf Slime (M)" for a lineup.
+    pub fn lineup_label(&self, lineup: &Lineup) -> String {
+        lineup
+            .counts()
+            .into_iter()
+            .map(|(m, n)| if n > 1 { format!("{n}× {}", self.monster_name(m)) } else { self.monster_name(m) })
+            .collect::<Vec<_>>()
+            .join(" + ")
     }
 
     pub fn enchantment_name(&self, id: &EnchantmentId) -> String {

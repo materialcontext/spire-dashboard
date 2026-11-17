@@ -103,10 +103,40 @@ Notes:
   text.
 - Starting decks and relics use class names (`StrikeDefect`), which are mapped
   to ids (`STRIKE_DEFECT`).
-- Encounters list each distinct monster type once, not the count. The
-  playbook's `multi_enemy_names` makes up for this, and the UI says so.
+- Encounters list each distinct monster type once, not the count. Exact
+  lineups come from the run export instead (below). The playbook's
+  `multi_enemy_names` is only a fallback for encounters with no run data.
 - Keyless use allows 15 requests per minute per endpoint. One update makes one
   call per endpoint.
+
+## Community runs: exact lineups
+
+`spire-data/src/codex_runs.rs` reads `/api/exports/runs`, which returns
+gzipped JSON lines with one community-submitted run each. Every fight records
+its `monster_ids`, duplicates included.
+
+The aggregation:
+
+1. Keep single-player runs without custom modifiers.
+2. Drop player-side allies. These are monsters that aren't listed for an
+   encounter but appear across 5 or more encounters (Necrobinder's Osty,
+   pets, relic summons). Drop fights with monsters missing from the catalog
+   (mods).
+3. Per encounter (at least 20 fights), find the **anchors**: monster types
+   at one fixed count in 95% or more of fights.
+4. If the anchors alone also occur as a whole fight (5% or more), the
+   encounter has one starting lineup and the extras are **spawns** that join
+   mid-fight. This also requires a summoner or an extra type that isn't an
+   anchor.
+5. Otherwise the encounter draws from a random pool. Each lineup with a 3% or
+   higher share becomes a **variant**.
+6. Average damage taken and turns per encounter go into `stats`.
+
+Results land in `Encounter::lineups`, `spawns` and `stats`. The update reads
+`run_pages` pages (default 3, about 3,000 runs) from the last 14 days, so
+lineups track the current game version. The export's own budget is 120
+credits per hour, and one page costs 1 credit. If this step fails, the rest of
+the update still applies.
 
 ## Extension points
 

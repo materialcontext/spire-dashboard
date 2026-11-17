@@ -2,7 +2,7 @@
   "format": 1,
   "source": "spire-codex",
   "game_version": "v0.113.0",
-  "fetched_at": "2026-11-17T05:02:20Z",
+  "fetched_at": "2026-11-17T05:26:59Z",
   "characters": [
     {
       "id": "DEFECT",
@@ -19097,7 +19097,21 @@
       "monsters": [
         "AEONGLASS"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "AEONGLASS"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 165,
+        "avg_damage_taken": 32.478786,
+        "avg_turns": 7.569697
+      }
     },
     {
       "id": "AXEBOTS_NORMAL",
@@ -19108,7 +19122,28 @@
       "monsters": [
         "AXEBOT"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "AXEBOT",
+            "AXEBOT"
+          ],
+          "share": 0.50934577
+        },
+        {
+          "monsters": [
+            "AXEBOT"
+          ],
+          "share": 0.4906542
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 214,
+        "avg_damage_taken": 5.182243,
+        "avg_turns": 6.6635513
+      }
     },
     {
       "id": "BATTLEWORN_DUMMY_EVENT_ENCOUNTER",
@@ -19121,7 +19156,33 @@
         "BATTLE_FRIEND_V2",
         "BATTLE_FRIEND_V3"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "BATTLE_FRIEND_V2"
+          ],
+          "share": 0.65686274
+        },
+        {
+          "monsters": [
+            "BATTLE_FRIEND_V1"
+          ],
+          "share": 0.1764706
+        },
+        {
+          "monsters": [
+            "BATTLE_FRIEND_V3"
+          ],
+          "share": 0.16666667
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 102,
+        "avg_damage_taken": 0.37254903,
+        "avg_turns": 2.8235295
+      }
     },
     {
       "id": "BOWLBUGS_NORMAL",
@@ -19137,7 +19198,39 @@
       ],
       "tags": [
         "Workers"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "BOWLBUG_EGG",
+            "BOWLBUG_ROCK",
+            "BOWLBUG_SILK"
+          ],
+          "share": 0.36426118
+        },
+        {
+          "monsters": [
+            "BOWLBUG_EGG",
+            "BOWLBUG_NECTAR",
+            "BOWLBUG_ROCK"
+          ],
+          "share": 0.31958762
+        },
+        {
+          "monsters": [
+            "BOWLBUG_NECTAR",
+            "BOWLBUG_ROCK",
+            "BOWLBUG_SILK"
+          ],
+          "share": 0.3161512
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 291,
+        "avg_damage_taken": 8.487972,
+        "avg_turns": 4.257732
+      }
     },
     {
       "id": "BOWLBUGS_WEAK",
@@ -19152,7 +19245,29 @@
       ],
       "tags": [
         "Workers"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "BOWLBUG_EGG",
+            "BOWLBUG_ROCK"
+          ],
+          "share": 0.5037369
+        },
+        {
+          "monsters": [
+            "BOWLBUG_NECTAR",
+            "BOWLBUG_ROCK"
+          ],
+          "share": 0.4962631
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 669,
+        "avg_damage_taken": 6.77429,
+        "avg_turns": 3.6726458
+      }
     },
     {
       "id": "BYGONE_EFFIGY_ELITE",
@@ -19163,7 +19278,21 @@
       "monsters": [
         "BYGONE_EFFIGY"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "BYGONE_EFFIGY"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 384,
+        "avg_damage_taken": 17.119791,
+        "avg_turns": 4.8984375
+      }
     },
     {
       "id": "BYRDONIS_ELITE",
@@ -19174,7 +19303,21 @@
       "monsters": [
         "BYRDONIS"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "BYRDONIS"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 413,
+        "avg_damage_taken": 17.799032,
+        "avg_turns": 4.5012107
+      }
     },
     {
       "id": "CEREMONIAL_BEAST_BOSS",
@@ -19185,7 +19328,21 @@
       "monsters": [
         "CEREMONIAL_BEAST"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "CEREMONIAL_BEAST"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 273,
+        "avg_damage_taken": 27.860806,
+        "avg_turns": 9.336996
+      }
     },
     {
       "id": "CHOMPERS_NORMAL",
@@ -19198,7 +19355,22 @@
       ],
       "tags": [
         "Chomper"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "CHOMPER",
+            "CHOMPER"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 348,
+        "avg_damage_taken": 9.594828,
+        "avg_turns": 5.293103
+      }
     },
     {
       "id": "CONSTRUCT_MENAGERIE_NORMAL",
@@ -19210,7 +19382,23 @@
         "CUBEX_CONSTRUCT",
         "PUNCH_CONSTRUCT"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "CUBEX_CONSTRUCT",
+            "CUBEX_CONSTRUCT",
+            "PUNCH_CONSTRUCT"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 209,
+        "avg_damage_taken": 9.057416,
+        "avg_turns": 4.631579
+      }
     },
     {
       "id": "CORPSE_SLUGS_NORMAL",
@@ -19223,7 +19411,23 @@
       ],
       "tags": [
         "Slugs"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "CORPSE_SLUG",
+            "CORPSE_SLUG",
+            "CORPSE_SLUG"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 222,
+        "avg_damage_taken": 5.6261263,
+        "avg_turns": 4.4099097
+      }
     },
     {
       "id": "CORPSE_SLUGS_WEAK",
@@ -19236,7 +19440,22 @@
       ],
       "tags": [
         "Slugs"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "CORPSE_SLUG",
+            "CORPSE_SLUG"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 714,
+        "avg_damage_taken": 3.6218488,
+        "avg_turns": 4.2661066
+      }
     },
     {
       "id": "CUBEX_CONSTRUCT_NORMAL",
@@ -19247,7 +19466,21 @@
       "monsters": [
         "CUBEX_CONSTRUCT"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "CUBEX_CONSTRUCT"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 217,
+        "avg_damage_taken": 3.6313365,
+        "avg_turns": 4.105991
+      }
     },
     {
       "id": "CULTISTS_NORMAL",
@@ -19259,7 +19492,22 @@
         "CALCIFIED_CULTIST",
         "DAMP_CULTIST"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "CALCIFIED_CULTIST",
+            "DAMP_CULTIST"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 204,
+        "avg_damage_taken": 5.7107844,
+        "avg_turns": 4.6666665
+      }
     },
     {
       "id": "DECIMILLIPEDE_ELITE",
@@ -19272,7 +19520,23 @@
         "DECIMILLIPEDE_SEGMENT_FRONT",
         "DECIMILLIPEDE_SEGMENT_MIDDLE"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "DECIMILLIPEDE_SEGMENT_BACK",
+            "DECIMILLIPEDE_SEGMENT_FRONT",
+            "DECIMILLIPEDE_SEGMENT_MIDDLE"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 606,
+        "avg_damage_taken": 20.151815,
+        "avg_turns": 4.490099
+      }
     },
     {
       "id": "DENSE_VEGETATION_EVENT_ENCOUNTER",
@@ -19283,7 +19547,24 @@
       "monsters": [
         "WRIGGLER"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "WRIGGLER",
+            "WRIGGLER",
+            "WRIGGLER",
+            "WRIGGLER"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 64,
+        "avg_damage_taken": 9.59375,
+        "avg_turns": 4.453125
+      }
     },
     {
       "id": "DEVOTED_SCULPTOR_WEAK",
@@ -19294,7 +19575,21 @@
       "monsters": [
         "DEVOTED_SCULPTOR"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "DEVOTED_SCULPTOR"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 573,
+        "avg_damage_taken": 7.373473,
+        "avg_turns": 4.155323
+      }
     },
     {
       "id": "ENTOMANCER_ELITE",
@@ -19305,7 +19600,21 @@
       "monsters": [
         "ENTOMANCER"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "ENTOMANCER"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 605,
+        "avg_damage_taken": 14.803306,
+        "avg_turns": 5.4446282
+      }
     },
     {
       "id": "EXOSKELETONS_NORMAL",
@@ -19318,7 +19627,24 @@
       ],
       "tags": [
         "Exoskeletons"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "EXOSKELETON",
+            "EXOSKELETON",
+            "EXOSKELETON",
+            "EXOSKELETON"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 304,
+        "avg_damage_taken": 7.8717103,
+        "avg_turns": 4.1348686
+      }
     },
     {
       "id": "EXOSKELETONS_WEAK",
@@ -19331,7 +19657,23 @@
       ],
       "tags": [
         "Exoskeletons"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "EXOSKELETON",
+            "EXOSKELETON",
+            "EXOSKELETON"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 669,
+        "avg_damage_taken": 4.011958,
+        "avg_turns": 3.8535128
+      }
     },
     {
       "id": "FABRICATOR_NORMAL",
@@ -19342,7 +19684,26 @@
       "monsters": [
         "FABRICATOR"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "FABRICATOR"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [
+        "GUARDBOT",
+        "NOISEBOT",
+        "STABBOT",
+        "ZAPBOT"
+      ],
+      "stats": {
+        "fights": 222,
+        "avg_damage_taken": 7.954955,
+        "avg_turns": 4.171171
+      }
     },
     {
       "id": "FAKE_MERCHANT_EVENT_ENCOUNTER",
@@ -19353,7 +19714,10 @@
       "monsters": [
         "FAKE_MERCHANT_MONSTER"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [],
+      "spawns": [],
+      "stats": null
     },
     {
       "id": "FLYCONID_NORMAL",
@@ -19369,7 +19733,29 @@
       "tags": [
         "Mushroom",
         "Slimes"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "FLYCONID",
+            "TWIG_SLIME_M"
+          ],
+          "share": 0.56650245
+        },
+        {
+          "monsters": [
+            "FLYCONID",
+            "LEAF_SLIME_M"
+          ],
+          "share": 0.43349755
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 203,
+        "avg_damage_taken": 8.5172415,
+        "avg_turns": 4.6896553
+      }
     },
     {
       "id": "FOGMOG_NORMAL",
@@ -19381,7 +19767,23 @@
         "EYE_WITH_TEETH",
         "FOGMOG"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "FOGMOG"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [
+        "EYE_WITH_TEETH"
+      ],
+      "stats": {
+        "fights": 217,
+        "avg_damage_taken": 5.221198,
+        "avg_turns": 4.824885
+      }
     },
     {
       "id": "FOSSIL_STALKER_NORMAL",
@@ -19392,7 +19794,21 @@
       "monsters": [
         "FOSSIL_STALKER"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "FOSSIL_STALKER"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 239,
+        "avg_damage_taken": 6.083682,
+        "avg_turns": 3.6443515
+      }
     },
     {
       "id": "FROG_KNIGHT_NORMAL",
@@ -19403,7 +19819,21 @@
       "monsters": [
         "FROG_KNIGHT"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "FROG_KNIGHT"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 214,
+        "avg_damage_taken": 6.364486,
+        "avg_turns": 5.425234
+      }
     },
     {
       "id": "FUZZY_WURM_CRAWLER_WEAK",
@@ -19416,7 +19846,21 @@
       ],
       "tags": [
         "Crawler"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "FUZZY_WURM_CRAWLER"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 708,
+        "avg_damage_taken": 1.4646893,
+        "avg_turns": 4.2415257
+      }
     },
     {
       "id": "GLOBE_HEAD_NORMAL",
@@ -19427,7 +19871,21 @@
       "monsters": [
         "GLOBE_HEAD"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "GLOBE_HEAD"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 218,
+        "avg_damage_taken": 5.4816513,
+        "avg_turns": 4.4220185
+      }
     },
     {
       "id": "GREMLIN_MERC_NORMAL",
@@ -19440,7 +19898,24 @@
         "GREMLIN_MERC",
         "SNEAKY_GREMLIN"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "GREMLIN_MERC"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [
+        "FAT_GREMLIN",
+        "SNEAKY_GREMLIN"
+      ],
+      "stats": {
+        "fights": 239,
+        "avg_damage_taken": 6.25523,
+        "avg_turns": 5.6861925
+      }
     },
     {
       "id": "HAUNTED_SHIP_NORMAL",
@@ -19451,7 +19926,21 @@
       "monsters": [
         "HAUNTED_SHIP"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "HAUNTED_SHIP"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 263,
+        "avg_damage_taken": 5.3422055,
+        "avg_turns": 4.444867
+      }
     },
     {
       "id": "HUNTER_KILLER_NORMAL",
@@ -19462,7 +19951,21 @@
       "monsters": [
         "HUNTER_KILLER"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "HUNTER_KILLER"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 354,
+        "avg_damage_taken": 10.782486,
+        "avg_turns": 4.9011297
+      }
     },
     {
       "id": "INFESTED_PRISMS_ELITE",
@@ -19473,7 +19976,21 @@
       "monsters": [
         "INFESTED_PRISM"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "INFESTED_PRISM"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 579,
+        "avg_damage_taken": 16.291883,
+        "avg_turns": 5.756477
+      }
     },
     {
       "id": "INKLETS_NORMAL",
@@ -19484,7 +20001,23 @@
       "monsters": [
         "INKLET"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "INKLET",
+            "INKLET",
+            "INKLET"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 216,
+        "avg_damage_taken": 6.486111,
+        "avg_turns": 3.7129629
+      }
     },
     {
       "id": "KAISER_CRAB_BOSS",
@@ -19496,7 +20029,22 @@
         "CRUSHER",
         "ROCKET"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "CRUSHER",
+            "ROCKET"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 342,
+        "avg_damage_taken": 31.371346,
+        "avg_turns": 8.619883
+      }
     },
     {
       "id": "KNIGHTS_ELITE",
@@ -19511,7 +20059,23 @@
       ],
       "tags": [
         "Knights"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "FLAIL_KNIGHT",
+            "MAGI_KNIGHT",
+            "SPECTRAL_KNIGHT"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 335,
+        "avg_damage_taken": 15.17612,
+        "avg_turns": 4.719403
+      }
     },
     {
       "id": "KNOWLEDGE_DEMON_BOSS",
@@ -19522,7 +20086,21 @@
       "monsters": [
         "KNOWLEDGE_DEMON"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "KNOWLEDGE_DEMON"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 364,
+        "avg_damage_taken": 29.912088,
+        "avg_turns": 9.115385
+      }
     },
     {
       "id": "LAGAVULIN_MATRIARCH_BOSS",
@@ -19533,7 +20111,21 @@
       "monsters": [
         "LAGAVULIN_MATRIARCH"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "LAGAVULIN_MATRIARCH"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 268,
+        "avg_damage_taken": 19.216417,
+        "avg_turns": 9.466418
+      }
     },
     {
       "id": "LIVING_FOG_NORMAL",
@@ -19545,7 +20137,23 @@
         "GAS_BOMB",
         "LIVING_FOG"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "LIVING_FOG"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [
+        "GAS_BOMB"
+      ],
+      "stats": {
+        "fights": 241,
+        "avg_damage_taken": 8.771784,
+        "avg_turns": 5.0124483
+      }
     },
     {
       "id": "LOUSE_PROGENITOR_NORMAL",
@@ -19556,7 +20164,21 @@
       "monsters": [
         "LOUSE_PROGENITOR"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "LOUSE_PROGENITOR"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 356,
+        "avg_damage_taken": 6.22191,
+        "avg_turns": 5.6825843
+      }
     },
     {
       "id": "MAWLER_NORMAL",
@@ -19567,7 +20189,21 @@
       "monsters": [
         "MAWLER"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "MAWLER"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 242,
+        "avg_damage_taken": 5.5619836,
+        "avg_turns": 4.4008265
+      }
     },
     {
       "id": "MECHA_KNIGHT_ELITE",
@@ -19578,7 +20214,21 @@
       "monsters": [
         "MECHA_KNIGHT"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "MECHA_KNIGHT"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 291,
+        "avg_damage_taken": 15.323024,
+        "avg_turns": 5.9553266
+      }
     },
     {
       "id": "MYSTERIOUS_KNIGHT_EVENT_ENCOUNTER",
@@ -19589,7 +20239,21 @@
       "monsters": [
         "MYSTERIOUS_KNIGHT"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "MYSTERIOUS_KNIGHT"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 38,
+        "avg_damage_taken": 18.5,
+        "avg_turns": 4.263158
+      }
     },
     {
       "id": "MYTES_NORMAL",
@@ -19600,7 +20264,22 @@
       "monsters": [
         "MYTE"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "MYTE",
+            "MYTE"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 364,
+        "avg_damage_taken": 10.019231,
+        "avg_turns": 5.2747254
+      }
     },
     {
       "id": "NIBBITS_NORMAL",
@@ -19611,7 +20290,22 @@
       "monsters": [
         "NIBBIT"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "NIBBIT",
+            "NIBBIT"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 244,
+        "avg_damage_taken": 8.147541,
+        "avg_turns": 5.127049
+      }
     },
     {
       "id": "NIBBITS_WEAK",
@@ -19624,7 +20318,21 @@
       ],
       "tags": [
         "Nibbit"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "NIBBIT"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 717,
+        "avg_damage_taken": 3.3012552,
+        "avg_turns": 4.0767083
+      }
     },
     {
       "id": "OVERGROWTH_CRAWLERS",
@@ -19639,7 +20347,22 @@
       "tags": [
         "Shrinker",
         "Crawler"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "FUZZY_WURM_CRAWLER",
+            "SHRINKER_BEETLE"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 194,
+        "avg_damage_taken": 6.6030927,
+        "avg_turns": 5.2731957
+      }
     },
     {
       "id": "OVICOPTER_NORMAL",
@@ -19651,7 +20374,23 @@
         "OVICOPTER",
         "TOUGH_EGG"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "OVICOPTER"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [
+        "TOUGH_EGG"
+      ],
+      "stats": {
+        "fights": 370,
+        "avg_damage_taken": 7.781081,
+        "avg_turns": 5.3054056
+      }
     },
     {
       "id": "OWL_MAGISTRATE_NORMAL",
@@ -19662,7 +20401,21 @@
       "monsters": [
         "OWL_MAGISTRATE"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "OWL_MAGISTRATE"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 225,
+        "avg_damage_taken": 8.0622225,
+        "avg_turns": 5.2933335
+      }
     },
     {
       "id": "PHANTASMAL_GARDENERS_ELITE",
@@ -19673,7 +20426,24 @@
       "monsters": [
         "PHANTASMAL_GARDENER"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "PHANTASMAL_GARDENER",
+            "PHANTASMAL_GARDENER",
+            "PHANTASMAL_GARDENER",
+            "PHANTASMAL_GARDENER"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 482,
+        "avg_damage_taken": 12.790457,
+        "avg_turns": 5.253112
+      }
     },
     {
       "id": "PHROG_PARASITE_ELITE",
@@ -19685,7 +20455,23 @@
         "PHROG_PARASITE",
         "WRIGGLER"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "PHROG_PARASITE"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [
+        "WRIGGLER"
+      ],
+      "stats": {
+        "fights": 419,
+        "avg_damage_taken": 14.24821,
+        "avg_turns": 6.7016706
+      }
     },
     {
       "id": "PUNCH_CONSTRUCT_NORMAL",
@@ -19696,7 +20482,21 @@
       "monsters": [
         "PUNCH_CONSTRUCT"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "PUNCH_CONSTRUCT"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 228,
+        "avg_damage_taken": 3.6622808,
+        "avg_turns": 4.6622806
+      }
     },
     {
       "id": "PUNCH_OFF_EVENT_ENCOUNTER",
@@ -19707,7 +20507,22 @@
       "monsters": [
         "PUNCH_CONSTRUCT"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "PUNCH_CONSTRUCT",
+            "PUNCH_CONSTRUCT"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 24,
+        "avg_damage_taken": 15.833333,
+        "avg_turns": 6.75
+      }
     },
     {
       "id": "QUEEN_BOSS",
@@ -19719,7 +20534,22 @@
         "QUEEN",
         "TORCH_HEAD_AMALGAM"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "QUEEN",
+            "TORCH_HEAD_AMALGAM"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 389,
+        "avg_damage_taken": 25.722364,
+        "avg_turns": 8.709512
+      }
     },
     {
       "id": "RUBY_RAIDERS_NORMAL",
@@ -19734,7 +20564,95 @@
         "CROSSBOW_RUBY_RAIDER",
         "TRACKER_RUBY_RAIDER"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "ASSASSIN_RUBY_RAIDER",
+            "AXE_RUBY_RAIDER",
+            "BRUTE_RUBY_RAIDER"
+          ],
+          "share": 0.14666666
+        },
+        {
+          "monsters": [
+            "ASSASSIN_RUBY_RAIDER",
+            "BRUTE_RUBY_RAIDER",
+            "CROSSBOW_RUBY_RAIDER"
+          ],
+          "share": 0.13333334
+        },
+        {
+          "monsters": [
+            "AXE_RUBY_RAIDER",
+            "BRUTE_RUBY_RAIDER",
+            "CROSSBOW_RUBY_RAIDER"
+          ],
+          "share": 0.115555555
+        },
+        {
+          "monsters": [
+            "AXE_RUBY_RAIDER",
+            "CROSSBOW_RUBY_RAIDER",
+            "TRACKER_RUBY_RAIDER"
+          ],
+          "share": 0.10222222
+        },
+        {
+          "monsters": [
+            "ASSASSIN_RUBY_RAIDER",
+            "BRUTE_RUBY_RAIDER",
+            "TRACKER_RUBY_RAIDER"
+          ],
+          "share": 0.09777778
+        },
+        {
+          "monsters": [
+            "AXE_RUBY_RAIDER",
+            "BRUTE_RUBY_RAIDER",
+            "TRACKER_RUBY_RAIDER"
+          ],
+          "share": 0.09777778
+        },
+        {
+          "monsters": [
+            "BRUTE_RUBY_RAIDER",
+            "CROSSBOW_RUBY_RAIDER",
+            "TRACKER_RUBY_RAIDER"
+          ],
+          "share": 0.08444444
+        },
+        {
+          "monsters": [
+            "ASSASSIN_RUBY_RAIDER",
+            "AXE_RUBY_RAIDER",
+            "TRACKER_RUBY_RAIDER"
+          ],
+          "share": 0.075555556
+        },
+        {
+          "monsters": [
+            "ASSASSIN_RUBY_RAIDER",
+            "CROSSBOW_RUBY_RAIDER",
+            "TRACKER_RUBY_RAIDER"
+          ],
+          "share": 0.075555556
+        },
+        {
+          "monsters": [
+            "ASSASSIN_RUBY_RAIDER",
+            "AXE_RUBY_RAIDER",
+            "CROSSBOW_RUBY_RAIDER"
+          ],
+          "share": 0.07111111
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 225,
+        "avg_damage_taken": 9.755555,
+        "avg_turns": 4.0355554
+      }
     },
     {
       "id": "SCROLLS_OF_BITING_NORMAL",
@@ -19747,7 +20665,24 @@
       ],
       "tags": [
         "Scrolls"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "SCROLL_OF_BITING",
+            "SCROLL_OF_BITING",
+            "SCROLL_OF_BITING",
+            "SCROLL_OF_BITING"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 183,
+        "avg_damage_taken": 9.606558,
+        "avg_turns": 3.0327868
+      }
     },
     {
       "id": "SCROLLS_OF_BITING_WEAK",
@@ -19760,7 +20695,23 @@
       ],
       "tags": [
         "Scrolls"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "SCROLL_OF_BITING",
+            "SCROLL_OF_BITING",
+            "SCROLL_OF_BITING"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 564,
+        "avg_damage_taken": 4.9468083,
+        "avg_turns": 2.9840426
+      }
     },
     {
       "id": "SEAPUNK_NORMAL",
@@ -19774,7 +20725,22 @@
       ],
       "tags": [
         "Seapunk"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "CALCIFIED_CULTIST",
+            "SEAPUNK"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 150,
+        "avg_damage_taken": 8.433333,
+        "avg_turns": 5.213333
+      }
     },
     {
       "id": "SEAPUNK_WEAK",
@@ -19787,7 +20753,21 @@
       ],
       "tags": [
         "Seapunk"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "SEAPUNK"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 704,
+        "avg_damage_taken": 3.2244318,
+        "avg_turns": 4.1676135
+      }
     },
     {
       "id": "SEWER_CLAM_NORMAL",
@@ -19798,7 +20778,21 @@
       "monsters": [
         "SEWER_CLAM"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "SEWER_CLAM"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 281,
+        "avg_damage_taken": 3.281139,
+        "avg_turns": 4.960854
+      }
     },
     {
       "id": "SHRINKER_BEETLE_WEAK",
@@ -19811,7 +20805,21 @@
       ],
       "tags": [
         "Shrinker"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "SHRINKER_BEETLE"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 721,
+        "avg_damage_taken": 1.2538141,
+        "avg_turns": 3.5728154
+      }
     },
     {
       "id": "SKULKING_COLONY_ELITE",
@@ -19822,7 +20830,21 @@
       "monsters": [
         "SKULKING_COLONY"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "SKULKING_COLONY"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 468,
+        "avg_damage_taken": 14.412394,
+        "avg_turns": 6.032051
+      }
     },
     {
       "id": "SLIMED_BERSERKER_NORMAL",
@@ -19833,7 +20855,21 @@
       "monsters": [
         "SLIMED_BERSERKER"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "SLIMED_BERSERKER"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 213,
+        "avg_damage_taken": 7.028169,
+        "avg_turns": 6.0751176
+      }
     },
     {
       "id": "SLIMES_NORMAL",
@@ -19849,7 +20885,24 @@
       ],
       "tags": [
         "Slimes"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "LEAF_SLIME_M",
+            "LEAF_SLIME_S",
+            "TWIG_SLIME_M",
+            "TWIG_SLIME_S"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 188,
+        "avg_damage_taken": 5.37234,
+        "avg_turns": 4.6968083
+      }
     },
     {
       "id": "SLIMES_WEAK",
@@ -19865,7 +20918,31 @@
       ],
       "tags": [
         "Slimes"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "LEAF_SLIME_S",
+            "TWIG_SLIME_M",
+            "TWIG_SLIME_S"
+          ],
+          "share": 0.51088536
+        },
+        {
+          "monsters": [
+            "LEAF_SLIME_M",
+            "LEAF_SLIME_S",
+            "TWIG_SLIME_S"
+          ],
+          "share": 0.48911467
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 689,
+        "avg_damage_taken": 2.5181422,
+        "avg_turns": 4.417997
+      }
     },
     {
       "id": "SLITHERING_STRANGLER_NORMAL",
@@ -19881,7 +20958,60 @@
         "TWIG_SLIME_M",
         "TWIG_SLIME_S"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "SLITHERING_STRANGLER",
+            "SNAPPING_JAXFRUIT"
+          ],
+          "share": 0.35023043
+        },
+        {
+          "monsters": [
+            "SLITHERING_STRANGLER",
+            "TWIG_SLIME_M"
+          ],
+          "share": 0.17050691
+        },
+        {
+          "monsters": [
+            "LEAF_SLIME_M",
+            "SLITHERING_STRANGLER"
+          ],
+          "share": 0.16589862
+        },
+        {
+          "monsters": [
+            "LEAF_SLIME_S",
+            "SLITHERING_STRANGLER",
+            "TWIG_SLIME_S"
+          ],
+          "share": 0.16589862
+        },
+        {
+          "monsters": [
+            "LEAF_SLIME_S",
+            "LEAF_SLIME_S",
+            "SLITHERING_STRANGLER"
+          ],
+          "share": 0.08294931
+        },
+        {
+          "monsters": [
+            "SLITHERING_STRANGLER",
+            "TWIG_SLIME_S",
+            "TWIG_SLIME_S"
+          ],
+          "share": 0.06451613
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 217,
+        "avg_damage_taken": 6.202765,
+        "avg_turns": 4.589862
+      }
     },
     {
       "id": "SLUDGE_SPINNER_WEAK",
@@ -19892,7 +21022,21 @@
       "monsters": [
         "SLUDGE_SPINNER"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "SLUDGE_SPINNER"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 692,
+        "avg_damage_taken": 2.5390174,
+        "avg_turns": 3.849711
+      }
     },
     {
       "id": "SLUMBERING_BEETLE_NORMAL",
@@ -19907,7 +21051,23 @@
       ],
       "tags": [
         "Workers"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "BOWLBUG_ROCK",
+            "BOWLBUG_SILK",
+            "SLUMBERING_BEETLE"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 302,
+        "avg_damage_taken": 11.036424,
+        "avg_turns": 6.13245
+      }
     },
     {
       "id": "SNAPPING_JAXFRUIT_NORMAL",
@@ -19921,7 +21081,22 @@
       ],
       "tags": [
         "Mushroom"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "FLYCONID",
+            "SNAPPING_JAXFRUIT"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 208,
+        "avg_damage_taken": 8.548077,
+        "avg_turns": 4.451923
+      }
     },
     {
       "id": "SOUL_FYSH_BOSS",
@@ -19932,7 +21107,21 @@
       "monsters": [
         "SOUL_FYSH"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "SOUL_FYSH"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 284,
+        "avg_damage_taken": 23.672535,
+        "avg_turns": 10.781691
+      }
     },
     {
       "id": "SOUL_NEXUS_ELITE",
@@ -19943,7 +21132,21 @@
       "monsters": [
         "SOUL_NEXUS"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "SOUL_NEXUS"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 327,
+        "avg_damage_taken": 14.556575,
+        "avg_turns": 5.1070337
+      }
     },
     {
       "id": "SPINY_TOAD_NORMAL",
@@ -19954,7 +21157,21 @@
       "monsters": [
         "SPINY_TOAD"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "SPINY_TOAD"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 364,
+        "avg_damage_taken": 8.090659,
+        "avg_turns": 5.0467033
+      }
     },
     {
       "id": "TERROR_EEL_ELITE",
@@ -19965,7 +21182,21 @@
       "monsters": [
         "TERROR_EEL"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "TERROR_EEL"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 515,
+        "avg_damage_taken": 16.502913,
+        "avg_turns": 7.4679613
+      }
     },
     {
       "id": "TEST_SUBJECT_BOSS",
@@ -19976,7 +21207,21 @@
       "monsters": [
         "TEST_SUBJECT"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "TEST_SUBJECT"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 366,
+        "avg_damage_taken": 27.174864,
+        "avg_turns": 9.590164
+      }
     },
     {
       "id": "THE_ARCHITECT_EVENT_ENCOUNTER",
@@ -19987,7 +21232,10 @@
       "monsters": [
         "ARCHITECT"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [],
+      "spawns": [],
+      "stats": null
     },
     {
       "id": "THE_INSATIABLE_BOSS",
@@ -19998,7 +21246,21 @@
       "monsters": [
         "THE_INSATIABLE"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "THE_INSATIABLE"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 380,
+        "avg_damage_taken": 28.3,
+        "avg_turns": 8.155263
+      }
     },
     {
       "id": "THE_KIN_BOSS",
@@ -20010,7 +21272,23 @@
         "KIN_FOLLOWER",
         "KIN_PRIEST"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "KIN_FOLLOWER",
+            "KIN_FOLLOWER",
+            "KIN_PRIEST"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 266,
+        "avg_damage_taken": 25.048872,
+        "avg_turns": 10.075188
+      }
     },
     {
       "id": "THE_LOST_AND_FORGOTTEN_NORMAL",
@@ -20022,7 +21300,22 @@
         "THE_FORGOTTEN",
         "THE_LOST"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "THE_FORGOTTEN",
+            "THE_LOST"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 207,
+        "avg_damage_taken": 6.753623,
+        "avg_turns": 4.748792
+      }
     },
     {
       "id": "THE_OBSCURA_NORMAL",
@@ -20034,7 +21327,23 @@
         "PARAFRIGHT",
         "THE_OBSCURA"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "THE_OBSCURA"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [
+        "PARAFRIGHT"
+      ],
+      "stats": {
+        "fights": 345,
+        "avg_damage_taken": 7.57971,
+        "avg_turns": 5.6637683
+      }
     },
     {
       "id": "THIEVING_HOPPER_WEAK",
@@ -20047,7 +21356,21 @@
       ],
       "tags": [
         "Thieves"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "THIEVING_HOPPER"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 686,
+        "avg_damage_taken": 7.3119535,
+        "avg_turns": 4.158892
+      }
     },
     {
       "id": "TOADPOLES_WEAK",
@@ -20058,7 +21381,22 @@
       "monsters": [
         "TOADPOLE"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "TOADPOLE",
+            "TOADPOLE"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 726,
+        "avg_damage_taken": 3.11708,
+        "avg_turns": 4.2162533
+      }
     },
     {
       "id": "TUNNELER_NORMAL",
@@ -20073,7 +21411,36 @@
       "tags": [
         "Burrower",
         "Chomper"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "BOWLBUG_EGG",
+            "TUNNELER"
+          ],
+          "share": 0.36842105
+        },
+        {
+          "monsters": [
+            "CHOMPER",
+            "TUNNELER"
+          ],
+          "share": 0.33684212
+        },
+        {
+          "monsters": [
+            "BOWLBUG_SILK",
+            "TUNNELER"
+          ],
+          "share": 0.29473683
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 95,
+        "avg_damage_taken": 7.4210525,
+        "avg_turns": 5.8736844
+      }
     },
     {
       "id": "TUNNELER_WEAK",
@@ -20086,7 +21453,21 @@
       ],
       "tags": [
         "Burrower"
-      ]
+      ],
+      "lineups": [
+        {
+          "monsters": [
+            "TUNNELER"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 685,
+        "avg_damage_taken": 5.7635036,
+        "avg_turns": 5.0569344
+      }
     },
     {
       "id": "TURRET_OPERATOR_WEAK",
@@ -20098,7 +21479,22 @@
         "LIVING_SHIELD",
         "TURRET_OPERATOR"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "LIVING_SHIELD",
+            "TURRET_OPERATOR"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 570,
+        "avg_damage_taken": 6.542105,
+        "avg_turns": 3.791228
+      }
     },
     {
       "id": "TWO_TAILED_RATS_NORMAL",
@@ -20109,7 +21505,23 @@
       "monsters": [
         "TWO_TAILED_RAT"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "TWO_TAILED_RAT",
+            "TWO_TAILED_RAT",
+            "TWO_TAILED_RAT"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 255,
+        "avg_damage_taken": 5.109804,
+        "avg_turns": 3.8156862
+      }
     },
     {
       "id": "VANTOM_BOSS",
@@ -20120,7 +21532,21 @@
       "monsters": [
         "VANTOM"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "VANTOM"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 267,
+        "avg_damage_taken": 30.033709,
+        "avg_turns": 9.543071
+      }
     },
     {
       "id": "VINE_SHAMBLER_NORMAL",
@@ -20131,7 +21557,21 @@
       "monsters": [
         "VINE_SHAMBLER"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "VINE_SHAMBLER"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 213,
+        "avg_damage_taken": 7.42723,
+        "avg_turns": 4.5915494
+      }
     },
     {
       "id": "WATERFALL_GIANT_BOSS",
@@ -20142,7 +21582,21 @@
       "monsters": [
         "WATERFALL_GIANT"
       ],
-      "tags": []
+      "tags": [],
+      "lineups": [
+        {
+          "monsters": [
+            "WATERFALL_GIANT"
+          ],
+          "share": 1.0
+        }
+      ],
+      "spawns": [],
+      "stats": {
+        "fights": 273,
+        "avg_damage_taken": 20.457876,
+        "avg_turns": 11.827839
+      }
     }
   ],
   "events": [

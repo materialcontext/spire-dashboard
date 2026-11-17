@@ -10,6 +10,7 @@
 //! Updates only happen when the user presses the button: see [`fetch`].
 
 pub mod codex;
+pub mod codex_runs;
 pub mod fetch;
 pub mod store;
 
@@ -74,7 +75,15 @@ pub fn bundled_playbook() -> Playbook {
 
 /// Current time as an RFC 3339 UTC timestamp (second precision).
 pub fn now_rfc3339() -> String {
-    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()) as i64;
+    rfc3339(unix_now())
+}
+
+pub fn unix_now() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()) as i64
+}
+
+/// Formats Unix seconds as an RFC 3339 UTC timestamp.
+pub fn rfc3339(secs: i64) -> String {
     let (days, rem) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
     // Civil-from-days (H. Hinnant), valid for the proleptic Gregorian calendar.
     let z = days + 719_468;
@@ -119,6 +128,12 @@ mod tests {
     fn rejects_newer_format() {
         let json = r#"{"format": 999, "source": "future"}"#;
         assert!(matches!(parse_pack(json), Err(DataError::Format { .. })));
+    }
+
+    #[test]
+    fn formats_known_dates() {
+        assert_eq!(rfc3339(0), "1970-01-01T00:00:00Z");
+        assert_eq!(rfc3339(1_795_000_000), "2026-11-18T11:06:40Z");
     }
 
     #[test]
