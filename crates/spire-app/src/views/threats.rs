@@ -4,9 +4,10 @@ use eframe::egui::{self, RichText, Ui};
 use spire_core::analysis::{Coverage, ThreatPreview};
 use spire_core::run::NodeKind;
 
+use crate::actions::{Action, Link};
 use crate::app::{UiState, ViewCtx};
 use crate::style::color::*;
-use crate::widgets::{chip, coverage_color, culled, panel, segmented};
+use crate::widgets::{chip, coverage_color, culled, link, panel, segmented};
 
 /// Lineups shown before collapsing the rest into "+N more".
 const LINEUPS_SHOWN: usize = 3;
@@ -82,7 +83,7 @@ fn status_word(c: Option<Coverage>) -> (&'static str, egui::Color32) {
     }
 }
 
-pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState) {
+pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
     let weak =
         v.state.hallway_fights_in_act < spire_core::analysis::threats::weak_fights(v.state, v.catalog, v.playbook);
     let note = match st.threat_tab {
@@ -108,7 +109,9 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState) {
                     } else {
                         text()
                     });
-                    ui.label(name);
+                    if link(ui, name).on_hover_text("Open in Enemies").clicked() {
+                        out.push(Action::Open(Link::Encounter(t.encounter.clone())));
+                    }
                     if t.seen {
                         ui.label(RichText::new("fought").small().color(text_faint()));
                     }

@@ -24,7 +24,12 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
     let note = if double { Some("Two bosses at this ascension") } else { None };
     panel(ui, &title, note, |ui| {
         for boss in &v.dash.bosses {
-            ui.label(RichText::new(&boss.name).heading().color(text()));
+            if crate::widgets::link(ui, RichText::new(&boss.name).heading().color(text()))
+                .on_hover_text("Open in Enemies")
+                .clicked()
+            {
+                out.push(Action::Open(crate::actions::Link::Encounter(boss.encounter.clone())));
+            }
             threats::preview_body(ui, boss);
             ui.add_space(6.0);
         }

@@ -36,4 +36,14 @@ pub enum Action {
     },
     SetLargeText(bool),
     ToggleDataWindow,
+    /// Jump to a catalog entry.
+    Open(Link),
+    DismissToast,
+}
+
+/// Something a name in the UI can link to.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Link {
+    Card(CardId),
+    Encounter(EncounterId),
 }

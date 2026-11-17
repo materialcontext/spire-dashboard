@@ -19,6 +19,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
         ui.label(RichText::new(s.deck.len().to_string()).small().color(text_faint()));
     });
     hairline(ui);
+    ui.label(RichText::new("Right-click a card to upgrade, enchant or remove it.").small().color(text_faint()));
 
     // Rows are grouped once per run change (Dashboard::rows), not per frame.
     let mut current = None;
@@ -97,7 +98,12 @@ fn card_row(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
         let name = if row.count > 1 { format!("{}× {}", row.count, row.name) } else { row.name.clone() };
         let color = if row.card.upgraded { good() } else { text() };
         // Tooltip text is only built while hovered.
-        ui.label(RichText::new(name).color(color)).on_hover_ui(|ui| card_tooltip(ui, v, row));
+        let r = crate::widgets::link(ui, RichText::new(name).color(color)).on_hover_ui(|ui| card_tooltip(ui, v, row));
+        if r.clicked() {
+            out.push(Action::Open(crate::actions::Link::Card(row.card.card.clone())));
+        }
+        // Right-click: everything you can do to this card.
+        r.context_menu(|ui| card_menu(ui, v, row, out));
         if let Some(e) = &row.card.enchantment {
             ui.label(RichText::new(v.catalog.enchantment_name(e)).small().color(info()));
         }
@@ -127,6 +133,50 @@ fn role_marks(ui: &mut Ui, roles: &[Role]) {
         let (rect, resp) = ui.allocate_exact_size(vec2(7.0, 7.0), Sense::hover());
         ui.painter().rect_filled(rect, 0.0, style::role_color(*r));
         resp.on_hover_text(r.label());
+    }
+}
+
+fn card_menu(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
+    if !row.card.upgraded && ui.button("Upgrade").clicked() {
+        out.push(Action::Draft(Change::UpgradeCard(row.card.clone())));
+        ui.close();
+    }
+    let card = v.catalog.cards.get(&row.card.card);
+    match (&row.card.enchantment, card) {
+        (Some(e), _) => {
+            // Enchantments are permanent: one per card, never removed.
+            ui.label(RichText::new(format!("Enchanted: {}", v.catalog.enchantment_name(e))).small().color(text_dim()));
+        }
+        (None, Some(card)) => {
+            let fits: Vec<_> = v.catalog.enchantments.values().filter(|e| e.fits(card)).collect();
+            if fits.is_empty() {
+                ui.label(RichText::new("No enchantment fits").small().color(text_faint()));
+            } else {
+                ui.menu_button("Enchant", |ui| {
+                    for e in fits {
+                        if ui.button(&e.name).on_hover_text(&e.text).clicked() {
+                            out.push(Action::Draft(Change::Enchant {
+                                card: row.card.clone(),
+                                enchantment: e.id.clone(),
+                            }));
+                            ui.close();
+                        }
+                    }
+                });
+            }
+        }
+        (None, None) => {}
+    }
+    if row.eternal {
+        ui.label(RichText::new("Eternal: can't be removed").small().color(text_faint()));
+    } else if ui.button("Remove from deck").clicked() {
+        out.push(Action::Draft(Change::RemoveCard(row.card.clone())));
+        ui.close();
+    }
+    ui.separator();
+    if ui.button("Open in Cards").clicked() {
+        out.push(Action::Open(crate::actions::Link::Card(row.card.card.clone())));
+        ui.close();
     }
 }
 

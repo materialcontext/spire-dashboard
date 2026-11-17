@@ -51,6 +51,7 @@ pub fn root(ui: &mut Ui, v: &ViewCtx, draft: &mut NodeDraft, st: &mut UiState, o
     let side = egui::Frame::new().inner_margin(egui::Margin { left: 14, right: 14, top: 0, bottom: 0 });
     egui::Panel::top("top").frame(side).show(ui, |ui| top::show(ui, v, st, out));
     dialogs::show(ui, v, st, out);
+    toast(ui, st, out);
 
     match st.tab {
         Tab::Run => {}
@@ -106,7 +107,7 @@ pub fn root(ui: &mut Ui, v: &ViewCtx, draft: &mut NodeDraft, st: &mut UiState, o
                     culled(&mut cols[0], ("act", g), |ui| act::show(ui, v, out));
                     cols[0].add_space(GAP);
                     culled(&mut cols[0], ("breakdown", g), |ui| breakdown::show(ui, v));
-                    culled(&mut cols[1], ("threats", g, st.threat_tab), |ui| threats::show(ui, v, st));
+                    culled(&mut cols[1], ("threats", g, st.threat_tab), |ui| threats::show(ui, v, st, out));
                     cols[1].add_space(GAP);
                     events::show(&mut cols[1], v);
                 });
@@ -115,10 +116,39 @@ pub fn root(ui: &mut Ui, v: &ViewCtx, draft: &mut NodeDraft, st: &mut UiState, o
                 ui.add_space(GAP);
                 breakdown::show(ui, v);
                 ui.add_space(GAP);
-                threats::show(ui, v, st);
+                threats::show(ui, v, st, out);
                 ui.add_space(GAP);
                 events::show(ui, v);
             }
         });
     });
+}
+
+/// The commit notice, bottom centre, with Undo.
+fn toast(ui: &mut Ui, st: &UiState, out: &mut Vec<Action>) {
+    use crate::style::color::*;
+    let Some(t) = &st.toast else { return };
+    egui::Area::new(egui::Id::unique("toast"))
+        .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -24.0))
+        .order(egui::Order::Foreground)
+        .show(ui.ctx(), |ui| {
+            egui::Frame::new()
+                .fill(surface_hi())
+                .stroke(egui::Stroke::new(1.0, border_hi()))
+                .inner_margin(egui::Margin::symmetric(14, 8))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new(&t.text).color(text()));
+                        ui.add_space(12.0);
+                        if ui.button(egui::RichText::new("Undo").color(accent())).clicked() {
+                            out.push(Action::Undo);
+                            out.push(Action::DismissToast);
+                        }
+                        if ui.add(egui::Button::new(egui::RichText::new("x").color(text_dim())).frame(false)).clicked()
+                        {
+                            out.push(Action::DismissToast);
+                        }
+                    });
+                });
+        });
 }
