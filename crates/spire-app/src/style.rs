@@ -79,7 +79,7 @@ const fn rgb(r: u8, g: u8, b: u8) -> Color32 {
     Color32::from_rgb(r, g, b)
 }
 
-/// High-contrast dark base shared by Bright, Clear, Large and Spirebound.
+/// High-contrast dark base shared by Bright, Large and Spirebound.
 const BRIGHT: Palette = Palette {
     bg: rgb(13, 15, 19),
     surface: rgb(27, 30, 38),
@@ -113,7 +113,6 @@ const BASE: LookDef = LookDef {
 };
 
 pub const LOOKS: &[LookDef] = &[
-    LookDef { name: "clear", label: "Clear", blurb: "High contrast, set in Inter.", ..BASE },
     LookDef {
         name: "bright",
         label: "Bright",
@@ -124,7 +123,7 @@ pub const LOOKS: &[LookDef] = &[
     LookDef {
         name: "large",
         label: "Large",
-        blurb: "Clear, bigger and roomier.",
+        blurb: "High contrast in Inter, bigger and roomier.",
         sizes: (22.0, 16.5, 13.5),
         tinted_chips: true,
         roomy: true,
@@ -159,29 +158,6 @@ pub const LOOKS: &[LookDef] = &[
             info: rgb(120, 186, 236),
         },
         tinted_chips: true,
-        ..BASE
-    },
-    LookDef {
-        name: "abyss",
-        label: "Abyss",
-        blurb: "Underdocks deep water, bioluminescent.",
-        palette: Palette {
-            bg: rgb(4, 15, 21),
-            surface: rgb(9, 30, 40),
-            surface_hi: rgb(16, 48, 62),
-            input: rgb(2, 9, 13),
-            border: rgb(24, 70, 86),
-            border_hi: rgb(44, 120, 138),
-            text: rgb(220, 246, 246),
-            text_dim: rgb(150, 204, 208),
-            text_faint: rgb(98, 150, 158),
-            accent: rgb(56, 240, 206),
-            good: rgb(110, 232, 150),
-            warn: rgb(246, 210, 96),
-            bad: rgb(250, 108, 128),
-            info: rgb(100, 178, 255),
-        },
-        glow: true,
         ..BASE
     },
     LookDef {
@@ -256,33 +232,10 @@ pub const LOOKS: &[LookDef] = &[
         sizes: (18.0, 14.0, 12.0),
         ..BASE
     },
-    LookDef {
-        name: "brutalist",
-        label: "Brutalist",
-        blurb: "Black, white, warning yellow. Heavy rules.",
-        palette: Palette {
-            bg: rgb(0, 0, 0),
-            surface: rgb(20, 20, 20),
-            surface_hi: rgb(44, 44, 44),
-            input: rgb(0, 0, 0),
-            border: rgb(235, 235, 235),
-            border_hi: rgb(255, 255, 255),
-            text: rgb(255, 255, 255),
-            text_dim: rgb(214, 214, 214),
-            text_faint: rgb(168, 168, 168),
-            accent: rgb(255, 228, 0),
-            good: rgb(0, 232, 122),
-            warn: rgb(255, 152, 0),
-            bad: rgb(255, 54, 54),
-            info: rgb(0, 174, 255),
-        },
-        border: 2.0,
-        ..BASE
-    },
 ];
 
 /// The look new installs start with.
-pub const DEFAULT_LOOK: &str = "clear";
+pub const DEFAULT_LOOK: &str = "spirebound";
 
 static LOOK: AtomicUsize = AtomicUsize::new(0);
 /// Current character colour (RGBA), or 0 for none; drives `character_accent`.
