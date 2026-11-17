@@ -19,6 +19,27 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
     ui.horizontal(|ui| {
         ui.label(RichText::new("SPIRE").strong().color(accent()));
         ui.label(RichText::new("DASHBOARD").color(text_dim()));
+        ui.add_space(12.0);
+        // Tabs: the active one is underlined in the accent colour.
+        for tab in crate::views::Tab::ALL {
+            let active = st.tab == tab;
+            let text = RichText::new(tab.label()).family(crate::style::strong_family());
+            let r = ui.add(
+                egui::Button::new(text.color(if active { crate::style::color::text() } else { text_dim() }))
+                    .frame(false),
+            );
+            if active {
+                let rect = r.rect;
+                ui.painter().hline(
+                    rect.x_range(),
+                    rect.max.y + 2.0,
+                    egui::Stroke::new(2.0, crate::style::color::accent()),
+                );
+            }
+            if r.clicked() {
+                st.tab = tab;
+            }
+        }
         ui.add_space(16.0);
 
         if let Some(c) = s.character.as_ref().and_then(|c| v.catalog.characters.get(c)) {

@@ -94,7 +94,36 @@ pub fn contains_ci(haystack: &str, needle: &str) -> bool {
     n.is_empty() || h.windows(n.len()).any(|w| w.eq_ignore_ascii_case(n))
 }
 
+/// Where a card's roles come from.
+#[derive(Clone, Debug, PartialEq)]
+pub enum RoleSource {
+    Personal(Vec<Role>),
+    Playbook(Vec<Role>),
+    /// Each matching rule's role and description.
+    Rules(Vec<(Role, String)>),
+}
+
 impl Condition {
+    /// A short human description, e.g. `deals damage`,
+    /// `applies Strength`, `is a Power and mentions "block"`.
+    pub fn describe(&self) -> String {
+        let join = |cs: &[Condition], word: &str| cs.iter().map(Condition::describe).collect::<Vec<_>>().join(word);
+        match self {
+            Condition::HasDamage => "deals damage".into(),
+            Condition::HasBlock => "gains Block".into(),
+            Condition::Draws => "draws cards".into(),
+            Condition::GainsEnergy => "gains Energy".into(),
+            Condition::AppliesPower(p) => format!("applies {p}"),
+            Condition::TextContains(t) => format!("mentions \"{t}\""),
+            Condition::Keyword(k) => format!("has {k}"),
+            Condition::CardType(t) => format!("is a {}", t.label()),
+            Condition::Target(t) => format!("targets {t:?}"),
+            Condition::All(cs) => join(cs, " and "),
+            Condition::Any(cs) => format!("({})", join(cs, " or ")),
+            Condition::Not(c) => format!("not {}", c.describe()),
+        }
+    }
+
     pub fn matches(&self, card: &Card) -> bool {
         match self {
             Condition::HasDamage => card.damage.is_some_and(|d| d > 0),
@@ -226,6 +255,10 @@ pub struct Playbook {
     /// Hand-set roles for specific cards; these replace the rules' verdict.
     #[serde(default)]
     pub card_roles: BTreeMap<CardId, Vec<Role>>,
+    /// The player's own role overrides, kept apart from the shipped
+    /// playbook (stored in their data folder); they win over everything.
+    #[serde(skip)]
+    pub personal_roles: BTreeMap<CardId, Vec<Role>>,
     pub aoe: Condition,
     /// Words in an encounter name that signal several enemies. Data sources
     /// list each distinct monster once, so `Many Corpse Slugs` looks like one.
@@ -244,13 +277,29 @@ impl Playbook {
 
     /// Roles a card fills: a hand-set override, else the rule table.
     pub fn roles_of(&self, card: &Card) -> Vec<Role> {
-        if let Some(roles) = self.card_roles.get(&card.id) {
-            return roles.clone();
+        match self.role_source(card) {
+            RoleSource::Personal(roles) | RoleSource::Playbook(roles) => roles,
+            RoleSource::Rules(matched) => {
+                let mut roles: Vec<Role> = matched.into_iter().map(|(r, _)| r).collect();
+                roles.dedup();
+                roles
+            }
         }
-        let mut roles: Vec<Role> = self.role_rules.iter().filter(|r| r.when.matches(card)).map(|r| r.role).collect();
-        roles.sort();
-        roles.dedup();
-        roles
+    }
+
+    /// Why a card has its roles: your override, the playbook's override, or
+    /// the rules that matched (with a readable description of each).
+    pub fn role_source(&self, card: &Card) -> RoleSource {
+        if let Some(roles) = self.personal_roles.get(&card.id) {
+            return RoleSource::Personal(roles.clone());
+        }
+        if let Some(roles) = self.card_roles.get(&card.id) {
+            return RoleSource::Playbook(roles.clone());
+        }
+        let mut matched: Vec<(Role, String)> =
+            self.role_rules.iter().filter(|r| r.when.matches(card)).map(|r| (r.role, r.when.describe())).collect();
+        matched.sort_by_key(|(r, _)| *r);
+        RoleSource::Rules(matched)
     }
 
     pub fn is_aoe(&self, card: &Card) -> bool {

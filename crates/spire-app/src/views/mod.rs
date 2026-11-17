@@ -7,9 +7,11 @@
 
 pub mod act;
 pub mod breakdown;
+pub mod cards;
 pub mod data;
 pub mod deck;
 pub mod dialogs;
+pub mod enemies;
 pub mod events;
 pub mod log;
 pub mod start;
@@ -25,10 +27,58 @@ use crate::widgets::culled;
 
 const GAP: f32 = 12.0;
 
+/// Top-level navigation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Tab {
+    Run,
+    Cards,
+    Enemies,
+}
+
+impl Tab {
+    pub const ALL: [Tab; 3] = [Tab::Run, Tab::Cards, Tab::Enemies];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Tab::Run => "Run",
+            Tab::Cards => "Cards",
+            Tab::Enemies => "Enemies",
+        }
+    }
+}
+
 pub fn root(ui: &mut Ui, v: &ViewCtx, draft: &mut NodeDraft, st: &mut UiState, out: &mut Vec<Action>) {
     let side = egui::Frame::new().inner_margin(egui::Margin { left: 14, right: 14, top: 0, bottom: 0 });
     egui::Panel::top("top").frame(side).show(ui, |ui| top::show(ui, v, st, out));
     dialogs::show(ui, v, st, out);
+
+    match st.tab {
+        Tab::Run => {}
+        Tab::Cards => {
+            egui::Panel::left("card-filters").frame(side).resizable(true).default_size(260.0).show(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| cards::filters(ui, v, &mut st.cards));
+            });
+            egui::Panel::right("card-detail").frame(side).resizable(true).default_size(420.0).show(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| cards::detail(ui, v, &mut st.cards, out));
+            });
+            egui::CentralPanel::default()
+                .frame(egui::Frame::new().inner_margin(egui::Margin::same(GAP as i8)))
+                .show(ui, |ui| cards::list(ui, v, &mut st.cards));
+            return;
+        }
+        Tab::Enemies => {
+            egui::Panel::left("enemy-filters").frame(side).resizable(true).default_size(260.0).show(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| enemies::filters(ui, v, &mut st.enemies));
+            });
+            egui::Panel::right("enemy-detail").frame(side).resizable(true).default_size(460.0).show(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| enemies::detail(ui, v, &st.enemies));
+            });
+            egui::CentralPanel::default()
+                .frame(egui::Frame::new().inner_margin(egui::Margin::same(GAP as i8)))
+                .show(ui, |ui| enemies::list(ui, v, &mut st.enemies));
+            return;
+        }
+    }
 
     if !v.state.started() {
         egui::CentralPanel::default().frame(side).show(ui, |ui| {

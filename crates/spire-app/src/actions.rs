@@ -29,6 +29,11 @@ pub enum Action {
     SetSourceUrl(String),
     SetChannel(spire_data::codex::Channel),
     SetLook(&'static str),
+    /// Set (Some) or clear (None) your own role override for a card.
+    SetPersonalRoles {
+        card: CardId,
+        roles: Option<Vec<spire_core::playbook::Role>>,
+    },
     SetLargeText(bool),
     ToggleDataWindow,
 }
