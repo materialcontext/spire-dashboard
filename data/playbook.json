@@ -487,6 +487,9 @@
     "SIGNAL_BOOST": [
       "consistency"
     ],
+    "SIMPLETON": [
+      "consistency"
+    ],
     "STAMPEDE": [
       "scaling_damage"
     ],
