@@ -37,6 +37,7 @@ impl Watcher {
     /// system (no data directory).
     pub fn start(ctx: egui::Context) -> Option<Watcher> {
         let path = game_link::link_path()?;
+        let game = game_link::game_dir();
         let stop = Arc::new(AtomicBool::new(false));
         let (tx, rx) = channel();
         let flag = stop.clone();
@@ -53,7 +54,10 @@ impl Watcher {
                         seen = now;
                         let update = match game_link::read_link(&path) {
                             None => Update::NoLink,
-                            Some(link) => {
+                            Some(mut link) => {
+                                if let Some(game) = &game {
+                                    link.locate(game);
+                                }
                                 run_save = link.run_save.clone();
                                 let json =
                                     if link.in_progress { link.read_run_save() } else { link.read_finished(None) };

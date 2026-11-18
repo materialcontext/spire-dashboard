@@ -287,8 +287,8 @@ fn monitored(ui: &mut egui::Ui, settings: &Settings, st: &UiState, following: bo
             ui.label(RichText::new(run).small().color(text_dim()));
             if let Some(p) = &f.problem {
                 ui.label(RichText::new(p).small().color(warn()));
-                if let Some(path) = &link.run_save {
-                    ui.label(RichText::new(format!("Run save: {}", path.display())).small().color(text_faint()));
+                if let Some(path) = link.run_save.as_ref().or(link.save_dir.as_ref()) {
+                    ui.label(RichText::new(path.display().to_string()).small().color(text_faint()));
                 }
             }
             if link.modded_profile() {

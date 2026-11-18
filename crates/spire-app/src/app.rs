@@ -708,8 +708,13 @@ impl SpireApp {
                 let what = if link.in_progress { "the game's run save" } else { "the game's last finished run" };
                 format!("Can't follow: couldn't read {what}: {why}.")
             }),
+            (None, true, None) if link.save_dir.is_none() => {
+                let under =
+                    spire_data::game_link::game_dir().map_or(String::new(), |d| format!(" under {}", d.display()));
+                Err(format!("Can't follow: couldn't find the game's saves folder{under}."))
+            }
             (None, true, None) => {
-                Err("The game hasn't saved this run yet (no current_run.save in its save folder).".to_string())
+                Err("The game hasn't saved this run yet (no current_run.save in its saves folder).".to_string())
             }
             (None, true, Some(path)) => Err(format!("Can't follow: couldn't open {}.", path.display())),
             (None, false, _) => Err(String::new()),
@@ -964,8 +969,12 @@ mod follow_tests {
         let problem = app.ui.follow.problem.clone().expect("a reason");
         assert!(problem.contains("isn't plain JSON"), "{problem}");
         assert!(!app.state.started());
-        // No run save yet.
+        // No saves folder found.
         let link = Link { in_progress: true, ..Link::default() };
+        app.sync_game(Update::Run { link: Box::new(link), json: None }, &ctx);
+        assert!(app.ui.follow.problem.as_deref().is_some_and(|p| p.contains("saves folder")));
+        // A saves folder, but no run save yet.
+        let link = Link { in_progress: true, save_dir: Some(std::env::temp_dir()), ..Link::default() };
         app.sync_game(Update::Run { link: Box::new(link), json: None }, &ctx);
         assert!(app.ui.follow.problem.as_deref().is_some_and(|p| p.contains("hasn't saved")));
         // Once it reads, the reason clears.
