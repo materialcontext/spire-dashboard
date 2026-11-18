@@ -82,7 +82,7 @@ pub struct UiState {
     /// Analytics: list every card's draw odds, not just the top ones.
     pub show_all_odds: bool,
     /// Monitored runs: what the companion mod reports.
-    pub follow: crate::monitor::Status,
+    pub follow: crate::follow::Status,
 }
 
 pub struct Toast {
@@ -185,6 +185,20 @@ impl SpireApp {
             },
             update_rx: None,
         }
+    }
+
+    /// Saves the settings, noting a failure.
+    fn save_settings(&mut self) {
+        if let Err(e) = self.store.save_settings(&self.settings) {
+            self.note(format!("Could not save settings: {e}"));
+        }
+    }
+
+    /// Shows a toast for a few seconds.
+    fn toast(&mut self, ctx: &egui::Context, text: String) {
+        let now = ctx.input(|i| i.time);
+        self.ui.toast = Some(Toast { text, since: now, until: now + TOAST_SECONDS });
+        ctx.request_repaint_after(std::time::Duration::from_secs_f64(TOAST_SECONDS));
     }
 
     fn note(&mut self, msg: impl Into<String>) {
@@ -462,10 +476,7 @@ impl SpireApp {
                     self.ui.end_encounter = self.state.encounters_seen.last().cloned();
                 }
                 if node {
-                    let now = ctx.input(|i| i.time);
-                    let text = format!("Floor {} logged", self.state.floor);
-                    self.ui.toast = Some(Toast { text, since: now, until: now + TOAST_SECONDS });
-                    ctx.request_repaint_after(std::time::Duration::from_secs_f64(TOAST_SECONDS));
+                    self.toast(ctx, format!("Floor {} logged", self.state.floor));
                 }
             }
             Action::DismissToast => self.ui.toast = None,
@@ -524,9 +535,7 @@ impl SpireApp {
                     };
                     Source::SpireCodex { base_url: url, run_pages, channel }
                 };
-                if let Err(e) = self.store.save_settings(&self.settings) {
-                    self.note(format!("Could not save settings: {e}"));
-                }
+                self.save_settings();
             }
             Action::SetLook(name) => {
                 crate::style::set_look(ctx, name);
@@ -538,9 +547,7 @@ impl SpireApp {
                     *slot = Some(name.to_string());
                 }
                 self.settings.look = Some(name.to_string());
-                if let Err(e) = self.store.save_settings(&self.settings) {
-                    self.note(format!("Could not save settings: {e}"));
-                }
+                self.save_settings();
             }
             Action::SetPersonalRoles { card, roles } => {
                 match roles {
@@ -555,30 +562,22 @@ impl SpireApp {
             Action::SetLargeText(on) => {
                 crate::style::set_large(ctx, on);
                 self.settings.large_text = on;
-                if let Err(e) = self.store.save_settings(&self.settings) {
-                    self.note(format!("Could not save settings: {e}"));
-                }
+                self.save_settings();
             }
             Action::SetMatchSystem(on) => {
                 self.settings.match_system = on;
-                if let Err(e) = self.store.save_settings(&self.settings) {
-                    self.note(format!("Could not save settings: {e}"));
-                }
+                self.save_settings();
             }
             Action::SetSystemTitleBar(on) => {
                 crate::chrome::set_custom(ctx, !on);
                 self.settings.system_title_bar = on;
-                if let Err(e) = self.store.save_settings(&self.settings) {
-                    self.note(format!("Could not save settings: {e}"));
-                }
+                self.save_settings();
             }
             Action::SetChannel(channel) => {
                 if let Source::SpireCodex { channel: c, .. } = &mut self.settings.source {
                     *c = channel;
                 }
-                if let Err(e) = self.store.save_settings(&self.settings) {
-                    self.note(format!("Could not save settings: {e}"));
-                }
+                self.save_settings();
             }
             Action::ToggleDataWindow => self.ui.show_data = !self.ui.show_data,
             Action::SaveHistory { id, run } => match self.store.update_archived(&id, &run) {
@@ -590,9 +589,7 @@ impl SpireApp {
             },
             Action::SetFollowGame(on) => {
                 self.settings.follow_game = on;
-                if let Err(e) = self.store.save_settings(&self.settings) {
-                    self.note(format!("Could not save settings: {e}"));
-                }
+                self.save_settings();
                 self.watcher = if on { crate::monitor::Watcher::start(ctx.clone()) } else { None };
                 self.ui.follow = Default::default();
                 if !on && self.run.source.take().is_some() {
@@ -691,69 +688,41 @@ impl SpireApp {
     }
 
     fn sync_game(&mut self, update: crate::monitor::Update, ctx: &egui::Context) {
-        use crate::monitor::Update;
+        use crate::follow::Step;
         let (link, json) = match update {
-            Update::NoLink => {
+            crate::monitor::Update::NoLink => {
                 self.ui.follow.no_link = true;
                 self.ui.follow.link = None;
                 return;
             }
-            Update::Run { link, json } => (link, json),
+            crate::monitor::Update::Run { link, json } => (link, json),
         };
         self.ui.follow.no_link = false;
-        let hint = link.hint();
-        // Where following stops, if it does, so Settings and the log can say.
-        let read = match (json, link.in_progress, &link.run_save) {
-            (Some(j), ..) => spire_data::game_run::read(&j, &self.catalog, &hint).map_err(|why| {
-                let what = if link.in_progress { "the game's run save" } else { "the game's last finished run" };
-                format!("Can't follow: couldn't read {what}: {why}.")
-            }),
-            (None, true, None) if link.save_dir.is_none() => {
-                let under =
-                    spire_data::game_link::game_dir().map_or(String::new(), |d| format!(" under {}", d.display()));
-                Err(format!("Can't follow: couldn't find the game's saves folder{under}."))
-            }
-            (None, true, None) => {
-                Err("The game hasn't saved this run yet (no current_run.save in its saves folder).".to_string())
-            }
-            (None, true, Some(path)) => Err(format!("Can't follow: couldn't open {}.", path.display())),
-            (None, false, _) => Err(String::new()),
-        };
+        let read = crate::follow::read(&link, json, &self.catalog);
         self.ui.follow.link = Some(link);
         let game = match read {
             Ok(game) => game,
-            Err(problem) => {
-                self.follow_problem((!problem.is_empty()).then_some(problem));
-                return;
-            }
+            Err(problem) => return self.follow_problem(problem),
         };
         self.follow_problem(None);
-        let key = format!("game:{}", game.key);
-        if self.ui.follow.filed.contains(&key) {
-            return;
-        }
-        if self.run.source.as_deref() == Some(key.as_str()) {
-            if self.run.events != game.events {
-                let before = self.state.floor;
-                self.run.events = game.events;
-                self.run_changed();
-                if self.state.floor > before {
-                    let now = ctx.input(|i| i.time);
-                    let text = format!("Floor {} logged from the game", self.state.floor);
-                    self.ui.toast = Some(Toast { text, since: now, until: now + TOAST_SECONDS });
-                    ctx.request_repaint_after(std::time::Duration::from_secs_f64(TOAST_SECONDS));
+        match crate::follow::step(game, &self.run, self.state.started(), &self.ui.follow.filed) {
+            Step::Nothing => {}
+            Step::Advance { events, ended } => {
+                if self.run.events != events {
+                    let before = self.state.floor;
+                    self.run.events = events;
+                    self.run_changed();
+                    if self.state.floor > before {
+                        self.toast(ctx, format!("Floor {} logged from the game", self.state.floor));
+                    }
+                }
+                if ended {
+                    self.file_followed();
                 }
             }
-            if game.ended {
-                self.file_followed(key);
-            }
-        } else if game.ended {
-            // A run that finished before we followed it: leave it be.
-            self.ui.follow.waiting = true;
-        } else if !self.state.started() || self.run.ended() {
-            self.adopt(game);
-        } else {
-            self.ui.follow.conflict = Some(game);
+            Step::Waiting => self.ui.follow.waiting = true,
+            Step::Adopt(game) => self.adopt(game),
+            Step::Conflict(game) => self.ui.follow.conflict = Some(game),
         }
     }
 
@@ -770,7 +739,7 @@ impl SpireApp {
     /// Makes the game's run the app's run.
     fn adopt(&mut self, game: spire_data::game_run::GameRun) {
         self.ui.follow.waiting = false;
-        let key = format!("game:{}", game.key);
+        let key = crate::follow::key(&game);
         let started_at = game.start_time.map_or_else(spire_data::now_rfc3339, spire_data::rfc3339);
         self.run = Run { events: game.events, started_at: Some(started_at), source: Some(key), notes: None };
         self.ui.follow.conflict = None;
@@ -783,13 +752,13 @@ impl SpireApp {
             ));
         }
         if game.ended {
-            self.file_followed(format!("game:{}", game.key));
+            self.file_followed();
         }
     }
 
     /// The followed run has ended in the game: file it in history.
-    fn file_followed(&mut self, key: String) {
-        self.ui.follow.filed.push(key);
+    fn file_followed(&mut self) {
+        self.ui.follow.filed.extend(self.run.source.clone());
         match self.store.archive_run(&self.run) {
             Ok(_) => self.note("The game's run ended; saved to history."),
             Err(e) => self.note(format!("Could not save the run to history: {e}")),
