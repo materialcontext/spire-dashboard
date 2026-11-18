@@ -945,22 +945,61 @@ fn rest_heals_thirty_percent_plus_relic_bonus_capped_at_missing() {
 }
 
 #[test]
-fn draw_and_energy_tags_come_from_numbers_and_text() {
-    use spire_core::analysis::deck::{CardTag, tags};
+fn tags_come_from_numbers_and_text() {
+    use spire_core::analysis::tags::{Tag, Tagged, tags};
+    let pb = playbook();
+    let names = |c: &Card| tags(c, false, &pb).iter().map(|t| t.tag).collect::<Vec<_>>();
     let mut pommel = card("POMMEL", CardType::Attack, Rarity::Common, "Deal 9 damage. Draw 1 card.");
-    pommel.draw = Some(1);
-    assert_eq!(tags(&pommel, false), vec![CardTag::Draw]);
+    (pommel.damage, pommel.draw) = (Some(9), Some(1));
+    assert_eq!(names(&pommel), vec![Tag::Damage, Tag::Draw]);
     let surge = card("SURGE", CardType::Skill, Rarity::Common, "Gain 2 Energy.");
-    assert_eq!(tags(&surge, false), vec![CardTag::Energy]);
+    assert_eq!(names(&surge), vec![Tag::Energy]);
     let demesne = card(
         "DEMESNE",
         CardType::Power,
         Rarity::Rare,
         "At the start of your turn, gain 1 Energy and draw 1 additional card.",
     );
-    assert_eq!(tags(&demesne, false), vec![CardTag::Draw, CardTag::Energy]);
-    let strike = card("S", CardType::Attack, Rarity::Basic, "Deal 6 damage.");
-    assert!(tags(&strike, false).is_empty());
+    assert_eq!(names(&demesne), vec![Tag::Draw, Tag::Energy]);
+    let mut twin = card("TWIN", CardType::Attack, Rarity::Common, "Deal 5 damage twice.");
+    (twin.damage, twin.hits, twin.cost) = (Some(5), Some(2), Some(1));
+    let t = tags(&twin, false, &pb);
+    assert!(t.contains(&Tagged { tag: Tag::MultiHit, value: 5, hits: 2 }));
+    assert_eq!(t.iter().find(|t| t.tag == Tag::MultiHit).unwrap().label(), "Multi-Hit 2×5");
+    let mut shiv = card("SHIV_ISH", CardType::Attack, Rarity::Common, "Deal 4 damage.");
+    (shiv.damage, shiv.cost) = (Some(4), Some(0));
+    assert_eq!(names(&shiv), vec![Tag::Damage, Tag::ChipDamage]);
+    let mut cleave = card("CLEAVE_ISH", CardType::Attack, Rarity::Common, "Deal 8 damage to ALL enemies.");
+    (cleave.damage, cleave.target) = (Some(8), spire_core::catalog::Target::AllEnemies);
+    assert_eq!(names(&cleave), vec![Tag::Area]);
+}
+
+#[test]
+fn roles_come_from_tags_and_overrides_replace_them() {
+    use spire_core::analysis::tags::{Tag, TagSource, of};
+    use spire_core::playbook::{RoleSource, TagRole};
+    let mut pb = playbook();
+    pb.role_rules.clear();
+    pb.tag_roles = vec![
+        TagRole { role: Role::Mitigation, tag: Tag::Block, min: 0 },
+        TagRole { role: Role::Survival, tag: Tag::Block, min: 10 },
+    ];
+    let mut wall = card("WALL", CardType::Skill, Rarity::Common, "Gain 12 Block.");
+    wall.block = Some(12);
+    match pb.role_source(&wall) {
+        RoleSource::Rules(m) => {
+            assert_eq!(m, vec![(Role::Mitigation, "Block 12".to_string()), (Role::Survival, "Block 12".to_string())])
+        }
+        other => panic!("expected rules, got {other:?}"),
+    }
+    let mut defend = card("DEFEND_ISH", CardType::Skill, Rarity::Common, "Gain 5 Block.");
+    defend.block = Some(5);
+    assert_eq!(pb.roles_of(&defend), vec![Role::Mitigation], "5 Block is under the Survival line");
+    assert_eq!(pb.tags_for(Role::Survival), vec![Tag::Block]);
+    pb.personal_tags.insert(wall.id.clone(), vec![Tag::Weak]);
+    let (t, source) = of(&wall, false, &pb);
+    assert_eq!((t.iter().map(|t| t.tag).collect::<Vec<_>>(), source), (vec![Tag::Weak], TagSource::Personal));
+    assert!(pb.roles_of(&wall).is_empty(), "roles follow the overridden tags");
 }
 
 #[test]

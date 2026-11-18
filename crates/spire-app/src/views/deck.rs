@@ -2,6 +2,7 @@
 
 use eframe::egui::{self, RichText, Sense, Ui, vec2};
 use spire_core::analysis::DeckRow;
+use spire_core::analysis::tags::{Tag, Tagged};
 use spire_core::catalog::CardType;
 use spire_core::playbook::Role;
 use spire_core::run::Change;
@@ -140,11 +141,12 @@ fn card_row(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
     });
 }
 
-/// "D" and "E" for cards that draw or gain energy, beside the role marks.
-fn tag_marks(ui: &mut Ui, tags: &[spire_core::analysis::deck::CardTag]) {
-    for t in tags.iter().rev() {
-        let letter = &t.label()[..1];
-        ui.label(secondary(letter)).on_hover_text(t.describe());
+/// "D" and "E" for cards that draw or gain energy, beside the role marks
+/// (they aren't roles: they keep every role working on bad draws).
+fn tag_marks(ui: &mut Ui, tags: &[Tagged]) {
+    for t in tags.iter().rev().filter(|t| matches!(t.tag, Tag::Draw | Tag::Energy)) {
+        let letter = &t.tag.label()[..1];
+        ui.label(secondary(letter)).on_hover_text(t.tag.describe());
     }
 }
 
@@ -282,5 +284,9 @@ fn card_tooltip(ui: &mut Ui, v: &ViewCtx, row: &DeckRow) {
         for r in &row.roles {
             ui.label(RichText::new(r.label()).small().color(style::role_color(*r)));
         }
+    }
+    if !row.tags.is_empty() {
+        let tags: Vec<String> = row.tags.iter().map(Tagged::label).collect();
+        ui.label(RichText::new(tags.join(" · ")).small().color(style::tag_color()));
     }
 }

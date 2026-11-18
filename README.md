@@ -223,8 +223,8 @@ cargo run -p spire-data --bin refresh-bundle
 
 Everything the dashboard *believes* lives in `data/playbook.json`, not in code:
 
-- which card features mean which role
-- per-card role overrides
+- which card features mean which tag, and which tags give which role
+- per-card tag and role overrides
 - per-act role targets
 - thresholds for "big hit" and "long fight"
 - the words that mark event options as removal, upgrade, relic and so on

@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 
+use crate::analysis::tags::{self, Tag, Tagged};
 use crate::catalog::{Card, CardType, Catalog, Rarity};
 use crate::playbook::{ActPlan, Playbook, Role};
 use crate::run::DeckCard;
@@ -12,44 +13,8 @@ pub struct ClassifiedCard<'a> {
     pub deck: &'a DeckCard,
     pub card: Option<&'a Card>,
     pub roles: Vec<Role>,
-    pub tags: Vec<CardTag>,
-}
-
-/// What a card does for acceleration, beside its roles: draws cards, gains energy.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum CardTag {
-    Draw,
-    Energy,
-}
-
-impl CardTag {
-    pub const ALL: [CardTag; 2] = [CardTag::Draw, CardTag::Energy];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            CardTag::Draw => "Draw",
-            CardTag::Energy => "Energy",
-        }
-    }
-
-    pub fn describe(self) -> &'static str {
-        match self {
-            CardTag::Draw => "Draws cards",
-            CardTag::Energy => "Gains energy",
-        }
-    }
-}
-
-/// Draw and energy tags, from the card's numbers and its text (powers and
-/// "next turn" effects only say it in prose). Upgrades are applied.
-pub fn tags(card: &Card, upgraded: bool) -> Vec<CardTag> {
-    let effects = crate::mechanics::read(card.text_at(upgraded), &[], true);
-    let says = |f: fn(&crate::mechanics::Effect) -> bool| effects.triggers.iter().flat_map(|(_, es)| es).any(f);
-    let draw = (card.draw.is_some() && card.value("cards", upgraded) > 0)
-        || says(|e| matches!(e, crate::mechanics::Effect::Draw(n) if *n > 0));
-    let energy = (card.energy.is_some() && card.value("energy", upgraded) > 0)
-        || says(|e| matches!(e, crate::mechanics::Effect::Energy(n) if *n > 0));
-    CardTag::ALL.into_iter().filter(|t| if *t == CardTag::Draw { draw } else { energy }).collect()
+    /// Tags with the upgrade applied.
+    pub tags: Vec<Tagged>,
 }
 
 impl ClassifiedCard<'_> {
@@ -71,7 +36,7 @@ pub fn classify<'a>(deck: &'a [DeckCard], catalog: &'a Catalog, playbook: &Playb
                 deck: d,
                 card,
                 roles: card.map(|c| playbook.roles_of(c)).unwrap_or_default(),
-                tags: card.map(|c| tags(c, d.upgraded)).unwrap_or_default(),
+                tags: card.map(|c| tags::tags(c, d.upgraded, playbook)).unwrap_or_default(),
             }
         })
         .collect()
@@ -90,7 +55,7 @@ pub struct DeckRow {
     pub known: bool,
     /// Cannot be removed or transformed.
     pub eternal: bool,
-    pub tags: Vec<CardTag>,
+    pub tags: Vec<Tagged>,
 }
 
 pub fn deck_rows(cards: &[ClassifiedCard<'_>]) -> Vec<DeckRow> {
@@ -136,9 +101,8 @@ pub struct DeckProfile {
     pub eternal: u32,
     /// Draws that do nothing: curses, statuses, unplayables.
     pub dead: u32,
-    /// Cards that draw cards, and cards that gain energy.
-    pub draw: u32,
-    pub energy: u32,
+    /// Cards carrying each tag, starter Strikes and Defends included.
+    pub by_tag: BTreeMap<Tag, u32>,
 }
 
 impl DeckProfile {
@@ -148,6 +112,10 @@ impl DeckProfile {
 
     pub fn starter_role(&self, role: Role) -> u32 {
         self.starter_roles.get(&role).copied().unwrap_or(0)
+    }
+
+    pub fn tag(&self, tag: Tag) -> u32 {
+        self.by_tag.get(&tag).copied().unwrap_or(0)
     }
 
     pub fn of_type(&self, t: CardType) -> u32 {
@@ -172,8 +140,9 @@ pub fn profile(cards: &[ClassifiedCard<'_>]) -> DeckProfile {
         for r in &c.roles {
             *roles.entry(*r).or_default() += 1;
         }
-        p.draw += u32::from(c.tags.contains(&CardTag::Draw));
-        p.energy += u32::from(c.tags.contains(&CardTag::Energy));
+        for t in &c.tags {
+            *p.by_tag.entry(t.tag).or_default() += 1;
+        }
         p.upgraded += u32::from(c.deck.upgraded);
         p.unknown += u32::from(c.card.is_none());
         p.starter_basics += u32::from(starter);

@@ -141,8 +141,9 @@ mod tests {
     #[test]
     fn playbook_card_overrides_name_real_cards() {
         let cat = spire_core::Catalog::from_layers([bundled_pack()]);
-        for id in bundled_playbook().card_roles.keys() {
-            assert!(cat.cards.contains_key(id), "playbook card_roles names unknown card {id}");
+        let pb = bundled_playbook();
+        for id in pb.card_roles.keys().chain(pb.card_tags.keys()) {
+            assert!(cat.cards.contains_key(id), "playbook card_roles or card_tags names unknown card {id}");
         }
     }
 

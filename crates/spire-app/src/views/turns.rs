@@ -309,10 +309,20 @@ pub fn outlook(ui: &mut Ui, o: &Outlook, stats: Option<&EncounterStats>) {
             ui.spacing_mut().item_spacing.x = 4.0;
             ui.label(caption("Would help:"));
             for limit in &o.limits {
-                chip(ui, limit.role.label(), role_color(limit.role)).on_hover_text(&limit.text);
+                let color = limit.role.map_or_else(crate::style::tag_color, role_color);
+                chip(ui, limit.label(), color).on_hover_text(look_for(&limit.text, &limit.tags));
             }
         });
     }
+}
+
+/// "spikes of 40…" then "Look for: Block, Weak" on its own line.
+fn look_for(text: &str, tags: &[spire_core::analysis::tags::Tag]) -> String {
+    if tags.is_empty() {
+        return text.to_string();
+    }
+    let names: Vec<&str> = tags.iter().map(|t| t.label()).collect();
+    format!("{text}\nLook for: {}", names.join(", "))
 }
 
 /// The outlook's hover: each way played, the rules, joins, junk and blast.
@@ -327,7 +337,7 @@ fn outlook_detail(ui: &mut Ui, o: &Outlook, stats: Option<&EncounterStats>) {
         ui.label(secondary(format!("{}: {result}", l.way.label())));
     }
     for r in &o.rules {
-        ui.label(format!("{r}."));
+        ui.label(look_for(&format!("{}.", r.text), &r.tags));
     }
     for j in &o.joins {
         let who = if j.count == 1 { j.name.clone() } else { format!("{} {}s", j.count, j.name) };
