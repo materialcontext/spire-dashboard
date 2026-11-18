@@ -14,6 +14,7 @@ pub mod codex_runs;
 pub mod fetch;
 pub mod game_link;
 pub mod game_run;
+mod run_file;
 pub mod store;
 
 use spire_core::{DataPack, Playbook};

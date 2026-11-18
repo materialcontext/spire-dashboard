@@ -21,10 +21,11 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::Deserialize;
 use spire_core::DataPack;
 use spire_core::catalog::{EncounterStats, FixedRoom, GameRules, Lineup, NodeKind};
 use spire_core::ids::MonsterId;
+
+use crate::run_file::{WRun, entry};
 
 /// Fewer fights than this and an encounter is left unenriched.
 pub const MIN_FIGHTS: usize = 20;
@@ -33,50 +34,6 @@ const BASE_MIN_SHARE: f32 = 0.05;
 const VARIANT_MIN_SHARE: f32 = 0.03;
 /// A non-member monster seen in this many encounters is a player ally.
 const ALLY_SPREAD: usize = 5;
-
-#[derive(Deserialize)]
-struct WRun {
-    #[serde(default)]
-    ascension: Option<u32>,
-    #[serde(default)]
-    modifiers: Option<serde_json::Value>,
-    #[serde(default)]
-    players: Vec<serde_json::Value>,
-    #[serde(default)]
-    map_point_history: Vec<Vec<WPoint>>,
-    #[serde(default)]
-    killed_by_encounter: Option<String>,
-    #[serde(default)]
-    win: Option<bool>,
-}
-
-#[derive(Deserialize)]
-struct WPoint {
-    #[serde(default)]
-    map_point_type: Option<String>,
-    #[serde(default)]
-    player_stats: Vec<WStats>,
-    #[serde(default)]
-    rooms: Vec<WRoom>,
-}
-
-#[derive(Deserialize)]
-struct WStats {
-    #[serde(default)]
-    damage_taken: Option<u32>,
-    #[serde(default)]
-    current_hp: Option<u32>,
-}
-
-#[derive(Deserialize)]
-struct WRoom {
-    #[serde(default)]
-    model_id: String,
-    #[serde(default)]
-    monster_ids: Vec<String>,
-    #[serde(default)]
-    turns_taken: Option<u32>,
-}
 
 /// One fight from one run.
 #[derive(Clone, Debug, PartialEq)]
@@ -96,10 +53,6 @@ pub struct Fight {
     pub died: bool,
 }
 
-fn strip(id: &str) -> &str {
-    id.split_once('.').map_or(id, |(_, rest)| rest)
-}
-
 fn is_empty_value(v: &Option<serde_json::Value>) -> bool {
     match v {
         None | Some(serde_json::Value::Null) => true,
@@ -117,7 +70,7 @@ pub fn fights(jsonl: &str) -> Vec<Fight> {
         .filter(|run| run.players.len() == 1 && is_empty_value(&run.modifiers));
     let mut out = Vec::new();
     for (r, run) in runs.enumerate() {
-        let killer = run.killed_by_encounter.as_deref().map(strip).filter(|k| *k != "NONE");
+        let killer = run.killed_by_encounter.as_deref().map(entry).filter(|k| *k != "NONE");
         let lost = run.win == Some(false);
         let points = run.map_point_history.len();
         let mut hp_before: Option<u32> = None;
@@ -126,14 +79,14 @@ pub fn fights(jsonl: &str) -> Vec<Fight> {
             let n = acts.len();
             for (i, point) in acts.into_iter().enumerate() {
                 let (damage, hp_after) = match point.player_stats.as_slice() {
-                    [only] => (only.damage_taken, only.current_hp),
+                    [only] => (only.damage_taken, only.current_hp.map(|hp| hp.max(0) as u32)),
                     _ => (None, None),
                 };
                 let last = last_act && i + 1 == n;
                 for room in point.rooms.into_iter().filter(|r| !r.monster_ids.is_empty()) {
-                    let mut monsters: Vec<String> = room.monster_ids.iter().map(|m| strip(m).to_string()).collect();
+                    let mut monsters: Vec<String> = room.monster_ids.iter().map(|m| entry(m).to_string()).collect();
                     monsters.sort();
-                    let encounter = strip(&room.model_id).to_string();
+                    let encounter = entry(&room.model_id).to_string();
                     let died = last && lost && killer == Some(encounter.as_str());
                     out.push(Fight {
                         run: r,
@@ -199,7 +152,7 @@ pub fn layouts(jsonl: &str) -> Vec<ActLayout> {
         .filter_map(|line| serde_json::from_str::<WRun>(line).ok())
         .filter(|run| run.players.len() == 1 && is_empty_value(&run.modifiers))
         .flat_map(|run| {
-            let ascension = run.ascension.unwrap_or(0);
+            let ascension = run.ascension;
             run.map_point_history.into_iter().enumerate().filter_map(move |(act, points)| {
                 let rooms: Option<Vec<NodeKind>> =
                     points.iter().map(|p| p.map_point_type.as_deref().and_then(node_kind)).collect();
