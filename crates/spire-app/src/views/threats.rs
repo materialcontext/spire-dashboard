@@ -65,7 +65,10 @@ pub fn preview_body(
     crate::views::turns::strip(ui, (key, &t.encounter), &t.plans, t.stats.as_ref().filter(|_| boss_or_elite));
     // Elites and bosses: when runs end here, and whether this deck is on track.
     if boss_or_elite {
-        crate::views::turns::deaths(ui, (key, &t.encounter), &t.plans, t.stats.as_ref());
+        // Once monsters join mid-fight, a turn number no longer says whose
+        // move it is, so the deadly turns go unnamed.
+        let named: &[spire_core::analysis::threats::MonsterPlan] = if t.spawns.is_empty() { &t.plans } else { &[] };
+        crate::views::turns::deaths(ui, (key, &t.encounter), named, t.stats.as_ref());
         if let Some(o) = outlook {
             crate::views::turns::outlook(ui, o, t.stats.as_ref());
         }

@@ -674,6 +674,11 @@ pub struct Monster {
     /// Eruption: "When killed, deals damage at the end of your next turn").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub death_blow: Option<DeathBlow>,
+    /// It summons more monsters when it dies (Phrog Parasite's Infested:
+    /// "Upon dying, summons... something"). `amount` is the power's amount,
+    /// read as how many; the encounter's `spawns` say what.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub death_summons: Option<DeathBlow>,
 }
 
 /// A power that makes a monster deal damage after it's killed.

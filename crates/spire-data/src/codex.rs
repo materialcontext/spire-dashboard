@@ -572,13 +572,21 @@ fn map_orb(o: WOrb) -> Orb {
 
 /// Powers whose text says the holder deals damage once it's killed.
 fn death_blow_powers(powers: &[WPowerDef]) -> Vec<(String, String)> {
+    powers_where(powers, |t| t.contains("when killed") && t.contains("deals damage"))
+}
+
+/// Powers whose text says the holder summons monsters when it dies.
+fn death_summon_powers(powers: &[WPowerDef]) -> Vec<(String, String)> {
+    powers_where(powers, |t| {
+        (t.contains("upon dying") || t.contains("when killed") || t.contains("when this dies")) && t.contains("summon")
+    })
+}
+
+fn powers_where(powers: &[WPowerDef], pick: impl Fn(&str) -> bool) -> Vec<(String, String)> {
     powers
         .iter()
         .map(|p| (p.id.clone(), strip_markup(&p.description)))
-        .filter(|(_, text)| {
-            let t = text.to_lowercase();
-            t.contains("when killed") && t.contains("deals damage")
-        })
+        .filter(|(_, text)| pick(&text.to_lowercase()))
         .collect()
 }
 
@@ -639,6 +647,7 @@ fn map_monster(m: WMonster) -> Monster {
         hp_max_asc: m.max_hp_ascension,
         pattern: m.attack_pattern.map(map_pattern),
         death_blow: None,
+        death_summons: None,
     }
 }
 
@@ -827,15 +836,18 @@ pub fn to_pack(
         })
         .collect();
 
-    let blows = match responses.get("powers") {
-        Some(_) => death_blow_powers(&parse::<WPowerDef>(responses, "powers")?),
+    let defs = match responses.get("powers") {
+        Some(_) => parse::<WPowerDef>(responses, "powers")?,
         None => Vec::new(),
     };
+    let blows = death_blow_powers(&defs);
+    let summons = death_summon_powers(&defs);
     let monsters = parse::<WMonster>(responses, "monsters")?
         .into_iter()
         .map(map_monster)
         .map(|mut m| {
             m.death_blow = death_blow(&m, &blows);
+            m.death_summons = death_blow(&m, &summons);
             m
         })
         .collect();
@@ -1085,6 +1097,9 @@ mod tests {
         ];
         let blows = death_blow_powers(&powers);
         assert_eq!(blows.len(), 1);
+        let infested = [WPowerDef { id: "INFESTED".into(), description: "Upon dying, summons... something.".into() }];
+        assert_eq!(death_summon_powers(&infested).len(), 1);
+        assert!(death_summon_powers(&powers).is_empty());
         let giant = Monster {
             id: MonsterId::new("GIANT"),
             name: "Giant".into(),
@@ -1100,6 +1115,7 @@ mod tests {
             hp_max_asc: None,
             pattern: None,
             death_blow: None,
+            death_summons: None,
         };
         let blow = death_blow(&giant, &blows).unwrap();
         assert_eq!((blow.power.as_str(), blow.amount), ("STEAM_ERUPTION", Some(15)));

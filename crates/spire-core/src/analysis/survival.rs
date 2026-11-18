@@ -9,15 +9,21 @@
 //! exactly what's coming; block only the turns that hit hardest) and the
 //! one that loses the least HP is kept.
 //!
+//! Monsters an on-death power summons (Phrog Parasite's Wrigglers) fight as
+//! a later stage: once the deck has dealt the first stage's HP, the next
+//! stage's pattern starts on the following enemy turn.
+//!
 //! What it leaves out, so it reads as a guide, not a forecast:
-//! - Enemies die together: damage from one that falls early still counts.
+//! - Enemies in a stage die together: damage from one that falls early
+//!   still counts, and damage past a stage's HP carries into the next.
 //! - Debuffs on the player (Weak, Frail) and on enemies are not modelled,
 //!   except Vulnerable the pattern puts on the player.
 //! - Potions, and cards the simulator can't read.
 
 use crate::analysis::sim::DeckSim;
-use crate::analysis::threats::{Scaling, lineup_incoming, lineup_plans};
+use crate::analysis::threats::{Scaling, lineup_incoming, lineup_statuses, lineup_waves};
 use crate::catalog::{Catalog, Encounter};
+use crate::playbook::SimAssumptions;
 use crate::run::RunState;
 
 /// Player turns played out before giving up on a kill.
@@ -58,15 +64,42 @@ pub enum Split {
     NeedFrom(u32),
 }
 
-/// What the deck is up against: the enemies' expected damage per enemy
-/// turn, their combined HP, and a blow after death, if any.
+/// Enemies that fight together: their expected damage and Status cards
+/// per enemy turn from when they arrive, and their combined HP.
+#[derive(Clone, Copy, Debug)]
+pub struct Stage<'a> {
+    pub incoming: &'a [f32],
+    /// Unplayable cards they add to the deck on each enemy turn (expected).
+    pub statuses: &'a [f32],
+    pub hp: u32,
+}
+
+/// What the deck is up against.
 #[derive(Clone, Copy, Debug)]
 pub struct Foe<'a> {
-    pub incoming: &'a [f32],
-    pub hp: u32,
+    /// In order: each stage arrives once the one before has fallen.
+    pub stages: &'a [Stage<'a>],
     /// Damage the enemies still deal at the end of the player's turn after
     /// the kill (Waterfall Giant's Steam Eruption), at least this much.
     pub blast: Option<f32>,
+    /// The deck's size before any Status cards: those dilute every later
+    /// draw, so the deck's damage and block shrink by `deck / (deck + added)`.
+    pub deck: f32,
+}
+
+impl Foe<'_> {
+    fn hp(&self) -> u32 {
+        self.stages.iter().map(|s| s.hp).sum()
+    }
+}
+
+/// Monsters summoned mid-fight, for the explanation.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Join {
+    pub name: String,
+    pub count: u32,
+    /// The power that summons them.
+    pub power: String,
 }
 
 /// One way to play the fight out.
@@ -75,6 +108,8 @@ pub struct Line {
     pub split: Split,
     /// The turn a blow after death lands (the turn after the kill).
     pub blast_turn: Option<u32>,
+    /// Unplayable cards the enemies had added by the end.
+    pub junk: f32,
     /// Player turn the last enemy falls on.
     pub kill_turn: Option<u32>,
     /// HP lost by then (or by `MAX_TURNS`).
@@ -89,6 +124,11 @@ pub struct Outlook {
     /// All-out attack, for comparison.
     pub race: Line,
     pub hp: i32,
+    /// Unplayable cards counted per enemy Status move (an assumption; 0
+    /// when the enemies have none).
+    pub status_cards: u32,
+    /// Monsters summoned once others die, in the order they join.
+    pub joins: Vec<Join>,
 }
 
 /// Plays out one plan.
@@ -103,42 +143,67 @@ fn play(sim: &DeckSim, foe: Foe, split: Split) -> Line {
             Split::NeedFrom(_) => 0.0,
         }
     };
+    let Some(first) = foe.stages.first() else {
+        return Line { split, blast_turn: None, junk: 0.0, kill_turn: None, hp_loss: 0 };
+    };
     let mut dealt = 0.0f32;
     let mut lost = 0.0f32;
+    let mut junk = 0.0f32;
+    // The stage being fought, the enemy turn it arrived on, and the damage
+    // that clears it and every stage before.
+    let (mut stage, mut since, mut clears) = (0usize, 0usize, first.hp as f32);
+    let incoming = |stage: usize, t: usize| foe.stages[stage].incoming.get(t).copied().unwrap_or(0.0);
+    let statuses = |stage: usize, t: usize| foe.stages[stage].statuses.get(t).copied().unwrap_or(0.0);
+    // Status cards thin out the draws: output scales with the share of the
+    // deck that's still playable (a hand-limited deck loses about that much).
+    let thinned = |junk: f32| if foe.deck > 0.0 { foe.deck / (foe.deck + junk) } else { 1.0 };
     for t in 0..MAX_TURNS {
         let out = output(t);
-        let (attack, block) = (out.damage.mean, out.block.mean);
-        let coming = foe.incoming.get(t).copied().unwrap_or(0.0);
-        let share = share_for(coming, block);
+        let keep = thinned(junk);
+        let (attack, block) = (out.damage.mean * keep, out.block.mean * keep);
+        let share = share_for(incoming(stage, t - since), block);
         dealt += attack * (1.0 - share);
-        if dealt >= foe.hp as f32 {
+        while dealt >= clears && stage + 1 < foe.stages.len() {
+            stage += 1;
+            since = t;
+            clears += foe.stages[stage].hp as f32;
+        }
+        if dealt >= clears {
             // A blow after death: one more hit at the end of the next turn,
             // with that turn's block (there's nothing left to attack, but
             // the plan still splits the same way).
             let blast_turn = foe.blast.map(|floor| {
-                let blast = floor.max(foe.incoming.get(t + 1).copied().unwrap_or(0.0));
-                let block = output(t + 1).block.mean;
+                let blast = floor.max(incoming(stage, t + 1 - since));
+                let block = output(t + 1).block.mean * keep;
                 lost += (blast - block * share_for(blast, block)).max(0.0);
                 t as u32 + 2
             });
-            return Line { split, blast_turn, kill_turn: Some(t as u32 + 1), hp_loss: lost.round() as u32 };
+            return Line { split, blast_turn, junk, kill_turn: Some(t as u32 + 1), hp_loss: lost.round() as u32 };
         }
-        lost += (coming - block * share).max(0.0);
+        // A stage that arrived this turn takes its first enemy turn now.
+        lost += (incoming(stage, t - since) - block * share).max(0.0);
+        junk += statuses(stage, t - since);
     }
-    Line { split, blast_turn: None, kill_turn: None, hp_loss: lost.round() as u32 }
+    Line { split, blast_turn: None, junk, kill_turn: None, hp_loss: lost.round() as u32 }
 }
 
 /// How a fight against `enemy_hp` total HP dealing `incoming` expected
 /// damage per enemy turn is likely to go for a deck at `hp`. `None` when
 /// the simulator has nothing to go on (no deck).
 pub fn outlook(sim: &DeckSim, foe: Foe, hp: i32) -> Option<Outlook> {
-    if sim.turns.is_empty() || foe.hp == 0 {
+    if sim.turns.is_empty() || foe.hp() == 0 {
         return None;
     }
     let race = play(sim, foe, Split::Share(0.0));
     // Thresholds for blocking only the big turns: the distinct incoming
     // amounts of the first turns, so each plan blocks one more kind of turn.
-    let mut big: Vec<u32> = foe.incoming.iter().take(8).map(|d| d.round() as u32).filter(|d| *d > 0).collect();
+    let mut big: Vec<u32> = foe
+        .stages
+        .iter()
+        .flat_map(|s| s.incoming.iter().take(8))
+        .map(|d| d.round() as u32)
+        .filter(|d| *d > 0)
+        .collect();
     big.sort_unstable();
     big.dedup();
     let splits = [Split::Share(0.25), Split::Share(0.5), Split::Share(0.75), Split::Need]
@@ -154,24 +219,55 @@ pub fn outlook(sim: &DeckSim, foe: Foe, hp: i32) -> Option<Outlook> {
         Some(_) if best.hp_loss as f32 >= hp as f32 * SAFE_SHARE => Verdict::Tight,
         Some(_) => Verdict::OnTrack,
     };
-    Some(Outlook { verdict, best, race, hp })
+    Some(Outlook { verdict, best, race, hp, status_cards: 0, joins: Vec::new() })
 }
 
 /// The outlook for the run's deck and HP against an encounter's most
 /// common lineup, following each monster's move pattern.
-pub fn for_encounter(sim: &DeckSim, enc: &Encounter, catalog: &Catalog, state: &RunState) -> Option<Outlook> {
+pub fn for_encounter(
+    sim: &DeckSim,
+    enc: &Encounter,
+    catalog: &Catalog,
+    state: &RunState,
+    assumptions: &SimAssumptions,
+) -> Option<Outlook> {
     let scaling = Scaling::for_run(state, catalog);
-    let (plans, enemy_hp) = lineup_plans(enc, catalog, scaling, MAX_TURNS);
-    let incoming: Vec<f32> = lineup_incoming(&plans, MAX_TURNS).into_iter().map(|(_, expected, _)| expected).collect();
-    // The blast's size grows over the fight and the data gives only its
-    // starting value, so it counts as at least that, and at least the turn
-    // it would otherwise have had.
-    let blast = plans
+    let waves = lineup_waves(enc, catalog, scaling, MAX_TURNS);
+    let per = assumptions.status_cards as f32;
+    let series: Vec<(Vec<f32>, Vec<f32>)> = waves
         .iter()
+        .map(|w| {
+            let incoming = lineup_incoming(&w.plans, MAX_TURNS).into_iter().map(|(_, expected, _)| expected).collect();
+            let statuses = lineup_statuses(&w.plans, MAX_TURNS).into_iter().map(|n| n * per).collect();
+            (incoming, statuses)
+        })
+        .collect();
+    let stages: Vec<Stage> =
+        waves.iter().zip(&series).map(|(w, (incoming, statuses))| Stage { incoming, statuses, hp: w.hp }).collect();
+    // The blast follows the last kill. Its size grows over the fight and
+    // the data gives only its starting value, so it counts as at least
+    // that, and at least the turn it would otherwise have had.
+    let blast = waves
+        .last()
+        .into_iter()
+        .flat_map(|w| &w.plans)
         .filter_map(|p| catalog.monsters.get(&p.monster)?.death_blow.as_ref())
         .map(|b| b.amount.unwrap_or(0) as f32)
         .reduce(f32::max);
-    outlook(sim, Foe { incoming: &incoming, hp: enemy_hp, blast }, state.hp)
+    let foe = Foe { stages: &stages, blast, deck: state.deck.len() as f32 };
+    let any = series.iter().any(|(_, s)| s.iter().any(|n| *n > 0.0));
+    let joins = waves
+        .iter()
+        .filter_map(|w| {
+            let power = w.summoned_by.clone()?;
+            w.plans.first().map(|p| Join { name: p.name.clone(), count: p.count, power })
+        })
+        .collect();
+    outlook(sim, foe, state.hp).map(|o| Outlook {
+        status_cards: if any { assumptions.status_cards } else { 0 },
+        joins,
+        ..o
+    })
 }
 
 #[cfg(test)]
@@ -184,16 +280,48 @@ mod tests {
         DeckSim { turns: vec![TurnOutput { damage: s(attack), block: s(block) }; 5], ..Default::default() }
     }
 
-    fn foe(incoming: &[f32], hp: u32, blast: Option<f32>) -> Foe<'_> {
-        Foe { incoming, hp, blast }
+    fn stage(incoming: &[f32], hp: u32) -> [Stage<'_>; 1] {
+        [Stage { incoming, statuses: &[], hp }]
+    }
+
+    fn foe<'a>(stages: &'a [Stage<'a>], blast: Option<f32>) -> Foe<'a> {
+        Foe { stages, blast, deck: 10.0 }
+    }
+
+    #[test]
+    fn summoned_monsters_fight_after_the_first_falls() {
+        // 20 a turn: the first 40 HP fall on turn 2; the summons arrive
+        // stunned on that enemy turn, then hit 15 a turn until their 60 HP
+        // fall on turn 5.
+        let mut summoned = [15.0f32; 20];
+        summoned[0] = 0.0;
+        let stages = [
+            Stage { incoming: &[5.0; 20], statuses: &[], hp: 40 },
+            Stage { incoming: &summoned, statuses: &[], hp: 60 },
+        ];
+        let o = outlook(&sim(20.0, 0.0), foe(&stages, None), 80).unwrap();
+        assert_eq!(o.race.kill_turn, Some(5));
+        assert_eq!(o.race.hp_loss, 5 + 15 + 15);
+    }
+
+    #[test]
+    fn status_cards_slow_the_deck_down() {
+        // Three unplayable cards a turn into a ten-card deck.
+        let statuses = [3.0f32; 20];
+        let clean = outlook(&sim(20.0, 0.0), foe(&stage(&[5.0; 20], 120), None), 60).unwrap();
+        let junked = [Stage { incoming: &[5.0; 20], statuses: &statuses, hp: 120 }];
+        let slowed = outlook(&sim(20.0, 0.0), foe(&junked, None), 60).unwrap();
+        assert_eq!(clean.race.kill_turn, Some(6));
+        assert!(slowed.race.kill_turn.unwrap_or(99) > 8, "{:?}", slowed.race);
+        assert!(slowed.race.junk > 20.0);
     }
 
     #[test]
     fn a_blow_after_death_costs_one_more_turn() {
         // Killed on turn 3, it still blasts at the end of turn 4: the fight
         // costs what killing it a turn later would, unless it dies sooner.
-        let plain = outlook(&sim(20.0, 0.0), foe(&[10.0; 20], 50, None), 60).unwrap();
-        let blast = outlook(&sim(20.0, 0.0), foe(&[10.0; 20], 50, Some(25.0)), 60).unwrap();
+        let plain = outlook(&sim(20.0, 0.0), foe(&stage(&[10.0; 20], 50), None), 60).unwrap();
+        let blast = outlook(&sim(20.0, 0.0), foe(&stage(&[10.0; 20], 50), Some(25.0)), 60).unwrap();
         assert_eq!(plain.race.hp_loss, 20);
         assert_eq!(blast.race.kill_turn, Some(3));
         assert_eq!(blast.race.blast_turn, Some(4));
@@ -203,7 +331,7 @@ mod tests {
     #[test]
     fn a_fast_kill_takes_few_enemy_turns() {
         // 20 a turn into 50 HP: dead on turn 3, after two enemy turns of 10.
-        let o = outlook(&sim(20.0, 10.0), foe(&[10.0; 20], 50, None), 60).unwrap();
+        let o = outlook(&sim(20.0, 10.0), foe(&stage(&[10.0; 20], 50), None), 60).unwrap();
         assert_eq!(o.race.kill_turn, Some(3));
         assert_eq!(o.race.hp_loss, 20);
         assert_eq!(o.verdict, Verdict::OnTrack);
@@ -211,13 +339,13 @@ mod tests {
 
     #[test]
     fn blocking_helps_against_big_hits() {
-        let o = outlook(&sim(10.0, 40.0), foe(&[20.0; 20], 100, None), 80).unwrap();
+        let o = outlook(&sim(10.0, 40.0), foe(&stage(&[20.0; 20], 100), None), 80).unwrap();
         assert!(o.best.hp_loss < o.race.hp_loss);
     }
 
     #[test]
     fn hopeless_fights_are_at_risk() {
-        let o = outlook(&sim(1.0, 1.0), foe(&[30.0; 20], 500, None), 40).unwrap();
+        let o = outlook(&sim(1.0, 1.0), foe(&stage(&[30.0; 20], 500), None), 40).unwrap();
         assert_eq!(o.verdict, Verdict::AtRisk);
     }
 }

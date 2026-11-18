@@ -66,7 +66,9 @@ kit, so old runs replay even after a data update.
   player's Vulnerable forward while the order is known.
 - `survival`: whether a deck is on track against a fight. It plays the fight
   out on the simulator's average damage and block against the lineup's
-  expected damage per turn, trying several attack/block splits.
+  expected damage per turn, trying several attack/block splits. Status cards
+  the enemies add thin the deck's output, and monsters an on-death power
+  summons (`threats::lineup_waves`) fight as a later stage.
 - `events`: run `needs` (removal, heal, upgrade…), and a `watchlist` of
   act events ranked by how well they meet those needs.
 - `advice`: act targets, boss gaps, area damage and removable curses (run-specific only).

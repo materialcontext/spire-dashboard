@@ -6,6 +6,8 @@
 //!
 //! `--sim` runs the deck simulator on every starter deck instead.
 //! `--mechanics` shows what the simulator reads from every power and relic.
+//! `--outlook` plays every starter deck against every elite (the survival
+//! check), next to the community's outcomes.
 
 use std::collections::BTreeMap;
 
@@ -19,6 +21,10 @@ fn main() {
     let pb = spire_data::bundled_playbook();
     if std::env::args().any(|a| a == "--sim") {
         starter_sims(&cat, &pb);
+        return;
+    }
+    if std::env::args().any(|a| a == "--outlook") {
+        starter_outlooks(&cat, &pb);
         return;
     }
     if std::env::args().any(|a| a == "--mechanics") {
@@ -94,6 +100,41 @@ fn starter_sims(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
             sim.stranded_energy,
             sim.resources,
         );
+    }
+}
+
+fn starter_outlooks(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
+    use spire_core::analysis::{sim::simulate, survival};
+    use spire_core::run::{RunEvent, RunState, apply};
+    let mut elites: Vec<_> =
+        cat.encounters.values().filter(|e| e.room == spire_core::catalog::RoomType::Elite).collect();
+    elites.sort_by_key(|e| (e.act.as_ref().and_then(|a| cat.acts.get(a)).map(|a| a.index), e.name.clone()));
+    for id in cat.characters.keys() {
+        let Some(start) = RunEvent::start(cat, id, 0) else { continue };
+        let state = apply(RunState::default(), &start);
+        let sim = simulate(&state, cat, &pb.simulation);
+        println!("== {id} ({} HP, {} cards)", state.hp, state.deck.len());
+        for e in &elites {
+            let Some(o) = survival::for_encounter(&sim, e, cat, &state, &pb.simulation) else { continue };
+            let community = e.stats.as_ref().map_or(String::new(), |s| {
+                format!(
+                    "community {:.1} turns, {:.0} dmg, {:.0}% end the run",
+                    s.avg_turns,
+                    s.avg_damage_taken,
+                    s.death_rate() * 100.0
+                )
+            });
+            let joins: Vec<String> = o.joins.iter().map(|j| format!("+{}x {}", j.count, j.name)).collect();
+            println!(
+                "  {:<22} {:<8} kill {:>2?} lose {:>3}  junk {:>4.1} {:<16} | {community}",
+                e.name,
+                o.verdict.label(),
+                o.best.kill_turn,
+                o.best.hp_loss,
+                o.best.junk,
+                joins.join(" "),
+            );
+        }
     }
 }
 

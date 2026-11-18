@@ -150,6 +150,21 @@ pub fn power_words(id: &str) -> String {
 
 /// Walks a monster's pattern for up to `horizon` turns.
 pub fn plan(monster: &Monster, deadly: bool, vulnerable_pct: u32, horizon: usize) -> Plan {
+    walk(monster, None, deadly, vulnerable_pct, horizon)
+}
+
+/// The move id the game gives monsters that join mid-fight: they spend
+/// their first turn on it (a Stun) before their usual pattern.
+pub const SPAWNED_MOVE: &str = "SPAWNED";
+
+/// Like `plan`, for a monster summoned mid-fight: it starts on its
+/// `SPAWNED` move when it has one.
+pub fn plan_spawned(monster: &Monster, deadly: bool, vulnerable_pct: u32, horizon: usize) -> Plan {
+    let start = monster.move_by_id(SPAWNED_MOVE).map(|m| m.id.as_str());
+    walk(monster, start, deadly, vulnerable_pct, horizon)
+}
+
+fn walk(monster: &Monster, start: Option<&str>, deadly: bool, vulnerable_pct: u32, horizon: usize) -> Plan {
     let mut w = Walker { monster, deadly, vulnerable_pct, strength: 0, vulnerable_left: 0 };
     let Some(pattern) = monster.pattern.as_ref().filter(|p| !p.states.is_empty()) else {
         return unknown(&w, horizon);
@@ -158,7 +173,7 @@ pub fn plan(monster: &Monster, deadly: bool, vulnerable_pct: u32, horizon: usize
     let move_state = |move_id: &str| {
         pattern.states.iter().find(|s| s.kind == StateKind::Move && s.move_id.as_deref() == Some(move_id))
     };
-    let mut state: Option<&PatternState> = match &pattern.initial {
+    let mut state: Option<&PatternState> = match start.or(pattern.initial.as_deref()) {
         Some(m) => move_state(m),
         None => pattern.states.iter().find(|s| s.kind != StateKind::Move && !s.branches.is_empty()),
     };
@@ -325,6 +340,7 @@ mod tests {
             hp_max_asc: None,
             pattern: Some(pattern),
             death_blow: None,
+            death_summons: None,
         }
     }
 
