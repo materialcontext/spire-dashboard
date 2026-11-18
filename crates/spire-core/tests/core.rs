@@ -876,3 +876,21 @@ fn glass_decays_each_turn() {
     assert_eq!(by_turn, vec![4.0, 3.0, 2.0, 1.0, 0.0]);
     assert_eq!(sim.relics_simulated, vec!["CORE".to_string()]);
 }
+
+#[test]
+fn vigor_counts_on_every_hit_of_the_attack_that_spends_it() {
+    let mut cat = catalog();
+    let mut twin = cat.cards[&CardId::new("STRIKE")].clone();
+    twin.id = CardId::new("TWIN");
+    twin.damage = Some(2);
+    twin.hits = Some(3);
+    twin.keywords = vec!["Innate".into()];
+    twin.tags = vec![];
+    cat.cards.insert(twin.id.clone(), twin);
+    let beko = with_relic(&mut cat, "BEKO", "At the start of each combat, gain 8 Vigor.");
+    let mut s = sim_state(&cat, &[("TWIN", false)]);
+    s.relics = vec![beko];
+    let sim = sim::simulate(&s, &cat, &quick());
+    // (2 + 8) x 3 on turn 1; Vigor is spent, so 2 x 3 afterwards.
+    assert_eq!((sim.turns[0].damage.mean, sim.turns[1].damage.mean), (30.0, 6.0));
+}

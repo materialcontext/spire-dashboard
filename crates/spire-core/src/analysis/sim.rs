@@ -636,13 +636,14 @@ impl<'a> Fight<'a> {
         if e.damage > 0 {
             // Per hit, in the game's order (Spire Codex, combat mechanics):
             // printed damage plus flat bonuses (Strength, "deals N additional
-            // damage", and Vigor and Aim on the first hit), then multipliers,
-            // rounded down once per hit.
+            // damage", Vigor, and Aim on shots), then multipliers, rounded
+            // down once per hit. Vigor and Aim are spent by the attack but
+            // count on every one of its hits.
             let extra: i32 = self.mods.extra_damage.iter().filter(|(f, _)| matches(f, p)).map(|(_, n)| n).sum();
             let hits = (e.hits + i32::from(self.mods.extra_hit && e.hits > 1)) * times;
-            let mut first_bonus = std::mem::take(&mut self.vigor);
+            let mut bonus = std::mem::take(&mut self.vigor);
             if p.shoots {
-                first_bonus += self.aim * p.aim_multiplier;
+                bonus += self.aim * p.aim_multiplier;
                 self.aim = 0;
             }
             let mut mult = 1.0f32;
@@ -656,15 +657,16 @@ impl<'a> Fight<'a> {
                 self.attacked_this_turn = true;
             }
             let hit = |bonus: i32| ((e.damage + self.strength + extra + bonus).max(0) as f32 * mult).floor();
-            self.log.damage += hit(first_bonus) + hit(0) * (hits - 1).max(0) as f32;
+            self.log.damage += hit(bonus) * hits as f32;
         }
         if e.osty > 0 {
             self.log.damage += ((e.osty + self.mods.extra_osty) * times) as f32;
         }
         if e.block > 0 {
             let extra: i32 = self.mods.extra_block.iter().filter(|(f, _)| matches(f, p)).map(|(_, n)| n).sum();
-            self.log.block += ((e.block + self.dexterity + extra).max(0) * times + self.stretch) as f32;
-            self.stretch = 0;
+            // Stretch is spent by the card but adds to each of its Block gains.
+            let stretch = std::mem::take(&mut self.stretch);
+            self.log.block += ((e.block + self.dexterity + extra + stretch).max(0) * times) as f32;
             self.fire(|w| *w == When::OnGainBlock);
         }
         self.vulnerable += e.vulnerable * times;
