@@ -962,6 +962,18 @@ mod follow_tests {
     }
 
     #[test]
+    fn follows_a_live_run_save() {
+        let (mut app, ctx) = app();
+        let live = include_str!("../../spire-data/tests/fixtures/in_progress.save");
+        let link = Link { in_progress: true, act_index: Some(0), ..Link::default() };
+        app.sync_game(Update::Run { link: Box::new(link), json: Some(live.to_string()) }, &ctx);
+        assert_eq!(app.ui.follow.problem, None);
+        assert!(app.run.source.is_some(), "adopted the game's run");
+        assert_eq!((app.state.hp, app.state.gold), (61, 99));
+        assert!(!app.run.ended());
+    }
+
+    #[test]
     fn says_why_it_cannot_follow() {
         let (mut app, ctx) = app();
         // A save the converter can't read: the reason shows, once.

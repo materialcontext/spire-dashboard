@@ -1,8 +1,11 @@
 //! Monitored runs: follow the game through the companion mod's link file.
 //!
 //! While the player has "Follow the game" on, a background thread checks
-//! twice a second whether the link file or the run save it names has
-//! changed (two `stat` calls), and only then reads them and sends them over.
+//! twice a second whether the link file or any profile's run save has
+//! changed (a `stat` each; the profile folders are listed again every few
+//! seconds), and only then reads them and sends them over. Watching every
+//! profile, not just the one picked, notices when the game starts writing
+//! another (another Steam account, or a save-path mod).
 //! The UI is woken only when something arrived, so following adds no idle
 //! frames. Turning it off stops the thread.
 
@@ -17,6 +20,9 @@ use spire_data::game_link::{self, Link};
 
 /// Seconds between checks.
 const EVERY: Duration = Duration::from_millis(500);
+
+/// Checks between listings of the profile folders.
+const RELIST: u32 = 20;
 
 /// What the watcher found.
 pub enum Update {
@@ -44,11 +50,20 @@ impl Watcher {
         std::thread::Builder::new()
             .name("follow-game".into())
             .spawn(move || {
-                let mut seen: (Option<SystemTime>, Option<SystemTime>) = (None, None);
+                let mut seen: (Option<SystemTime>, Vec<Option<SystemTime>>) = (None, Vec::new());
                 let mut first = true;
-                let mut run_save: Option<PathBuf> = None;
+                let mut run_saves: Vec<PathBuf> = Vec::new();
+                let mut tick = 0u32;
                 while !flag.load(Ordering::Relaxed) {
-                    let now = (game_link::modified(&path), run_save.as_deref().and_then(game_link::modified));
+                    if tick.is_multiple_of(RELIST) {
+                        run_saves = game.as_deref().map_or_else(Vec::new, game_link::save_dirs);
+                        run_saves.iter_mut().for_each(|d| d.push(game_link::RUN_SAVE));
+                    }
+                    tick = tick.wrapping_add(1);
+                    let now = (
+                        game_link::modified(&path),
+                        run_saves.iter().map(|p| game_link::modified(p)).collect::<Vec<_>>(),
+                    );
                     if first || now != seen {
                         first = false;
                         seen = now;
@@ -58,7 +73,6 @@ impl Watcher {
                                 if let Some(game) = &game {
                                     link.locate(game);
                                 }
-                                run_save = link.run_save.clone();
                                 let json =
                                     if link.in_progress { link.read_run_save() } else { link.read_finished(None) };
                                 Update::Run { link: Box::new(link), json }
