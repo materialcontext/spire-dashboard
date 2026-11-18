@@ -65,6 +65,19 @@ mod lenient {
         }
     }
 
+    /// The first string inside `v` that starts with `prefix` (`CHARACTER.`).
+    pub fn with_prefix(v: &Value, prefix: &str) -> Option<String> {
+        match v {
+            Value::String(s) if s.starts_with(prefix) => Some(s.clone()),
+            Value::Object(m) => match pair(m) {
+                Some(id) if id.starts_with(prefix) => Some(id),
+                _ => m.values().find_map(|x| with_prefix(x, prefix)),
+            },
+            Value::Array(a) => a.iter().find_map(|x| with_prefix(x, prefix)),
+            _ => None,
+        }
+    }
+
     fn deep(v: &Value) -> Option<String> {
         match v {
             Value::String(s) if looks_like_id(s) => Some(s.clone()),
@@ -283,7 +296,8 @@ pub enum Unreadable {
     /// JSON, but not shaped like a run (the parser's message).
     Shape(String),
     NoPlayer,
-    NoCharacter,
+    /// No character id anywhere in the player; its fields, to see where it went.
+    NoCharacter(Vec<String>),
     /// A character the catalog doesn't know.
     UnknownCharacter(String),
 }
@@ -294,7 +308,10 @@ impl std::fmt::Display for Unreadable {
             Unreadable::NotJson => write!(f, "it isn't plain JSON (the game may compress or encode it)"),
             Unreadable::Shape(e) => write!(f, "it isn't shaped like a run record ({e})"),
             Unreadable::NoPlayer => write!(f, "it has no players"),
-            Unreadable::NoCharacter => write!(f, "its player has no character"),
+            Unreadable::NoCharacter(keys) if keys.is_empty() => write!(f, "its player has no character"),
+            Unreadable::NoCharacter(keys) => {
+                write!(f, "its player has no character (the player's fields: {})", keys.join(", "))
+            }
             Unreadable::UnknownCharacter(c) => write!(f, "the game data doesn't know its character, {c}"),
         }
     }
@@ -319,7 +336,14 @@ pub fn read(json: &str, catalog: &Catalog, hint: &ActHint) -> Result<GameRun, Un
     let value: serde_json::Value = serde_json::from_str(json).map_err(|_| Unreadable::NotJson)?;
     let run = WRun::deserialize(&value).map_err(|e| Unreadable::Shape(shape_error(&value, e)))?;
     let player = run.players.first().ok_or(Unreadable::NoPlayer)?;
-    let character = CharacterId::new(entry(player.character.as_deref().ok_or(Unreadable::NoCharacter)?));
+    // Finished runs keep it in `character`; otherwise any character id in
+    // the player (the live save may name the field differently).
+    let first = &value["players"][0];
+    let character =
+        player.character.clone().or_else(|| lenient::with_prefix(first, "CHARACTER.")).ok_or_else(|| {
+            Unreadable::NoCharacter(first.as_object().map(|m| m.keys().cloned().collect()).unwrap_or_default())
+        })?;
+    let character = CharacterId::new(entry(&character));
     let start = RunEvent::start(catalog, &character, run.ascension)
         .ok_or_else(|| Unreadable::UnknownCharacter(character.to_string()))?;
     let key = format!("{}:{}", run.start_time.unwrap_or(0), run.seed.clone().unwrap_or_default());
@@ -549,6 +573,22 @@ mod tests {
         let objects = read(&v.to_string(), &cat, &ActHint::default()).expect("reads");
         assert_eq!(objects.events[1..], plain.events[1..]);
         assert_eq!(objects.floors, plain.floors);
+    }
+
+    #[test]
+    fn finds_the_character_under_another_name() {
+        let cat = catalog();
+        let json = include_str!("../tests/fixtures/finished.run");
+        let plain = read(json, &cat, &ActHint::default()).expect("reads");
+        let mut v: serde_json::Value = serde_json::from_str(json).unwrap();
+        let character = v["players"][0].as_object_mut().unwrap().remove("character").unwrap();
+        v["players"][0]["character_id"] = serde_json::json!({"model": character});
+        let renamed = read(&v.to_string(), &cat, &ActHint::default()).expect("reads");
+        assert_eq!(renamed.events, plain.events);
+        // None at all: the player's fields say where to look.
+        v["players"][0].as_object_mut().unwrap().remove("character_id");
+        let Err(why) = read(&v.to_string(), &cat, &ActHint::default()) else { panic!("should not read") };
+        assert!(why.to_string().contains("deck"), "{why}");
     }
 
     #[test]
