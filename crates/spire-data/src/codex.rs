@@ -570,6 +570,31 @@ fn map_orb(o: WOrb) -> Orb {
     }
 }
 
+/// Powers whose text says the holder deals damage once it's killed.
+fn death_blow_powers(powers: &[WPowerDef]) -> Vec<(String, String)> {
+    powers
+        .iter()
+        .map(|p| (p.id.clone(), strip_markup(&p.description)))
+        .filter(|(_, text)| {
+            let t = text.to_lowercase();
+            t.contains("when killed") && t.contains("deals damage")
+        })
+        .collect()
+}
+
+/// The monster's death blow, if any power it starts with or gains is one.
+fn death_blow(m: &Monster, blows: &[(String, String)]) -> Option<DeathBlow> {
+    let gained = m.innate_powers.iter().map(|p| (p.power.as_str(), p.amount)).chain(m.moves.iter().flat_map(|mv| {
+        mv.powers.iter().filter(|p| p.target == PowerTarget::Monster).map(|p| (p.power.as_str(), p.amount))
+    }));
+    for (power, amount) in gained {
+        if let Some((id, text)) = blows.iter().find(|(id, _)| id == power) {
+            return Some(DeathBlow { power: id.clone(), text: text.clone(), amount: Some(amount).filter(|a| *a > 0) });
+        }
+    }
+    None
+}
+
 fn map_monster(m: WMonster) -> Monster {
     Monster {
         id: MonsterId(m.id),
@@ -613,6 +638,7 @@ fn map_monster(m: WMonster) -> Monster {
         hp_min_asc: m.min_hp_ascension,
         hp_max_asc: m.max_hp_ascension,
         pattern: m.attack_pattern.map(map_pattern),
+        death_blow: None,
     }
 }
 
@@ -801,7 +827,18 @@ pub fn to_pack(
         })
         .collect();
 
-    let monsters = parse::<WMonster>(responses, "monsters")?.into_iter().map(map_monster).collect();
+    let blows = match responses.get("powers") {
+        Some(_) => death_blow_powers(&parse::<WPowerDef>(responses, "powers")?),
+        None => Vec::new(),
+    };
+    let monsters = parse::<WMonster>(responses, "monsters")?
+        .into_iter()
+        .map(map_monster)
+        .map(|mut m| {
+            m.death_blow = death_blow(&m, &blows);
+            m
+        })
+        .collect();
 
     // Act membership comes from the acts endpoint: its lists are ids, while
     // the encounter/event `act` fields are display strings.
@@ -1035,6 +1072,37 @@ mod tests {
         assert!(!card.vars.contains_key("odd"), "non-numeric vars are dropped");
         assert_eq!(card.star_cost, Some(2));
         assert_eq!((card.value("damage", false), card.value("damage", true)), (8, 12));
+    }
+
+    #[test]
+    fn finds_powers_that_strike_after_death() {
+        let powers = [
+            WPowerDef {
+                id: "STEAM_ERUPTION".into(),
+                description: "When killed, deals damage at the end of your next turn.".into(),
+            },
+            WPowerDef { id: "STRENGTH".into(), description: "Increases attack damage.".into() },
+        ];
+        let blows = death_blow_powers(&powers);
+        assert_eq!(blows.len(), 1);
+        let giant = Monster {
+            id: MonsterId::new("GIANT"),
+            name: "Giant".into(),
+            hp_min: 240,
+            hp_max: None,
+            moves: vec![MonsterMove {
+                id: "PRESSURIZE".into(),
+                powers: vec![MovePower { power: "STEAM_ERUPTION".into(), target: PowerTarget::Monster, amount: 15 }],
+                ..Default::default()
+            }],
+            innate_powers: vec![],
+            hp_min_asc: None,
+            hp_max_asc: None,
+            pattern: None,
+            death_blow: None,
+        };
+        let blow = death_blow(&giant, &blows).unwrap();
+        assert_eq!((blow.power.as_str(), blow.amount), ("STEAM_ERUPTION", Some(15)));
     }
 
     #[test]

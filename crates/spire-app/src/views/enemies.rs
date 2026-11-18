@@ -212,6 +212,7 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
                     name: m.name.clone(),
                     count: 1,
                     plan: pattern::plan(m, scaling.deadly, vulnerable, pattern::HORIZON),
+                    death_blow: m.death_blow.is_some(),
                 })
             })
             .collect();
@@ -248,6 +249,13 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
                 ui.label(RichText::new(hp).small().color(text_dim()));
             });
         });
+        if let Some(b) = &m.death_blow {
+            ui.label(
+                RichText::new(format!("{}: {}", crate::views::turns::power_name(&b.power), b.text))
+                    .small()
+                    .color(warn()),
+            );
+        }
         if !m.innate_powers.is_empty() {
             let powers: Vec<String> = m.innate_powers.iter().map(|p| format!("{} {}", p.power, p.amount)).collect();
             ui.label(RichText::new(format!("Starts with {}", powers.join(", "))).small().color(text_faint()));

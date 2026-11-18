@@ -58,10 +58,23 @@ pub enum Split {
     NeedFrom(u32),
 }
 
+/// What the deck is up against: the enemies' expected damage per enemy
+/// turn, their combined HP, and a blow after death, if any.
+#[derive(Clone, Copy, Debug)]
+pub struct Foe<'a> {
+    pub incoming: &'a [f32],
+    pub hp: u32,
+    /// Damage the enemies still deal at the end of the player's turn after
+    /// the kill (Waterfall Giant's Steam Eruption), at least this much.
+    pub blast: Option<f32>,
+}
+
 /// One way to play the fight out.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Line {
     pub split: Split,
+    /// The turn a blow after death lands (the turn after the kill).
+    pub blast_turn: Option<u32>,
     /// Player turn the last enemy falls on.
     pub kill_turn: Option<u32>,
     /// HP lost by then (or by `MAX_TURNS`).
@@ -79,47 +92,60 @@ pub struct Outlook {
 }
 
 /// Plays out one plan.
-fn play(sim: &DeckSim, incoming: &[f32], enemy_hp: u32, split: Split) -> Line {
-    let mut dealt = 0.0f32;
-    let mut lost = 0.0f32;
-    for t in 0..MAX_TURNS {
-        let out = sim.turns[t.min(sim.turns.len() - 1)];
-        let (attack, block) = (out.damage.mean, out.block.mean);
-        let coming = incoming.get(t).copied().unwrap_or(0.0);
+fn play(sim: &DeckSim, foe: Foe, split: Split) -> Line {
+    let output = |t: usize| sim.turns[t.min(sim.turns.len() - 1)];
+    let share_for = |coming: f32, block: f32| {
         let need = if block > 0.0 { (coming / block).min(1.0) } else { 0.0 };
-        let share = match split {
+        match split {
             Split::Share(s) => s,
             Split::Need => need,
             Split::NeedFrom(at) if coming >= at as f32 => need,
             Split::NeedFrom(_) => 0.0,
-        };
+        }
+    };
+    let mut dealt = 0.0f32;
+    let mut lost = 0.0f32;
+    for t in 0..MAX_TURNS {
+        let out = output(t);
+        let (attack, block) = (out.damage.mean, out.block.mean);
+        let coming = foe.incoming.get(t).copied().unwrap_or(0.0);
+        let share = share_for(coming, block);
         dealt += attack * (1.0 - share);
-        if dealt >= enemy_hp as f32 {
-            return Line { split, kill_turn: Some(t as u32 + 1), hp_loss: lost.round() as u32 };
+        if dealt >= foe.hp as f32 {
+            // A blow after death: one more hit at the end of the next turn,
+            // with that turn's block (there's nothing left to attack, but
+            // the plan still splits the same way).
+            let blast_turn = foe.blast.map(|floor| {
+                let blast = floor.max(foe.incoming.get(t + 1).copied().unwrap_or(0.0));
+                let block = output(t + 1).block.mean;
+                lost += (blast - block * share_for(blast, block)).max(0.0);
+                t as u32 + 2
+            });
+            return Line { split, blast_turn, kill_turn: Some(t as u32 + 1), hp_loss: lost.round() as u32 };
         }
         lost += (coming - block * share).max(0.0);
     }
-    Line { split, kill_turn: None, hp_loss: lost.round() as u32 }
+    Line { split, blast_turn: None, kill_turn: None, hp_loss: lost.round() as u32 }
 }
 
 /// How a fight against `enemy_hp` total HP dealing `incoming` expected
 /// damage per enemy turn is likely to go for a deck at `hp`. `None` when
 /// the simulator has nothing to go on (no deck).
-pub fn outlook(sim: &DeckSim, incoming: &[f32], enemy_hp: u32, hp: i32) -> Option<Outlook> {
-    if sim.turns.is_empty() || enemy_hp == 0 {
+pub fn outlook(sim: &DeckSim, foe: Foe, hp: i32) -> Option<Outlook> {
+    if sim.turns.is_empty() || foe.hp == 0 {
         return None;
     }
-    let race = play(sim, incoming, enemy_hp, Split::Share(0.0));
+    let race = play(sim, foe, Split::Share(0.0));
     // Thresholds for blocking only the big turns: the distinct incoming
     // amounts of the first turns, so each plan blocks one more kind of turn.
-    let mut big: Vec<u32> = incoming.iter().take(8).map(|d| d.round() as u32).filter(|d| *d > 0).collect();
+    let mut big: Vec<u32> = foe.incoming.iter().take(8).map(|d| d.round() as u32).filter(|d| *d > 0).collect();
     big.sort_unstable();
     big.dedup();
     let splits = [Split::Share(0.25), Split::Share(0.5), Split::Share(0.75), Split::Need]
         .into_iter()
         .chain(big.into_iter().map(Split::NeedFrom));
     let best = splits
-        .map(|s| play(sim, incoming, enemy_hp, s))
+        .map(|s| play(sim, foe, s))
         .chain(std::iter::once(race))
         .min_by_key(|l| (l.kill_turn.is_none(), l.hp_loss, l.kill_turn))?;
     let verdict = match best.kill_turn {
@@ -137,7 +163,15 @@ pub fn for_encounter(sim: &DeckSim, enc: &Encounter, catalog: &Catalog, state: &
     let scaling = Scaling::for_run(state, catalog);
     let (plans, enemy_hp) = lineup_plans(enc, catalog, scaling, MAX_TURNS);
     let incoming: Vec<f32> = lineup_incoming(&plans, MAX_TURNS).into_iter().map(|(_, expected, _)| expected).collect();
-    outlook(sim, &incoming, enemy_hp, state.hp)
+    // The blast's size grows over the fight and the data gives only its
+    // starting value, so it counts as at least that, and at least the turn
+    // it would otherwise have had.
+    let blast = plans
+        .iter()
+        .filter_map(|p| catalog.monsters.get(&p.monster)?.death_blow.as_ref())
+        .map(|b| b.amount.unwrap_or(0) as f32)
+        .reduce(f32::max);
+    outlook(sim, Foe { incoming: &incoming, hp: enemy_hp, blast }, state.hp)
 }
 
 #[cfg(test)]
@@ -150,10 +184,26 @@ mod tests {
         DeckSim { turns: vec![TurnOutput { damage: s(attack), block: s(block) }; 5], ..Default::default() }
     }
 
+    fn foe(incoming: &[f32], hp: u32, blast: Option<f32>) -> Foe<'_> {
+        Foe { incoming, hp, blast }
+    }
+
+    #[test]
+    fn a_blow_after_death_costs_one_more_turn() {
+        // Killed on turn 3, it still blasts at the end of turn 4: the fight
+        // costs what killing it a turn later would, unless it dies sooner.
+        let plain = outlook(&sim(20.0, 0.0), foe(&[10.0; 20], 50, None), 60).unwrap();
+        let blast = outlook(&sim(20.0, 0.0), foe(&[10.0; 20], 50, Some(25.0)), 60).unwrap();
+        assert_eq!(plain.race.hp_loss, 20);
+        assert_eq!(blast.race.kill_turn, Some(3));
+        assert_eq!(blast.race.blast_turn, Some(4));
+        assert_eq!(blast.race.hp_loss, 45);
+    }
+
     #[test]
     fn a_fast_kill_takes_few_enemy_turns() {
         // 20 a turn into 50 HP: dead on turn 3, after two enemy turns of 10.
-        let o = outlook(&sim(20.0, 10.0), &[10.0; 20], 50, 60).unwrap();
+        let o = outlook(&sim(20.0, 10.0), foe(&[10.0; 20], 50, None), 60).unwrap();
         assert_eq!(o.race.kill_turn, Some(3));
         assert_eq!(o.race.hp_loss, 20);
         assert_eq!(o.verdict, Verdict::OnTrack);
@@ -161,13 +211,13 @@ mod tests {
 
     #[test]
     fn blocking_helps_against_big_hits() {
-        let o = outlook(&sim(10.0, 40.0), &[20.0; 20], 100, 80).unwrap();
+        let o = outlook(&sim(10.0, 40.0), foe(&[20.0; 20], 100, None), 80).unwrap();
         assert!(o.best.hp_loss < o.race.hp_loss);
     }
 
     #[test]
     fn hopeless_fights_are_at_risk() {
-        let o = outlook(&sim(1.0, 1.0), &[30.0; 20], 500, 40).unwrap();
+        let o = outlook(&sim(1.0, 1.0), foe(&[30.0; 20], 500, None), 40).unwrap();
         assert_eq!(o.verdict, Verdict::AtRisk);
     }
 }

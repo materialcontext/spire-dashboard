@@ -654,6 +654,22 @@ pub struct Monster {
     /// How it picks moves, if known.
     #[serde(default)]
     pub pattern: Option<AttackPattern>,
+    /// It strikes once more after it dies (Waterfall Giant's Steam
+    /// Eruption: "When killed, deals damage at the end of your next turn").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub death_blow: Option<DeathBlow>,
+}
+
+/// A power that makes a monster deal damage after it's killed.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DeathBlow {
+    pub power: String,
+    /// The power's text, as the data source words it.
+    pub text: String,
+    /// The amount the data gives when the monster gains it (its starting
+    /// value; moves may add to it without the data saying how much).
+    #[serde(default)]
+    pub amount: Option<i32>,
 }
 
 impl Monster {

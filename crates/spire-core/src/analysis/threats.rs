@@ -114,6 +114,8 @@ pub struct MonsterPlan {
     pub name: String,
     pub count: u32,
     pub plan: pattern::Plan,
+    /// It still strikes at the end of the player's turn after it dies.
+    pub death_blow: bool,
 }
 
 /// The most common lineup's monsters, their turn plans for `turns` turns,
@@ -136,6 +138,7 @@ pub fn lineup_plans(enc: &Encounter, catalog: &Catalog, scaling: Scaling, turns:
                 name: m.name.clone(),
                 count,
                 plan: pattern::plan(m, scaling.deadly, vulnerable, turns),
+                death_blow: m.death_blow.is_some(),
             })
         })
         .collect();
