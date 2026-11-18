@@ -27,14 +27,12 @@ use crate::game_run::ActHint;
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct Link {
-    pub schema: u32,
     pub mod_version: String,
     pub game_version: Option<String>,
     pub in_progress: bool,
     pub profile_id: Option<i32>,
     pub save_dir: Option<PathBuf>,
     pub run_save: Option<PathBuf>,
-    pub run_save_modified: Option<i64>,
     pub history_dir: Option<PathBuf>,
     pub act_index: Option<u8>,
     pub act: Option<String>,

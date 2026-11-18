@@ -38,7 +38,6 @@ const WIN_ACCENT: Accent = Accent {
     base: [0, 120, 212, 255],
     light: [[0, 145, 248, 255], [76, 194, 255, 255], [153, 235, 255, 255]],
     dark: [[0, 103, 192, 255], [0, 62, 146, 255], [0, 26, 104, 255]],
-    multicolor: false,
 };
 
 /// Builds the System look for `native` in light or dark mode.
@@ -162,7 +161,6 @@ fn mac_defaults(light: bool) -> MacColors {
     if light {
         MacColors {
             window_background: [236, 236, 236, 255],
-            control_background: [255, 255, 255, 255],
             text_background: [255, 255, 255, 255],
             label: [0, 0, 0, 217],
             secondary_label: [0, 0, 0, 128],
@@ -177,7 +175,6 @@ fn mac_defaults(light: bool) -> MacColors {
     } else {
         MacColors {
             window_background: [50, 50, 50, 255],
-            control_background: [30, 30, 30, 255],
             text_background: [30, 30, 30, 255],
             label: [255, 255, 255, 217],
             secondary_label: [255, 255, 255, 140],

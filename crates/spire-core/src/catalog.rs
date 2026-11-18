@@ -637,10 +637,6 @@ impl MonsterMove {
         self.powers.iter().filter(|p| p.target == PowerTarget::Monster && p.power == "STRENGTH").map(|p| p.amount).sum()
     }
 
-    pub fn total_damage(&self) -> u32 {
-        self.total_damage_at(false)
-    }
-
     /// Damage × hits, using the ascension value when `deadly` and known.
     pub fn total_damage_at(&self, deadly: bool) -> u32 {
         self.per_hit_at(deadly).unwrap_or(0) * self.hits.unwrap_or(1).max(1)
@@ -1157,11 +1153,5 @@ impl Catalog {
             EventKind::Act => e.acts.is_empty() || e.acts.contains(act),
             EventKind::Ancient => false,
         })
-    }
-
-    /// Cards a character can find: their pool plus colorless.
-    pub fn character_pool<'a>(&'a self, character: &CharacterId) -> impl Iterator<Item = &'a Card> + 'a {
-        let color = character.as_str().to_lowercase();
-        self.cards.values().filter(move |c| c.color == color || c.color == "colorless")
     }
 }

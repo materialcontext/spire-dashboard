@@ -232,14 +232,6 @@ impl Store {
         runs
     }
 
-    /// Forgets the in-progress run (after archiving it).
-    pub fn clear_run(&self) -> Result<(), DataError> {
-        match fs::remove_file(self.path(RUN)) {
-            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.into()),
-            _ => Ok(()),
-        }
-    }
-
     /// A writer thread for this store's run file (see [`RunSaver`]).
     pub fn run_saver(&self) -> RunSaver {
         RunSaver::spawn(self.clone())

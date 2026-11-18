@@ -16,8 +16,6 @@ pub const HORIZON: usize = 12;
 pub struct MoveOption {
     pub name: String,
     pub intent: String,
-    /// Damage per hit, with the Strength it has built up so far.
-    pub per_hit: u32,
     pub hits: u32,
     /// Damage of the whole move, with Strength and the player's Vulnerable.
     pub damage: u32,
@@ -120,7 +118,6 @@ impl Walker<'_> {
         MoveOption {
             name: mv.name.clone(),
             intent: mv.intent.clone(),
-            per_hit,
             hits,
             damage,
             block: mv.block,

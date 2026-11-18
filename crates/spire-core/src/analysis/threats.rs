@@ -304,8 +304,6 @@ pub struct ThreatPreview {
     pub stats: Option<crate::catalog::EncounterStats>,
     /// The most common lineup, turn by turn.
     pub plans: Vec<MonsterPlan>,
-    /// Its combined HP.
-    pub lineup_hp: u32,
 }
 
 impl ThreatPreview {
@@ -326,7 +324,7 @@ pub fn preview(
 ) -> ThreatPreview {
     let plan = playbook.act(act_index);
     let profile = threat_profile(enc, catalog, playbook, scaling);
-    let (plans, lineup_hp) = lineup_plans(enc, catalog, scaling, pattern::HORIZON);
+    let (plans, _) = lineup_plans(enc, catalog, scaling, pattern::HORIZON);
     let checks = demands(&profile, enc.room, plan)
         .into_iter()
         .map(|d| DemandCheck {
@@ -346,7 +344,6 @@ pub fn preview(
         spawns: enc.spawns.iter().map(|m| catalog.monster_name(m)).collect(),
         stats: enc.stats.clone(),
         plans,
-        lineup_hp,
     }
 }
 
