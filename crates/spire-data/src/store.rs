@@ -31,6 +31,8 @@ pub struct Settings {
     pub match_system: bool,
     pub light_look: Option<String>,
     pub dark_look: Option<String>,
+    /// Monitored runs: follow the game through the companion mod.
+    pub follow_game: bool,
 }
 
 /// The app's data directory. All reads tolerate missing files.

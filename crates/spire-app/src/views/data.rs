@@ -153,6 +153,9 @@ pub fn contents(
             }
             ui.add_space(crate::style::space::s());
 
+            monitored(ui, settings, st, out);
+            ui.add_space(crate::style::space::s());
+
             ui.label(eyebrow("Game data"));
             hairline(ui);
             for (i, l) in v.catalog.layers.iter().enumerate() {
@@ -238,6 +241,52 @@ pub fn contents(
                 for m in st.messages.iter().rev() {
                     ui.label(RichText::new(m).small().color(text_dim()));
                 }
+            }
+        }
+    }
+}
+
+/// Monitored runs: follow the game through the companion mod.
+fn monitored(ui: &mut egui::Ui, settings: &Settings, st: &UiState, out: &mut Vec<Action>) {
+    ui.label(eyebrow("Monitored runs"));
+    hairline(ui);
+    let mut on = settings.follow_game;
+    if ui.checkbox(&mut on, "Follow the game").changed() {
+        out.push(Action::SetFollowGame(on));
+    }
+    ui.label(
+        RichText::new(
+            "Floors log themselves as you play. Needs the Spire Dashboard Link mod in the game's mods \
+             folder (see the README). It only reads.",
+        )
+        .small()
+        .color(text_faint()),
+    );
+    if !settings.follow_game {
+        return;
+    }
+    let f = &st.follow;
+    match &f.link {
+        None if f.no_link => {
+            ui.label(RichText::new("Waiting for the mod: start the game with mods enabled.").small().color(warn()));
+        }
+        None => {
+            ui.label(RichText::new("Looking for the game…").small().color(text_dim()));
+        }
+        Some(link) => {
+            let game = link.game_version.as_deref().unwrap_or("unknown version");
+            let line = format!("Connected: Link {} · game {game}", link.mod_version);
+            ui.label(RichText::new(line).small().color(good()));
+            let run = if link.in_progress { "A run is in progress." } else { "No run in progress." };
+            ui.label(RichText::new(run).small().color(text_dim()));
+            if link.modded_profile() {
+                ui.label(
+                    RichText::new(
+                        "With mods on, the game plays in its separate modded profile (its own unlocks and history).",
+                    )
+                    .small()
+                    .color(text_faint()),
+                );
             }
         }
     }

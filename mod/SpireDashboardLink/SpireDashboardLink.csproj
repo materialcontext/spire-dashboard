@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Spire Dashboard's companion mod for Slay the Spire 2. Read-only: it tells
+    the dashboard where the game keeps the run in progress and what the act's
+    boss is, by writing a small link file. It patches nothing.
+
+    Builds without the game: the game's sts2.dll is replaced at compile time
+    by ../Sts2Stub, and Godot comes from its public NuGet package. Neither is
+    shipped; the game supplies both at runtime. net8.0 loads in the game's
+    .NET 9 runtime.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Sts2Stub/Sts2Stub.csproj" Private="false" />
+    <PackageReference Include="GodotSharp" Version="4.5.1" ExcludeAssets="runtime" />
+  </ItemGroup>
+</Project>

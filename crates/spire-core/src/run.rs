@@ -1,7 +1,7 @@
 //! Run tracking, event-sourced.
 //!
-//! The player never has their game observed; they report what happened after
-//! each node. Each report is a [`RunEvent`] appended to a log, and the current
+//! The player reports what happened after each node, or (a monitored run)
+//! the app reads it from the game's own run save. Each report is a [`RunEvent`] appended to a log, and the current
 //! [`RunState`] is a pure fold over that log. That gives undo for free (drop
 //! the last event), makes saved runs replayable, and keeps every state
 //! transition in one function: [`apply`].
@@ -351,6 +351,10 @@ pub struct Run {
     /// The player's own notes, added when editing history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
+    /// The game run this one follows (monitored runs): its start time and
+    /// seed. `None` for runs logged by hand.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 /// One line of run history.

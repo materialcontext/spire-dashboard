@@ -29,6 +29,8 @@ pub struct ViewCtx<'a> {
     pub analytics: Option<&'a Analytics>,
     /// The deck simulation and fight outlooks, once built for this state.
     pub combat: Option<&'a Combat>,
+    /// The run follows the game (monitored): floors log themselves.
+    pub following: bool,
 }
 
 /// The live deck's simulation and how it fares against this act's elites
@@ -79,6 +81,8 @@ pub struct UiState {
     pub history: crate::views::history::HistoryBrowser,
     /// Analytics: list every card's draw odds, not just the top ones.
     pub show_all_odds: bool,
+    /// Monitored runs: what the companion mod reports.
+    pub follow: crate::monitor::Status,
 }
 
 pub struct Toast {
@@ -115,6 +119,8 @@ pub struct SpireApp {
     focused: bool,
     /// The native menu bar (macOS), when installed.
     menu: Option<crate::platform::menu::MenuBar>,
+    /// Following the game (monitored runs), while on.
+    watcher: Option<crate::monitor::Watcher>,
     draft: NodeDraft,
     ui: UiState,
     update_rx: Option<Receiver<Result<fetch::Fetched, String>>>,
@@ -156,6 +162,7 @@ impl SpireApp {
             changed: (0, 0.0),
             focused: true,
             menu: None,
+            watcher: None,
             ui: UiState {
                 threat_tab: spire_core::run::NodeKind::Monster,
                 show_data: false,
@@ -174,6 +181,7 @@ impl SpireApp {
                 end_encounter: None,
                 history: Default::default(),
                 show_all_odds: false,
+                follow: Default::default(),
             },
             update_rx: None,
         }
@@ -235,6 +243,10 @@ impl SpireApp {
     /// game's rules (Weary Traveler lowers it). Recorded as its own event, so
     /// Undo can take it back.
     fn ancient_heal(&mut self) {
+        // A followed run takes HP from the game itself.
+        if self.run.source.is_some() {
+            return;
+        }
         let Some(percent) = self.state.ancient_heal_due(&self.catalog.rules) else { return };
         let before = self.state.hp;
         self.run.push(RunEvent::AncientHeal { percent });
@@ -576,6 +588,26 @@ impl SpireApp {
                 }
                 Err(e) => self.note(format!("Could not save the edited run: {e}")),
             },
+            Action::SetFollowGame(on) => {
+                self.settings.follow_game = on;
+                if let Err(e) = self.store.save_settings(&self.settings) {
+                    self.note(format!("Could not save settings: {e}"));
+                }
+                self.watcher = if on { crate::monitor::Watcher::start(ctx.clone()) } else { None };
+                self.ui.follow = Default::default();
+                if !on && self.run.source.take().is_some() {
+                    // Keep the run, now logged by hand from here on.
+                    self.run_changed();
+                }
+            }
+            Action::FollowGameRun => {
+                if let Some(game) = self.ui.follow.conflict.take() {
+                    if self.state.started() && !self.run.ended() {
+                        self.finish(Outcome::Abandoned);
+                    }
+                    self.adopt(game);
+                }
+            }
             Action::ContextMenu(entries) => {
                 let (menu, actions) = crate::actions::MenuEntry::split(&entries);
                 let picked = self.menu.as_mut().and_then(|m| m.context_menu(&menu));
@@ -604,6 +636,7 @@ impl SpireApp {
             self.note(format!("Could not save the run: {e}"));
         }
         let ctx = ui.ctx().clone();
+        self.follow_game(&ctx);
         let mut actions = self.menu_actions(&ctx);
         actions.extend(self.keys(&ctx));
         if self.ui.toast.as_ref().is_some_and(|t| ctx.input(|i| i.time) > t.until) {
@@ -620,6 +653,7 @@ impl SpireApp {
                 generation: self.generation,
                 analytics: self.analytics.as_ref().filter(|(g, _)| *g == self.generation).map(|(_, a)| a),
                 combat: self.combat.as_ref(),
+                following: self.following(),
             };
             let (store, settings) = (&self.store, &self.settings);
             let mut page = |ui: &mut egui::Ui, st: &mut UiState, out: &mut Vec<Action>| {
@@ -639,6 +673,96 @@ impl SpireApp {
 }
 
 impl SpireApp {
+    /// The run follows the game right now.
+    fn following(&self) -> bool {
+        self.run.source.is_some() && self.watcher.is_some()
+    }
+
+    /// Monitored runs: start the watcher when following is on, and take in
+    /// what it found.
+    fn follow_game(&mut self, ctx: &egui::Context) {
+        if self.settings.follow_game && self.watcher.is_none() {
+            self.watcher = crate::monitor::Watcher::start(ctx.clone());
+        }
+        let Some(updates) = self.watcher.as_ref().map(|w| w.poll()) else { return };
+        for u in updates {
+            self.sync_game(u, ctx);
+        }
+    }
+
+    fn sync_game(&mut self, update: crate::monitor::Update, ctx: &egui::Context) {
+        use crate::monitor::Update;
+        let (link, json) = match update {
+            Update::NoLink => {
+                self.ui.follow.no_link = true;
+                self.ui.follow.link = None;
+                return;
+            }
+            Update::Run { link, json } => (link, json),
+        };
+        self.ui.follow.no_link = false;
+        let hint = link.hint();
+        self.ui.follow.link = Some(link);
+        let Some(game) = json.and_then(|j| spire_data::game_run::read(&j, &self.catalog, &hint)) else { return };
+        let key = format!("game:{}", game.key);
+        if self.ui.follow.filed.contains(&key) {
+            return;
+        }
+        if self.run.source.as_deref() == Some(key.as_str()) {
+            if self.run.events != game.events {
+                let before = self.state.floor;
+                self.run.events = game.events;
+                self.run_changed();
+                if self.state.floor > before {
+                    let now = ctx.input(|i| i.time);
+                    let text = format!("Floor {} logged from the game", self.state.floor);
+                    self.ui.toast = Some(Toast { text, since: now, until: now + TOAST_SECONDS });
+                    ctx.request_repaint_after(std::time::Duration::from_secs_f64(TOAST_SECONDS));
+                }
+            }
+            if game.ended {
+                self.file_followed(key);
+            }
+        } else if game.ended {
+            // A run that finished before we followed it: leave it be.
+        } else if !self.state.started() || self.run.ended() {
+            self.adopt(game);
+        } else {
+            self.ui.follow.conflict = Some(game);
+        }
+    }
+
+    /// Makes the game's run the app's run.
+    fn adopt(&mut self, game: spire_data::game_run::GameRun) {
+        let key = format!("game:{}", game.key);
+        let started_at = game.start_time.map_or_else(spire_data::now_rfc3339, spire_data::rfc3339);
+        self.run = Run { events: game.events, started_at: Some(started_at), source: Some(key), notes: None };
+        self.ui.follow.conflict = None;
+        self.run_changed();
+        self.note(format!("Following the game's run ({} floors so far).", game.floors));
+        if !game.unknown.is_empty() {
+            self.note(format!(
+                "{} things in this run aren't in the game data yet; update data in Settings.",
+                game.unknown.len()
+            ));
+        }
+        if game.ended {
+            self.file_followed(format!("game:{}", game.key));
+        }
+    }
+
+    /// The followed run has ended in the game: file it in history.
+    fn file_followed(&mut self, key: String) {
+        self.ui.follow.filed.push(key);
+        match self.store.archive_run(&self.run) {
+            Ok(_) => self.note("The game's run ended; saved to history."),
+            Err(e) => self.note(format!("Could not save the run to history: {e}")),
+        }
+        self.run = Run::default();
+        self.ui.history.invalidate();
+        self.run_changed();
+    }
+
     /// Builds what the open tab needs and nothing else: analytics for the
     /// live run, or the archived runs read from disk.
     fn prepare_tab(&mut self, ctx: &egui::Context) {
@@ -705,7 +829,8 @@ impl SpireApp {
                 }
             }
             let locked = self.state.act.is_none() || self.state.boss.is_none();
-            if self.ui.tab == crate::views::Tab::Run && self.state.started() && !locked {
+            let following = self.following();
+            if self.ui.tab == crate::views::Tab::Run && self.state.started() && !locked && !following {
                 for (n, key) in digits.iter().enumerate() {
                     if i.consume_key(Modifiers::NONE, *key) {
                         self.draft.kind = spire_core::run::NodeKind::ALL[n];
@@ -740,5 +865,84 @@ impl eframe::App for SpireApp {
 
     fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
         crate::style::clear_color(visuals)
+    }
+}
+
+#[cfg(test)]
+mod follow_tests {
+    use super::*;
+    use crate::monitor::Update;
+    use spire_data::game_link::Link;
+
+    const FINISHED: &str = include_str!("../../spire-data/tests/fixtures/finished.run");
+
+    /// The fixture run cut to `floors` floors of act 2, in progress.
+    fn in_progress(floors: usize) -> String {
+        let mut v: serde_json::Value = serde_json::from_str(FINISHED).unwrap();
+        let acts = v["map_point_history"].as_array().unwrap().clone();
+        let act2: Vec<_> = acts[1].as_array().unwrap().iter().take(floors).cloned().collect();
+        v["map_point_history"] = serde_json::json!([acts[0], act2]);
+        for k in ["win", "was_abandoned", "killed_by_encounter"] {
+            v.as_object_mut().unwrap().remove(k);
+        }
+        v.to_string()
+    }
+
+    fn app() -> (SpireApp, egui::Context) {
+        let dir = std::env::temp_dir().join(format!("spire-follow-{}-{}", std::process::id(), rand_suffix()));
+        (SpireApp::from_store(Store::at(dir)), egui::Context::default())
+    }
+
+    fn rand_suffix() -> u128 {
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+    }
+
+    fn update(json: String, in_progress: bool) -> Update {
+        Update::Run { link: Box::new(Link { in_progress, act_index: Some(1), ..Link::default() }), json: Some(json) }
+    }
+
+    #[test]
+    fn follows_the_game_from_adoption_to_history() {
+        let (mut app, ctx) = app();
+        app.sync_game(update(in_progress(3), true), &ctx);
+        assert!(app.run.source.is_some(), "adopted the game's run");
+        let floor = app.state.floor;
+        assert!(floor > 10);
+
+        // The game saves after the next floor: the run moves on.
+        app.sync_game(update(in_progress(4), true), &ctx);
+        assert_eq!(app.state.floor, floor + 1);
+        assert!(app.ui.toast.is_some());
+
+        // The run ends: filed in history, and the app is ready for the next.
+        app.sync_game(update(FINISHED.to_string(), false), &ctx);
+        assert!(!app.state.started());
+        assert_eq!(app.store.archived_runs().len(), 1);
+        // Seeing the same finished run again changes nothing.
+        app.sync_game(update(FINISHED.to_string(), false), &ctx);
+        assert_eq!(app.store.archived_runs().len(), 1);
+    }
+
+    #[test]
+    fn a_finished_run_seen_first_is_left_alone() {
+        let (mut app, ctx) = app();
+        app.sync_game(update(FINISHED.to_string(), false), &ctx);
+        assert!(!app.state.started());
+        assert!(app.store.archived_runs().is_empty());
+    }
+
+    #[test]
+    fn a_hand_logged_run_is_not_replaced_without_asking() {
+        let (mut app, ctx) = app();
+        let character = app.catalog.characters.keys().next().unwrap().clone();
+        app.apply(Action::NewRun { character, ascension: 0 }, &ctx);
+        let before = app.run.events.len();
+        app.sync_game(update(in_progress(2), true), &ctx);
+        assert_eq!(app.run.events.len(), before);
+        assert!(app.ui.follow.conflict.is_some());
+        // Following it files the hand-logged run and takes the game's.
+        app.apply(Action::FollowGameRun, &ctx);
+        assert!(app.run.source.is_some());
+        assert_eq!(app.store.archived_runs().len(), 1);
     }
 }

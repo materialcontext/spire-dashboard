@@ -50,6 +50,10 @@ pub enum Action {
     },
     /// Delete a run from history for good.
     DeleteHistory(String),
+    /// Follow the game through the companion mod (monitored runs), or stop.
+    SetFollowGame(bool),
+    /// Replace the hand-logged run with the game's (filed as Abandoned).
+    FollowGameRun,
     /// Show a native context menu (macOS) and apply what's picked.
     ContextMenu(Vec<MenuEntry>),
 }

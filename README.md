@@ -62,6 +62,40 @@ the card you took, HP and gold after. Then it re-analyses the run.
   relics. **Edit run…** fixes a filed run: its ascension, result, notes, each
   floor's fight, or a floor logged by mistake; or deletes it.
 
+## Monitored runs (follow the game)
+
+Instead of logging each floor by hand, the dashboard can follow your run in
+Slay the Spire 2 through a small companion mod, **Spire Dashboard Link**. The
+mod only reads: it changes nothing in the game. It tells the dashboard where
+the game saves your run and what the act's boss is, and the dashboard reads
+the game's own save after each floor.
+
+1. Get the mod:
+   - **Download:** open the latest CI run on GitHub (Actions) and download
+     the `SpireDashboardLink` artifact.
+   - **Or build it:** with the .NET 8 SDK, run
+     `dotnet build mod/SpireDashboardLink/SpireDashboardLink.csproj -c Release`.
+2. Copy `SpireDashboardLink.dll` and `SpireDashboardLink.json` into a
+   `SpireDashboardLink` folder in the game's `mods` folder:
+   - **Windows:** `…\steamapps\common\Slay the Spire 2\mods\`
+   - **macOS:** `SlayTheSpire2.app/Contents/MacOS/mods/` (Show Package
+     Contents)
+3. Start the game and enable mods in its settings. A consent dialog appears
+   the first time.
+4. In the dashboard, open **Settings → Monitored runs** and turn on **Follow
+   the game**. It shows when the mod is connected.
+
+While following:
+
+- **Logging:** floors log themselves, and the floor log is locked.
+- **When the run ends:** it's filed in History.
+- **If you're already logging a different run by hand:** the dashboard asks
+  before switching.
+- **Modded profile:** with mods on, the game plays in its separate *modded*
+  profile, with its own unlocks and run history.
+
+Turn following off to log by hand again. Nothing is read while it's off.
+
 ## Run it
 
 ```bash
