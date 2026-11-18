@@ -13,7 +13,7 @@ use crate::widgets::{culled, eyebrow, hairline, stripe};
 
 pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
     let s = v.state;
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.horizontal(|ui| {
         ui.label(eyebrow("Deck"));
         ui.label(RichText::new(s.deck.len().to_string()).small().color(text_faint()));
@@ -27,7 +27,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
         if current != Some(row.card_type) {
             current = Some(row.card_type);
             let count: u32 = v.dash.rows.iter().filter(|r| r.card_type == row.card_type).map(|r| r.count).sum();
-            ui.add_space(4.0);
+            ui.add_space(crate::style::space::xs());
             ui.label(
                 RichText::new(format!("{}  {count}", type_plural(row.card_type)))
                     .small()
@@ -68,11 +68,11 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
             });
         });
     }
-    ui.add_space(12.0);
+    ui.add_space(crate::style::space::m());
 }
 
 fn section(ui: &mut Ui, title: &str, count: usize) {
-    ui.add_space(14.0);
+    ui.add_space(crate::style::space::l());
     ui.horizontal(|ui| {
         ui.label(eyebrow(title));
         ui.label(RichText::new(count.to_string()).small().color(text_faint()));
@@ -97,7 +97,7 @@ fn card_row(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
         ui.spacing_mut().item_spacing.x = 6.0;
         stripe(ui, style::card_type_color(row.card_type), 18.0);
         let cost = v.catalog.cards.get(&row.card.card).map_or("?".to_string(), |c| c.cost_label_at(row.card.upgraded));
-        ui.add_sized([14.0, 18.0], egui::Label::new(RichText::new(cost).small().color(accent())));
+        ui.add_sized([14.0, 18.0], egui::Label::new(RichText::new(cost).small().color(text_dim())));
         let name = if row.count > 1 { format!("{}× {}", row.count, row.name) } else { row.name.clone() };
         let color = if row.card.upgraded { good() } else { text() };
         // Tooltip text is only built while hovered.
@@ -124,7 +124,7 @@ fn card_row(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
             if !row.card.upgraded && ui.add(row_button("+")).on_hover_text("Upgrade").clicked() {
                 out.push(Action::Draft(Change::UpgradeCard(row.card.clone())));
             }
-            ui.add_space(4.0);
+            ui.add_space(crate::style::space::xs());
             role_marks(ui, &row.roles);
             tag_marks(ui, &row.tags);
         });
@@ -192,8 +192,12 @@ fn card_menu(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
     }
 }
 
+/// A small frameless row action. The glyph stays small, but the target is
+/// at least 24 x 24 (WCAG 2.2 target size), so it's easy to hit.
 fn row_button(text: &str) -> egui::Button<'_> {
-    egui::Button::new(RichText::new(text).small().color(text_faint())).frame_when_inactive(false)
+    egui::Button::new(RichText::new(text).small().color(text_faint()))
+        .frame_when_inactive(false)
+        .min_size(vec2(24.0, 24.0))
 }
 
 fn card_tooltip(ui: &mut Ui, v: &ViewCtx, row: &DeckRow) {
@@ -221,7 +225,7 @@ fn card_tooltip(ui: &mut Ui, v: &ViewCtx, row: &DeckRow) {
         }
     }
     if !row.roles.is_empty() {
-        ui.add_space(4.0);
+        ui.add_space(crate::style::space::xs());
         for r in &row.roles {
             ui.label(RichText::new(r.label()).small().color(style::role_color(*r)));
         }

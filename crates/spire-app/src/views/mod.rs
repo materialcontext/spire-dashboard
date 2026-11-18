@@ -57,7 +57,7 @@ impl Tab {
 }
 
 pub fn root(ui: &mut Ui, v: &ViewCtx, draft: &mut NodeDraft, st: &mut UiState, out: &mut Vec<Action>) {
-    let side = egui::Frame::new().inner_margin(egui::Margin { left: 14, right: 14, top: 0, bottom: 0 });
+    let side = egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 16, top: 0, bottom: 0 });
     egui::Panel::top("top").frame(side).show(ui, |ui| top::show(ui, v, st, out));
     dialogs::show(ui, v, st, out);
     toast(ui, st, out);
@@ -202,23 +202,42 @@ fn dim(ui: &mut Ui, why: &str) {
 fn toast(ui: &mut Ui, st: &UiState, out: &mut Vec<Action>) {
     use crate::style::color::*;
     let Some(t) = &st.toast else { return };
+    // Fades in over 83 ms when motion is on; a repaint is asked for only
+    // while it's fading.
+    let opacity = if crate::style::motion() {
+        let now = ui.ctx().input(|i| i.time);
+        let o = ((now - t.since) as f32 / crate::style::FADE).clamp(0.0, 1.0);
+        if o < 1.0 {
+            ui.ctx().request_repaint();
+        }
+        o
+    } else {
+        1.0
+    };
     egui::Area::new(egui::Id::unique("toast"))
         .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -24.0))
         .order(egui::Order::Foreground)
         .show(ui.ctx(), |ui| {
+            ui.multiply_opacity(opacity);
             egui::Frame::new()
                 .fill(surface_hi())
                 .stroke(egui::Stroke::new(1.0, border_hi()))
-                .inner_margin(egui::Margin::symmetric(14, 8))
+                .inner_margin(egui::Margin::symmetric(16, 8))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new(&t.text).color(text()));
-                        ui.add_space(12.0);
+                        ui.add_space(crate::style::space::m());
                         if ui.button(egui::RichText::new("Undo").color(accent())).clicked() {
                             out.push(Action::Undo);
                             out.push(Action::DismissToast);
                         }
-                        if ui.add(egui::Button::new(egui::RichText::new("x").color(text_dim())).frame(false)).clicked()
+                        if ui
+                            .add(
+                                egui::Button::new(egui::RichText::new("x").color(text_dim()))
+                                    .frame(false)
+                                    .min_size(egui::vec2(24.0, 24.0)),
+                            )
+                            .clicked()
                         {
                             out.push(Action::DismissToast);
                         }

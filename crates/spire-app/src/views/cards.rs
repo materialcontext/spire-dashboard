@@ -126,12 +126,12 @@ fn pool_label(pool: &str) -> String {
 }
 
 pub fn filters(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser) {
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Find cards"));
     hairline(ui);
     ui.add(egui::TextEdit::singleline(&mut b.query).hint_text("Name or text").desired_width(f32::INFINITY));
 
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Pool"));
     let mut pools: Vec<&str> = v.catalog.cards.values().map(|c| c.color.as_str()).collect();
     pools.sort();
@@ -146,7 +146,7 @@ pub fn filters(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser) {
             }
         });
 
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Type"));
     let types = [
         (None, "All"),
@@ -158,7 +158,7 @@ pub fn filters(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser) {
     ];
     segmented(ui, &mut b.card_type, &types);
 
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Rarity"));
     let rarities = [
         (None, "All"),
@@ -170,7 +170,7 @@ pub fn filters(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser) {
     ];
     segmented(ui, &mut b.rarity, &rarities);
 
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Cost"));
     let costs = [
         (CostFilter::Any, "Any"),
@@ -183,20 +183,20 @@ pub fn filters(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser) {
     ];
     segmented(ui, &mut b.cost, &costs);
 
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Role"));
     let mut roles: Vec<(RoleFilter, &str)> = vec![(RoleFilter::Any, "Any")];
     roles.extend(Role::ALL.iter().map(|r| (RoleFilter::Role(*r), r.short())));
     roles.push((RoleFilter::NoRole, "No role"));
     segmented(ui, &mut b.role, &roles);
 
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Keyword"));
     let mut keywords: Vec<(Option<&'static str>, &str)> = vec![(None, "Any")];
     keywords.extend(KEYWORDS.iter().map(|k| (Some(*k), *k)));
     segmented(ui, &mut b.keyword, &keywords);
 
-    ui.add_space(10.0);
+    ui.add_space(crate::style::space::s());
     if ui.add(egui::Button::new(RichText::new("Clear filters").color(text_dim())).frame_when_inactive(false)).clicked()
     {
         *b = CardBrowser { selected: b.selected.take(), ..CardBrowser::default() };
@@ -236,7 +236,7 @@ pub fn list(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser) {
                     egui::Align2::LEFT_CENTER,
                     card.cost_label(),
                     small.clone(),
-                    accent(),
+                    text_dim(),
                 );
                 painter.text(egui::pos2(rect.min.x + 30.0, mid), egui::Align2::LEFT_CENTER, &card.name, font, text());
                 let right = format!("{} · {:?}", pool_label(&card.color), card.rarity);
@@ -250,7 +250,7 @@ pub fn list(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser) {
 }
 
 pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser, out: &mut Vec<Action>) {
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     let Some(card) = b.selected.as_ref().and_then(|id| v.catalog.cards.get(id)) else {
         ui.label(eyebrow("Card"));
         hairline(ui);
@@ -263,7 +263,7 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser, out: &mut Vec<Actio
     ui.horizontal(|ui| {
         stripe(ui, style::card_type_color(card.card_type), 26.0);
         let name = if up { format!("{}+", card.name) } else { card.name.clone() };
-        ui.label(RichText::new(name).heading().color(if up { good() } else { text() }));
+        ui.label(crate::widgets::title(name).color(if up { good() } else { text() }));
         if can_upgrade {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 crate::widgets::segmented(ui, &mut b.upgraded, &[(false, "Base"), (true, "Upgraded")]);
@@ -296,34 +296,34 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser, out: &mut Vec<Actio
     }
     let in_deck = v.state.deck.iter().filter(|d| d.card == card.id).count();
     if in_deck > 0 {
-        ui.label(RichText::new(format!("{in_deck} in your deck")).small().color(accent()));
+        ui.label(RichText::new(format!("{in_deck} in your deck")).small().strong().color(text()));
     }
 
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Text"));
     hairline(ui);
     ui.label(card.text_at(up));
     if !changes.is_empty() {
-        ui.add_space(4.0);
+        ui.add_space(crate::style::space::xs());
         ui.label(RichText::new(format!("Upgrade: {}", changes.join(" · "))).small().color(good()));
     } else if !can_upgrade {
         ui.label(RichText::new("No upgrade").small().color(text_faint()));
     }
 
     if card.card_type == CardType::Power {
-        ui.add_space(10.0);
+        ui.add_space(crate::style::space::s());
         let orbs: Vec<_> = v.catalog.orbs.values().cloned().collect();
         crate::views::relics::simulator_reading(ui, &spire_core::mechanics::read(card.text_at(up), &orbs, true));
     }
 
-    ui.add_space(10.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Roles"));
     hairline(ui);
     let source = v.playbook.role_source(card);
     let current = v.playbook.roles_of(card);
     match &source {
         RoleSource::Personal(_) => {
-            ui.label(RichText::new("Your override").small().color(accent()));
+            ui.label(RichText::new("Your override").small().strong().color(text()));
         }
         RoleSource::Playbook(_) => {
             ui.label(RichText::new("Set in the playbook").small().color(text_dim()));
@@ -338,7 +338,7 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser, out: &mut Vec<Actio
             }
         }
     }
-    ui.add_space(4.0);
+    ui.add_space(crate::style::space::xs());
     let mut edited = current.clone();
     let mut changed = false;
     for r in Role::ALL {
@@ -368,7 +368,7 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser, out: &mut Vec<Actio
             .color(text_faint()),
     );
 
-    ui.add_space(10.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Enchantments that fit"));
     hairline(ui);
     let fits: Vec<_> = v.catalog.enchantments.values().filter(|e| e.fits(card)).collect();

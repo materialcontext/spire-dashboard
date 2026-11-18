@@ -103,14 +103,17 @@ fn vitals(ui: &mut Ui, salt: &str, t: &Timeline) {
     let max: Vec<[f64; 2]> = t.points.iter().map(|p| [p.floor as f64, p.max_hp as f64]).collect();
     keys(
         ui,
-        &[Key { color: accent(), name: "HP", dashed: false }, Key { color: text_dim(), name: "Max HP", dashed: true }],
+        &[
+            Key { color: style::hp_color(1.0), name: "HP", dashed: false },
+            Key { color: text_dim(), name: "Max HP", dashed: true },
+        ],
     );
     plot(format!("{salt}-hp"), 160.0).include_y(0.0).label_formatter(floor_label("HP", "")).show(ui, |p| {
         for l in act_lines(t) {
             p.vline(l);
         }
         p.line(Line::new("Max HP", max).color(text_dim()).style(LineStyle::dashed_loose()).width(1.5));
-        p.line(Line::new("HP", hp).color(accent()).width(2.0));
+        p.line(Line::new("HP", hp).color(style::hp_color(1.0)).width(2.0));
     });
 }
 
@@ -221,10 +224,10 @@ fn dead_and_elites(ui: &mut Ui, salt: &str, t: &Timeline) {
     let last = t.points.last().map_or(0.0, |p| p.dead_share() * 100.0);
     ui.horizontal(|ui| {
         stat(ui, "Dead cards now", format!("{last:.0}%"), if last >= 15.0 { warn() } else { text() });
-        ui.add_space(24.0);
+        ui.add_space(crate::style::space::xl());
         for (i, n) in t.elites_by_act.iter().enumerate() {
             stat(ui, &format!("Act {} elites", i + 1), n.to_string(), text());
-            ui.add_space(16.0);
+            ui.add_space(crate::style::space::l());
         }
     });
     plot(format!("{salt}-dead"), 90.0)
@@ -278,11 +281,11 @@ fn per_turn(ui: &mut Ui, salt: &str, sim: &DeckSim) {
     let last = sim.turns[sim.turns.len() - 1];
     ui.horizontal(|ui| {
         stat(ui, "Damage, turn 1", format!("{:.0}", first.damage.mean), text());
-        ui.add_space(16.0);
+        ui.add_space(crate::style::space::l());
         stat(ui, &format!("Damage, turn {}", sim.turns.len()), format!("{:.0}", last.damage.mean), text());
-        ui.add_space(16.0);
+        ui.add_space(crate::style::space::l());
         stat(ui, "Block, turn 1", format!("{:.0}", first.block.mean), text());
-        ui.add_space(16.0);
+        ui.add_space(crate::style::space::l());
         stat(ui, &format!("Block, turn {}", sim.turns.len()), format!("{:.0}", last.block.mean), text());
     });
     let (red, blue) = (style::role_color(Role::FrontloadDamage), style::role_color(Role::FrontloadDefense));
@@ -341,24 +344,24 @@ fn draw_and_energy(ui: &mut Ui, sim: &DeckSim) {
     ui.horizontal_wrapped(|ui| {
         stat(ui, "Turnover", format!("{:.1} turns", sim.turnover), text())
             .on_hover_text("Turns to draw every card once. Lower means your best cards come back sooner.");
-        ui.add_space(16.0);
+        ui.add_space(crate::style::space::l());
         let dead = sim.dead_draws * 100.0;
         stat(ui, "Dead draws", format!("{dead:.0}%"), if dead >= 10.0 { warn() } else { text() })
             .on_hover_text("Share of drawn cards that can't be played: curses, statuses, unplayables.");
-        ui.add_space(16.0);
+        ui.add_space(crate::style::space::l());
         stat(ui, "Unspent energy", format!("{:.1} a turn", sim.unspent_energy), text())
             .on_hover_text("Energy left over with nothing worth playing. High: room for costlier cards.");
-        ui.add_space(16.0);
+        ui.add_space(crate::style::space::l());
         let wanted = sim.stranded_energy;
         stat(ui, "Energy short", format!("{wanted:.1} a turn"), if wanted >= 3.0 { warn() } else { text() })
             .on_hover_text("Cost of playable cards stuck in hand. High: more energy or cheaper cards would help.");
     });
     if !sim.resources.is_empty() {
-        ui.add_space(8.0);
+        ui.add_space(crate::style::space::s());
         ui.horizontal_wrapped(|ui| {
             for (r, n) in &sim.resources {
                 stat(ui, r.label(), format!("{n:.1} a turn"), text());
-                ui.add_space(16.0);
+                ui.add_space(crate::style::space::l());
             }
         });
     }

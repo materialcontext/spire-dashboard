@@ -15,6 +15,13 @@ spire-data.workspace = true
 eframe.workspace = true
 egui_plot.workspace = true
 
+# System preferences (text size, reduced motion); see src/platform.rs.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Registry", "Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWorkspace", "NSAccessibility"] }
+
 [dev-dependencies]
 serde_json.workspace = true
 

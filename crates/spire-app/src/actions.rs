@@ -35,6 +35,8 @@ pub enum Action {
         roles: Option<Vec<spire_core::playbook::Role>>,
     },
     SetLargeText(bool),
+    /// Follow the system's light/dark mode.
+    SetMatchSystem(bool),
     /// Use the system title bar (true) or the app's own (false).
     SetSystemTitleBar(bool),
     ToggleDataWindow,

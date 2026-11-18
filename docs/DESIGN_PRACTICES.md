@@ -4,7 +4,12 @@ A companion to [NATIVE_LOOK.md](NATIVE_LOOK.md). That plan adds System looks
 per OS. This report takes the general lessons behind Fluent (Windows 11) and
 Apple's Human Interface Guidelines, and applies them to the looks we already
 have: Spirebound, Forge, Neon Spire, Grimoire and Terminal, plus the Larger
-text option. None of this is built yet.
+text option.
+
+**Status: implemented.** Every change below shipped with this report. The
+one exception is per-style tracking, which is limited to titles (the
+`widgets::title` helper) until the native-look P0 spike settles egui's font
+API.
 
 Each section gives:
 

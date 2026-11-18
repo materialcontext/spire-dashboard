@@ -32,12 +32,12 @@ fn act_order(v: &ViewCtx, e: &Encounter) -> (u8, String) {
 }
 
 pub fn filters(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Find enemies"));
     hairline(ui);
     ui.add(egui::TextEdit::singleline(&mut b.query).hint_text("Encounter or monster").desired_width(f32::INFINITY));
 
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Act"));
     let mut acts: Vec<_> = v.catalog.acts.values().collect();
     acts.sort_by_key(|a| (a.index, a.name.clone()));
@@ -48,7 +48,7 @@ pub fn filters(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
         b.act = act;
     }
 
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Room"));
     let rooms = [
         (None, "All"),
@@ -58,7 +58,7 @@ pub fn filters(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
     ];
     segmented(ui, &mut b.room, &rooms);
 
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Stats at ascension"));
     let max = v.catalog.rules.max_ascension;
     let current = b.ascension(v);
@@ -107,7 +107,7 @@ pub fn list(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
         for e in list {
             let group = (act_order(v, e).1, e.room);
             if heading.as_ref() != Some(&group) {
-                ui.add_space(6.0);
+                ui.add_space(crate::style::space::s());
                 ui.label(RichText::new(format!("{} · {}", group.0, group.1.label())).small().color(text_faint()));
                 heading = Some(group);
             }
@@ -148,7 +148,7 @@ pub fn list(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
 }
 
 pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &EnemyBrowser) {
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     let Some(enc) = b.selected.as_ref().and_then(|id| v.catalog.encounters.get(id)) else {
         ui.label(eyebrow("Encounter"));
         hairline(ui);
@@ -158,7 +158,7 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &EnemyBrowser) {
     let asc = b.ascension(v);
     let scaling = Scaling { tough: v.catalog.rules.tough_enemies(asc), deadly: v.catalog.rules.deadly_enemies(asc) };
     let act = enc.act.as_ref().and_then(|a| v.catalog.acts.get(a));
-    ui.label(RichText::new(&enc.name).heading());
+    ui.label(crate::widgets::title(&enc.name));
     ui.label(
         RichText::new(format!(
             "{} · {}{}",
@@ -168,7 +168,7 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &EnemyBrowser) {
         ))
         .color(text_dim()),
     );
-    ui.add_space(6.0);
+    ui.add_space(crate::style::space::s());
     let p = preview(enc, v.catalog, v.playbook, act.map_or(0, |a| a.index), scaling, &v.dash.deck, false);
     let title = if v.state.started() { "Against your deck" } else { "Threat" };
     panel(ui, title, Some(&format!("A{asc}")), |ui| {
@@ -182,7 +182,7 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &EnemyBrowser) {
             monsters.push(m);
         }
     }
-    ui.add_space(10.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Monsters"));
     hairline(ui);
     for id in monsters {
@@ -195,7 +195,7 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &EnemyBrowser) {
         } else {
             format!("{min} HP")
         };
-        ui.add_space(6.0);
+        ui.add_space(crate::style::space::s());
         ui.horizontal(|ui| {
             ui.label(RichText::new(&m.name).family(crate::style::strong_family()).color(text()));
             if enc.spawns.contains(id) {

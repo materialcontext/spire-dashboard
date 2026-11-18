@@ -63,6 +63,8 @@ pub struct UiState {
 
 pub struct Toast {
     pub text: String,
+    /// `ctx.input().time` when it appeared (for the fade-in).
+    pub since: f64,
     /// `ctx.input().time` after which it disappears.
     pub until: f64,
 }
@@ -159,6 +161,23 @@ impl SpireApp {
         self.run = Run::default();
         self.ui.history.invalidate();
         self.run_changed();
+    }
+
+    /// With "Match system" on, shows the light or dark look the system calls
+    /// for. A string compare per frame; reconfigures only on a change.
+    fn follow_system_theme(&mut self, ctx: &egui::Context) {
+        if !self.settings.match_system {
+            return;
+        }
+        let light = ctx.system_theme() == Some(egui::Theme::Light);
+        let want = if light {
+            self.settings.light_look.as_deref().unwrap_or("grimoire")
+        } else {
+            self.settings.dark_look.as_deref().unwrap_or(crate::style::DEFAULT_LOOK)
+        };
+        if crate::style::current().name != want {
+            crate::style::set_look(ctx, want);
+        }
     }
 
     /// From act 2 on, the act's Ancient heals once the boss is known, by the
@@ -320,7 +339,7 @@ impl SpireApp {
                 if node {
                     let now = ctx.input(|i| i.time);
                     let text = format!("Floor {} logged", self.state.floor);
-                    self.ui.toast = Some(Toast { text, until: now + TOAST_SECONDS });
+                    self.ui.toast = Some(Toast { text, since: now, until: now + TOAST_SECONDS });
                     ctx.request_repaint_after(std::time::Duration::from_secs_f64(TOAST_SECONDS));
                 }
             }
@@ -386,6 +405,12 @@ impl SpireApp {
             }
             Action::SetLook(name) => {
                 crate::style::set_look(ctx, name);
+                // While following the system, a pick fills the light or dark slot.
+                if self.settings.match_system {
+                    let light = crate::style::find_look(name).is_some_and(|l| l.light);
+                    let slot = if light { &mut self.settings.light_look } else { &mut self.settings.dark_look };
+                    *slot = Some(name.to_string());
+                }
                 self.settings.look = Some(name.to_string());
                 if let Err(e) = self.store.save_settings(&self.settings) {
                     self.note(format!("Could not save settings: {e}"));
@@ -404,6 +429,12 @@ impl SpireApp {
             Action::SetLargeText(on) => {
                 crate::style::set_large(ctx, on);
                 self.settings.large_text = on;
+                if let Err(e) = self.store.save_settings(&self.settings) {
+                    self.note(format!("Could not save settings: {e}"));
+                }
+            }
+            Action::SetMatchSystem(on) => {
+                self.settings.match_system = on;
                 if let Err(e) = self.store.save_settings(&self.settings) {
                     self.note(format!("Could not save settings: {e}"));
                 }
@@ -433,6 +464,7 @@ impl SpireApp {
     pub fn frame(&mut self, ui: &mut egui::Ui) {
         self.poll_update();
         crate::style::set_character(ui.ctx(), self.state.character.as_ref().map(|c| c.as_str()));
+        self.follow_system_theme(ui.ctx());
         for e in self.saver.take_errors() {
             self.note(format!("Could not save the run: {e}"));
         }
@@ -458,6 +490,7 @@ impl SpireApp {
             }
         }
         crate::chrome::window_edges(&ctx);
+        crate::chrome::focus_ring(&ctx);
         for action in actions {
             self.apply(action, &ctx);
         }

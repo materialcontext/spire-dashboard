@@ -37,7 +37,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
             }
         });
 
-        ui.add_space(8.0);
+        ui.add_space(crate::style::space::s());
         ui.label(
             RichText::new("Roles · bright: cards you added · faded: starter Strikes/Defends · tick: target this act")
                 .small()
@@ -49,12 +49,20 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
         for r in Role::ALL {
             bar(ui, r.label(), d.role(r), d.starter_role(r), max_role, target(r), style::role_color(r));
         }
-        bar(ui, "Area damage", d.aoe, 0, max_role, plan.map(|p| p.needs_aoe).filter(|n| *n > 0), accent());
+        bar(
+            ui,
+            "Area damage",
+            d.aoe,
+            0,
+            max_role,
+            plan.map(|p| p.needs_aoe).filter(|n| *n > 0),
+            style::role_color(Role::FrontloadDamage),
+        );
         // What the acceleration cards actually do.
         bar(ui, "Draw", d.draw, 0, max_role, None, style::role_color(Role::Consistency));
         bar(ui, "Energy gain", d.energy, 0, max_role, None, style::role_color(Role::Consistency));
 
-        ui.add_space(4.0);
+        ui.add_space(crate::style::space::xs());
         ui.label(
             RichText::new(format!("{} upgraded · {} with no role · {} unknown", d.upgraded, d.no_role, d.unknown))
                 .small()
