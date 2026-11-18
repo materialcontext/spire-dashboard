@@ -102,6 +102,21 @@ mod lenient {
         })
     }
 
+    pub fn acts<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<super::WAct>, D::Error> {
+        let Value::Array(items) = Value::deserialize(d)? else { return Ok(Vec::new()) };
+        Ok(items
+            .iter()
+            .filter_map(|a| {
+                let rooms = &a["rooms"];
+                Some(super::WAct {
+                    id: id_of(a)?,
+                    boss: rooms.get("boss_id").and_then(id_of),
+                    second_boss: rooms.get("second_boss_id").and_then(id_of),
+                })
+            })
+            .collect())
+    }
+
     pub fn opt_i64<'de, D: Deserializer<'de>>(d: D) -> Result<Option<i64>, D::Error> {
         Ok(match Value::deserialize(d)? {
             Value::Number(n) => n.as_i64(),
@@ -114,14 +129,18 @@ mod lenient {
 #[derive(Deserialize, Default)]
 #[serde(default)]
 struct WRun {
-    #[serde(deserialize_with = "lenient::ids")]
-    acts: Vec<String>,
+    #[serde(deserialize_with = "lenient::acts")]
+    acts: Vec<WAct>,
+    /// The act in progress (live saves).
+    current_act_index: Option<usize>,
     ascension: u32,
     #[serde(deserialize_with = "lenient::opt_id")]
     seed: Option<String>,
     #[serde(deserialize_with = "lenient::opt_i64")]
     start_time: Option<i64>,
     players: Vec<WPlayer>,
+    /// Live saves keep the seed here rather than at the top.
+    rng: WRng,
     map_point_history: Vec<Vec<WPoint>>,
     win: Option<bool>,
     was_abandoned: Option<bool>,
@@ -132,9 +151,14 @@ struct WRun {
 #[derive(Deserialize, Default)]
 #[serde(default)]
 struct WPlayer {
+    #[serde(alias = "net_id")]
     id: Option<serde_json::Value>,
-    #[serde(deserialize_with = "lenient::opt_id")]
+    #[serde(alias = "character_id", deserialize_with = "lenient::opt_id")]
     character: Option<String>,
+    /// Live saves only: the player's HP, max HP and gold right now.
+    current_hp: Option<i32>,
+    max_hp: Option<i32>,
+    gold: Option<i32>,
     deck: Vec<WCard>,
     relics: Vec<WId>,
     potions: Vec<WId>,
@@ -155,6 +179,22 @@ struct WCard {
 struct WId {
     #[serde(deserialize_with = "lenient::id")]
     id: String,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct WRng {
+    #[serde(deserialize_with = "lenient::opt_id")]
+    seed: Option<String>,
+}
+
+/// An act: an id in finished runs; in live saves, an object with its
+/// rooms, which name the boss before it's fought.
+#[derive(Default)]
+struct WAct {
+    id: String,
+    boss: Option<String>,
+    second_boss: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -346,7 +386,8 @@ pub fn read(json: &str, catalog: &Catalog, hint: &ActHint) -> Result<GameRun, Un
     let character = CharacterId::new(entry(&character));
     let start = RunEvent::start(catalog, &character, run.ascension)
         .ok_or_else(|| Unreadable::UnknownCharacter(character.to_string()))?;
-    let key = format!("{}:{}", run.start_time.unwrap_or(0), run.seed.clone().unwrap_or_default());
+    let seed = run.seed.clone().or_else(|| run.rng.seed.clone()).unwrap_or_default();
+    let key = format!("{}:{seed}", run.start_time.unwrap_or(0));
     let mut events = vec![start];
     let mut state = apply(RunState::default(), &events[0]);
     let mut unknown: Vec<String> = Vec::new();
@@ -362,14 +403,14 @@ pub fn read(json: &str, catalog: &Catalog, hint: &ActHint) -> Result<GameRun, Un
 
     let mut floors = 0;
     // The act in progress may have no floors yet: the hint says it began.
-    let acts = run.map_point_history.len().max(hint.index.map_or(0, |i| i as usize + 1));
+    let current_act = hint.index.map(usize::from).or(run.current_act_index);
+    let acts = run.map_point_history.len().max(current_act.map_or(0, |i| i + 1));
     for i in 0..acts {
         let points: &[WPoint] = run.map_point_history.get(i).map_or(&[], Vec::as_slice);
-        let current = hint.index.is_some_and(|h| h as usize == i);
-        let act = run
-            .acts
-            .get(i)
-            .map(|a| entry(a).to_string())
+        let current = current_act == Some(i);
+        let saved = run.acts.get(i);
+        let act = saved
+            .map(|a| entry(&a.id).to_string())
             .or_else(|| hint.act.as_deref().filter(|_| current).map(|a| entry(a).to_string()));
         let Some(act) = act else { continue };
         let fought: Vec<EncounterId> = points
@@ -379,8 +420,18 @@ pub fn read(json: &str, catalog: &Catalog, hint: &ActHint) -> Result<GameRun, Un
             .map(|r| EncounterId::new(entry(&r.model_id)))
             .collect();
         let hinted = |b: &Option<String>| b.as_deref().filter(|_| current).map(|b| EncounterId::new(entry(b)));
-        let boss = fought.first().cloned().or_else(|| hinted(&hint.boss));
-        let second = fought.get(1).cloned().or_else(|| hinted(&hint.second_boss));
+        // Fought, else as the live save's act names it, else as the mod saw it.
+        let named = |b: Option<&String>| b.map(|b| EncounterId::new(entry(b)));
+        let boss = fought
+            .first()
+            .cloned()
+            .or_else(|| named(saved.and_then(|a| a.boss.as_ref())))
+            .or_else(|| hinted(&hint.boss));
+        let second = fought
+            .get(1)
+            .cloned()
+            .or_else(|| named(saved.and_then(|a| a.second_boss.as_ref())))
+            .or_else(|| hinted(&hint.second_boss));
         note(act.clone(), catalog.acts.contains_key(&ActId::new(&act)));
         push(&mut events, &mut state, RunEvent::EnterAct { act: ActId::new(&act), index: i as u8, boss });
         if let Some(s) = second {
@@ -480,13 +531,25 @@ fn changes(s: &WStats, state: &RunState, catalog: &Catalog, note: &mut impl FnMu
     for p in s.potion_choices.iter().filter(|c| c.was_picked) {
         out.push(Change::AddPotion(PotionId::new(entry(&p.choice))));
     }
-    if let Some(m) = s.max_hp.filter(|m| *m != state.max_hp) {
+    // A live save's floor in progress has zeros for HP and gold until it's
+    // done: no max HP means not recorded yet.
+    if s.max_hp == Some(0) {
+        return out;
+    }
+    out.extend(totals(state, s.max_hp, s.current_hp, s.current_gold));
+    out
+}
+
+/// Max HP, HP and gold where they differ from ours.
+fn totals(state: &RunState, max_hp: Option<i32>, hp: Option<i32>, gold: Option<i32>) -> Vec<Change> {
+    let mut out = Vec::new();
+    if let Some(m) = max_hp.filter(|m| *m != state.max_hp) {
         out.push(Change::SetMaxHp(m));
     }
-    if let Some(hp) = s.current_hp {
+    if let Some(hp) = hp.filter(|hp| *hp != state.hp) {
         out.push(Change::SetHp(hp));
     }
-    if let Some(g) = s.current_gold.filter(|g| *g != state.gold) {
+    if let Some(g) = gold.filter(|g| *g != state.gold) {
         out.push(Change::SetGold(g));
     }
     out
@@ -530,6 +593,8 @@ fn reconcile(state: &RunState, player: &WPlayer) -> Vec<Change> {
     if let Some(n) = player.max_potion_slot_count.filter(|n| *n != state.potion_slots) {
         out.push(Change::SetPotionSlots(n));
     }
+    // Live saves give the player's totals now; finished runs don't.
+    out.extend(totals(state, player.max_hp.filter(|m| *m > 0), player.current_hp, player.gold));
     out
 }
 
@@ -573,6 +638,29 @@ mod tests {
         let objects = read(&v.to_string(), &cat, &ActHint::default()).expect("reads");
         assert_eq!(objects.events[1..], plain.events[1..]);
         assert_eq!(objects.floors, plain.floors);
+    }
+
+    #[test]
+    fn reads_a_live_run_save() {
+        // A real current_run.save on the first floor, trimmed of RNG state,
+        // relic pools and unlocks. The floor in progress reports zero HP and
+        // gold; the player's own totals are what count.
+        let cat = catalog();
+        let json = include_str!("../tests/fixtures/in_progress.save");
+        let run = read(json, &cat, &ActHint::default()).expect("reads");
+        assert!(!run.ended);
+        assert_eq!(run.floors, 1);
+        assert!(run.key.ends_with(":QLP5BYSX5LF5"), "{}", run.key);
+        let state = run.events.iter().fold(RunState::default(), apply);
+        assert_eq!(state.character.as_ref().map(|c| c.as_str()), Some("FOOL"));
+        assert_eq!(state.ascension, 9);
+        assert_eq!((state.hp, state.max_hp, state.gold), (61, 77, 99));
+        assert_eq!(state.act.as_ref().map(|a| a.as_str()), Some("UNDERDOCKS"));
+        assert_eq!(state.boss.as_ref().map(|b| b.as_str()), Some("WATERFALL_GIANT_BOSS"));
+        assert_eq!(state.deck.len(), 12);
+        assert!(state.deck.iter().any(|c| c.card.as_str() == "YAH"));
+        assert!(state.relics.iter().any(|r| r.as_str() == "ARCANE_SCROLL"));
+        assert!(run.events.iter().all(|e| !matches!(e, RunEvent::Node(n) if n.changes.contains(&Change::SetHp(0)))));
     }
 
     #[test]
