@@ -51,6 +51,7 @@ pub struct UiState {
     /// Which top-level tab is showing.
     pub tab: crate::views::Tab,
     pub cards: crate::views::cards::CardBrowser,
+    pub relics: crate::views::relics::RelicBrowser,
     pub enemies: crate::views::enemies::EnemyBrowser,
     /// The End run dialog is open, with the fight to blame for a death.
     pub end_run_open: bool,
@@ -130,6 +131,7 @@ impl SpireApp {
                 toast: None,
                 tab: crate::views::Tab::Run,
                 cards: Default::default(),
+                relics: Default::default(),
                 enemies: Default::default(),
                 end_run_open: false,
                 end_encounter: None,
@@ -236,6 +238,10 @@ impl SpireApp {
                 self.ui.tab = crate::views::Tab::Cards;
                 self.ui.cards.selected = select.map(Into::into);
             }
+            "relics" => {
+                self.ui.tab = crate::views::Tab::Relics;
+                self.ui.relics.selected = select.map(Into::into);
+            }
             "enemies" => {
                 self.ui.tab = crate::views::Tab::Enemies;
                 self.ui.enemies.selected = select.map(Into::into);
@@ -310,6 +316,10 @@ impl SpireApp {
                 crate::actions::Link::Encounter(id) => {
                     self.ui.tab = crate::views::Tab::Enemies;
                     self.ui.enemies.selected = Some(id);
+                }
+                crate::actions::Link::Relic(id) => {
+                    self.ui.tab = crate::views::Tab::Relics;
+                    self.ui.relics.selected = Some(id);
                 }
             },
             Action::Undo => {
@@ -459,7 +469,7 @@ impl SpireApp {
     /// Keyboard accelerators. Ignored while a text field has focus, so
     /// typing a search never triggers them; everything also works by mouse.
     ///
-    /// 1–8 room · Ctrl+Enter commit · Ctrl+Z undo · Ctrl+1–5 tabs · Esc close.
+    /// 1–8 room · Ctrl+Enter commit · Ctrl+Z undo · Ctrl+1–6 tabs · Esc close.
     fn keys(&mut self, ctx: &egui::Context) -> Vec<Action> {
         use egui::{Key, Modifiers};
         let mut out = Vec::new();

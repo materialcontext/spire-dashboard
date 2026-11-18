@@ -16,7 +16,7 @@ pub const DEFAULT_BASE_URL: &str = "https://spire-codex.com";
 
 /// The endpoints one update reads, in order. Keyless use allows 15 calls per
 /// minute *per endpoint*, so one call to each is well within limits.
-pub const ENDPOINTS: [&str; 11] = [
+pub const ENDPOINTS: [&str; 12] = [
     "acts",
     "characters",
     "cards",
@@ -28,6 +28,7 @@ pub const ENDPOINTS: [&str; 11] = [
     "events",
     "ascensions",
     "orbs",
+    "powers",
 ];
 
 /// Which game branch to read. The dashboard follows the beta branch by
@@ -123,6 +124,20 @@ struct WCard {
     upgrade: BTreeMap<String, serde_json::Value>,
     #[serde(default)]
     star_cost: Option<i32>,
+}
+
+#[derive(Deserialize)]
+struct WPowerDef {
+    id: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    description: String,
+}
+
+/// "Receive [blue]50%[/blue] more damage from Attacks…" → 50.
+fn vulnerable_pct(powers: &[WPowerDef]) -> Option<u32> {
+    let v = powers.iter().find(|p| p.id == "VULNERABLE" || p.id == "VULNERABLE_POWER")?;
+    let after = v.description.split("[blue]").nth(1)?;
+    after.split('%').next()?.trim().parse().ok()
 }
 
 #[derive(Deserialize)]
@@ -498,6 +513,8 @@ fn map_orb(o: WOrb) -> Orb {
         evoke: number(evoke),
         evoke_effect: effect(evoke),
         focus: !spire_core::playbook::contains_ci(&raw, "unaffected by focus"),
+        // "…and reduce this orb's value by [blue]1[/blue]" (Glass).
+        decay: raw.split("reduce this orb's value by").nth(1).map(number).unwrap_or(0),
     }
 }
 
@@ -704,7 +721,10 @@ pub fn to_pack(
             .collect(),
         None => Vec::new(),
     };
-    let rules = rules_from(&ascensions);
+    let mut rules = rules_from(&ascensions);
+    if let (Some(r), true) = (rules.as_mut(), responses.contains_key("powers")) {
+        r.vulnerable_pct = vulnerable_pct(&parse::<WPowerDef>(responses, "powers")?);
+    }
 
     let acts = acts
         .into_iter()
@@ -844,6 +864,20 @@ mod tests {
                 OrbChannel { orb: OrbId::new("PLASMA_ORB"), count: 1, x: true },
             ]
         );
+    }
+
+    #[test]
+    fn reads_vulnerable_from_powers() {
+        let powers = [
+            WPowerDef { id: "WEAK".into(), description: "deal [blue]25%[/blue] less".into() },
+            WPowerDef {
+                id: "VULNERABLE".into(),
+                description: "Receive [blue]50%[/blue] more damage from Attacks for [blue][Amount][/blue] turns."
+                    .into(),
+            },
+        ];
+        assert_eq!(vulnerable_pct(&powers), Some(50));
+        assert_eq!(vulnerable_pct(&powers[..1]), None);
     }
 
     #[test]

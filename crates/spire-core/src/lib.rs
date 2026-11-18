@@ -11,6 +11,7 @@
 pub mod analysis;
 pub mod catalog;
 pub mod ids;
+pub mod mechanics;
 pub mod playbook;
 pub mod run;
 

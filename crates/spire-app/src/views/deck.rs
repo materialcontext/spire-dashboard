@@ -41,7 +41,10 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
     for r in &s.relics {
         ui.horizontal(|ui| {
             let text = v.catalog.relics.get(r).map_or("", |x| x.text.as_str());
-            ui.label(v.catalog.relic_name(r)).on_hover_text(text);
+            let name = RichText::new(v.catalog.relic_name(r));
+            if crate::widgets::link(ui, name).on_hover_text(text).clicked() {
+                out.push(Action::Open(crate::actions::Link::Relic(r.clone())));
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.add(row_button("x")).on_hover_text("Lose relic").clicked() {
                     out.push(Action::Draft(Change::RemoveRelic(r.clone())));

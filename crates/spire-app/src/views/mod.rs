@@ -16,6 +16,7 @@ pub mod enemies;
 pub mod events;
 pub mod history;
 pub mod log;
+pub mod relics;
 pub mod start;
 pub mod threats;
 pub mod top;
@@ -36,11 +37,12 @@ pub enum Tab {
     Analytics,
     History,
     Cards,
+    Relics,
     Enemies,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 5] = [Tab::Run, Tab::Analytics, Tab::History, Tab::Cards, Tab::Enemies];
+    pub const ALL: [Tab; 6] = [Tab::Run, Tab::Analytics, Tab::History, Tab::Cards, Tab::Relics, Tab::Enemies];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -48,6 +50,7 @@ impl Tab {
             Tab::Analytics => "Analytics",
             Tab::History => "History",
             Tab::Cards => "Cards",
+            Tab::Relics => "Relics",
             Tab::Enemies => "Enemies",
         }
     }
@@ -92,6 +95,18 @@ pub fn root(ui: &mut Ui, v: &ViewCtx, draft: &mut NodeDraft, st: &mut UiState, o
             egui::CentralPanel::default()
                 .frame(egui::Frame::new().inner_margin(egui::Margin::same(GAP as i8)))
                 .show(ui, |ui| cards::list(ui, v, &mut st.cards));
+            return;
+        }
+        Tab::Relics => {
+            egui::Panel::left("relic-filters").frame(side).resizable(true).default_size(260.0).show(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| relics::filters(ui, v, &mut st.relics));
+            });
+            egui::Panel::right("relic-detail").frame(side).resizable(true).default_size(420.0).show(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| relics::detail(ui, v, &mut st.relics));
+            });
+            egui::CentralPanel::default()
+                .frame(egui::Frame::new().inner_margin(egui::Margin::same(GAP as i8)))
+                .show(ui, |ui| relics::list(ui, v, &mut st.relics));
             return;
         }
         Tab::Enemies => {

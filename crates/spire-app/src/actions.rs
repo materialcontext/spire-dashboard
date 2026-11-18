@@ -48,4 +48,5 @@ pub enum Action {
 pub enum Link {
     Card(CardId),
     Encounter(EncounterId),
+    Relic(RelicId),
 }

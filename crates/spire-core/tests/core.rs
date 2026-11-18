@@ -707,6 +707,7 @@ fn sim_carries_strength_and_orbs_between_turns() {
             evoke: 8,
             evoke_effect: OrbEffect::Damage,
             focus: true,
+            decay: 0,
         },
     );
     cat.characters.get_mut(&CharacterId::new("HERO")).unwrap().orb_slots = Some(3);
@@ -773,4 +774,105 @@ fn upgrades_change_cost_text_and_keywords() {
     assert_eq!(bash.keywords_at(false), vec!["Exhaust"]);
     assert_eq!(bash.keywords_at(true), vec!["Innate"]);
     assert_eq!(bash.upgrade_changes(), vec!["Damage 8 to 10", "Gains Innate", "Loses Exhaust"]);
+}
+
+// ---------------------------------------------------------------- relics and ordering
+
+fn with_relic(cat: &mut Catalog, id: &str, text: &str) -> RelicId {
+    let relic = Relic {
+        id: RelicId::new(id),
+        name: id.into(),
+        rarity: Rarity::Common,
+        pool: "shared".into(),
+        text: text.into(),
+    };
+    cat.relics.insert(relic.id.clone(), relic);
+    RelicId::new(id)
+}
+
+fn strikes(cat: &Catalog, n: usize, relics: &[RelicId]) -> RunState {
+    let mut s = sim_state(cat, &vec![("STRIKE", false); n]);
+    s.relics = relics.to_vec();
+    s
+}
+
+#[test]
+fn vulnerable_multiplies_after_flat_bonuses_and_rounds_per_hit() {
+    let mut cat = catalog();
+    cat.rules.vulnerable_pct = Some(50);
+    let marbles = with_relic(&mut cat, "MARBLES", "At the start of each combat, apply 1 Vulnerable to ALL enemies.");
+    let base = sim::simulate(&strikes(&cat, 10, &[]), &cat, &quick());
+    assert_eq!(base.turns[0].damage.mean, 18.0, "three Strikes");
+    let vuln = sim::simulate(&strikes(&cat, 10, std::slice::from_ref(&marbles)), &cat, &quick());
+    assert_eq!(vuln.turns[0].damage.mean, 27.0, "6 x 1.5 = 9 per Strike");
+    assert_eq!(vuln.turns[1].damage.mean, 18.0, "one turn of Vulnerable wears off");
+
+    // A flat bonus lands before the multiplier: (6 + 1) x 1.5 = 10.5, rounded down to 10.
+    let dummy = with_relic(&mut cat, "DUMMY", "Cards containing “Strike” deal 1 additional damage.");
+    let both = sim::simulate(&strikes(&cat, 10, &[marbles, dummy]), &cat, &quick());
+    assert_eq!(both.turns[0].damage.mean, 30.0);
+}
+
+#[test]
+fn combat_start_draws_join_the_opening_hand() {
+    let mut cat = catalog();
+    let snake = with_relic(&mut cat, "SNAKE", "At the start of each combat, draw 2 additional cards.");
+    // Ten one-cost Strikes and 3 energy: drawing 7 instead of 5 doesn't add damage,
+    // but the deck cycles faster.
+    let plain = sim::simulate(&strikes(&cat, 12, &[]), &cat, &quick());
+    let drawn = sim::simulate(&strikes(&cat, 12, &[snake]), &cat, &quick());
+    assert!(drawn.turnover < plain.turnover, "{} vs {}", drawn.turnover, plain.turnover);
+    let energy = with_relic(&mut cat, "LANTERN", "Start each combat with an additional 1 Energy.");
+    let more = sim::simulate(&strikes(&cat, 12, &[energy]), &cat, &quick());
+    assert_eq!((more.turns[0].damage.mean, more.turns[1].damage.mean), (24.0, 18.0));
+}
+
+#[test]
+fn powers_trigger_on_later_cards_not_themselves() {
+    let mut cat = catalog();
+    let mut image = cat.cards[&CardId::new("INFLAME")].clone();
+    image.id = CardId::new("AFTERIMAGE");
+    image.cost = Some(0);
+    image.text = "Whenever you play a card, gain 1 Block.".into();
+    image.keywords = vec!["Innate".into()];
+    cat.cards.insert(image.id.clone(), image);
+    // Afterimage (innate, free) then three Strikes: 3 Block on turn 1, not 4.
+    let mut deck = vec![("AFTERIMAGE", false)];
+    deck.extend([("STRIKE", false); 9]);
+    let sim = sim::simulate(&sim_state(&cat, &deck), &cat, &quick());
+    assert_eq!(sim.turns[0].block.mean, 3.0, "{:?}", sim.turns[0]);
+}
+
+#[test]
+fn per_turn_counters_reset_each_turn() {
+    let mut cat = catalog();
+    let fan = with_relic(&mut cat, "FAN", "Every time you play 2 Attacks in a single turn, gain 4 Block.");
+    // Three Strikes a turn: one trigger a turn (the third Strike doesn't carry over).
+    let sim = sim::simulate(&strikes(&cat, 10, &[fan]), &cat, &quick());
+    assert_eq!((sim.turns[0].block.mean, sim.turns[1].block.mean), (4.0, 4.0));
+}
+
+#[test]
+fn glass_decays_each_turn() {
+    let mut cat = catalog();
+    cat.characters.get_mut(&CharacterId::new("HERO")).unwrap().orb_slots = Some(3);
+    let glass = Orb {
+        id: OrbId::new("GLASS"),
+        name: "Glass".into(),
+        text: String::new(),
+        passive: 4,
+        passive_effect: OrbEffect::DamageAll,
+        evoke: 8,
+        evoke_effect: OrbEffect::DamageAll,
+        focus: true,
+        decay: 1,
+    };
+    cat.orbs.insert(glass.id.clone(), glass);
+    let core = with_relic(&mut cat, "CORE", "At the start of each combat, Channel 1 Glass.");
+    let mut s = sim_state(&cat, &[("REGRET", false); 6]);
+    s.relics = vec![core];
+    let sim = sim::simulate(&s, &cat, &quick());
+    let by_turn: Vec<f32> = sim.turns.iter().map(|t| t.damage.mean).collect();
+    assert_eq!(by_turn, vec![4.0, 3.0, 2.0, 1.0, 0.0]);
+    assert_eq!(sim.relics_simulated, vec!["CORE".to_string()]);
 }
