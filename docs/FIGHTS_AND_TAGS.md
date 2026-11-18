@@ -1,6 +1,6 @@
 # Fight shapes, winning lines and card tags: plan
 
-Status: **decided**. F1 (shapes and rules), F1b (curated gaps) and F2 (roles and jobs) are built; F3 (lines) is next. Nothing here
+Status: **decided**. F1 (shapes and rules), F1b (curated gaps), F2 (roles and jobs) and F3 (ways to win) are built; F4 (tags) is next. Nothing here
 is built yet.
 
 ## The idea
@@ -235,7 +235,26 @@ hit, cards played, Skills played, debuffs applied, and unblocked damage.
   just not played out (the same policy as unread power text in the
   simulator).
 
-### 3. Lines (`analysis::lines`, core; replaces the survival splits)
+### 3. Lines (built as the ways in `analysis::survival`; they replace the survival splits)
+
+As built (F3): the four ways are `survival::Way`, played in `survival::play`.
+Fight rules change each turn's landed damage from the simulator's
+`PlayStats` (`survival::Mods`), in this order: Slow's per-card bonus, then
+Slippery spending the first hits, Skittish's Block on the first hit,
+Intangible (every other turn) and Hardened Shell's cap. Personal Hive's
+Dazed is Ethereal, so it thins only the draws until it is drawn; Painful
+Stabs adds a Wound on turns that get through; Enrage adds Strength per Skill
+to the enemy's turns; Shriek and Plow skip the enemy turn after the HP line.
+Rules about hits on a monster count once per stage (the deck hits one at a
+time); rules about what the enemies do add up. The lead way follows D8.
+Limits (`survival::Limit`) name the role that would help: Survival when a
+certain spike tops a defending turn's Block, Mitigation when the pressure
+tops an ordinary turn's, Fast Damage when the kill is over the community's
+pace by more than 1.5 turns, Chip when a hit rule meets fewer than 3 hits a
+turn, AoE when enemies join and little damage hits them all. Not built yet:
+scoring spike turns against bad draws (the Survival limit uses the high end
+of a defending turn's Block instead).
+
 
 Each line is played out against the shape, phase by phase:
 

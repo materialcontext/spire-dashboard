@@ -136,7 +136,7 @@ fn starter_outlooks(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
         let sim = simulate(&state, cat, &pb.simulation);
         println!("== {id} ({} HP, {} cards)", state.hp, state.deck.len());
         for e in &elites {
-            let Some(o) = survival::for_encounter(&sim, e, cat, &state, &pb.simulation) else { continue };
+            let Some(o) = survival::for_encounter(&sim, e, cat, &state, pb) else { continue };
             let community = e.stats.as_ref().map_or(String::new(), |s| {
                 format!(
                     "community {:.1} turns, {:.0} dmg, {:.0}% end the run",
@@ -146,14 +146,17 @@ fn starter_outlooks(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
                 )
             });
             let joins: Vec<String> = o.joins.iter().map(|j| format!("+{}x {}", j.count, j.name)).collect();
+            let limits: Vec<&str> = o.limits.iter().map(|l| l.role.label()).collect();
             println!(
-                "  {:<22} {:<8} kill {:>2?} lose {:>3}  junk {:>4.1} {:<16} | {community}",
+                "  {:<22} {:<8} {:<7} kill {:>2?} lose {:>3}  junk {:>4.1} {:<16} limits [{}] | {community}",
                 e.name,
                 o.verdict.label(),
-                o.best.kill_turn,
-                o.best.hp_loss,
-                o.best.junk,
+                o.lead.way.label(),
+                o.lead.kill_turn,
+                o.lead.hp_loss,
+                o.lead.junk,
                 joins.join(" "),
+                limits.join(", "),
             );
         }
     }

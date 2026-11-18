@@ -796,9 +796,7 @@ impl SpireApp {
                     continue;
                 }
                 let Some(enc) = self.catalog.encounters.get(&t.encounter) else { continue };
-                if let Some(o) =
-                    survival::for_encounter(&sim, enc, &self.catalog, &self.state, &self.playbook.simulation)
-                {
+                if let Some(o) = survival::for_encounter(&sim, enc, &self.catalog, &self.state, &self.playbook) {
                     outlooks.push((t.encounter.clone(), o));
                 }
             }
