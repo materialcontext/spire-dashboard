@@ -271,6 +271,28 @@ pub struct Playbook {
     /// text: an effect (or passive) name, when it happens, and the role.
     #[serde(default)]
     pub relic_roles: Vec<RelicRoleRule>,
+    /// Where a fight's turns count as spikes or quiet, and as ramping.
+    #[serde(default)]
+    pub fights: FightThresholds,
+}
+
+/// How a fight's turns are read against its typical turn (its pressure).
+/// Beliefs about what's worth calling out, not game facts.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FightThresholds {
+    /// A turn at or over this multiple of the pressure is a spike.
+    pub spike: f32,
+    /// A turn at or under this share of the pressure is quiet (a window).
+    pub quiet: f32,
+    /// Later turns at or over this multiple of the early ones: it ramps.
+    pub ramp: f32,
+}
+
+impl Default for FightThresholds {
+    fn default() -> Self {
+        FightThresholds { spike: 1.5, quiet: 0.35, ramp: 1.3 }
+    }
 }
 
 /// "A relic that gains Block once a combat is frontloaded defense."

@@ -63,7 +63,17 @@ kit, so old runs replay even after a data update.
   most common lineup's turn plans.
 - `pattern`: a monster's turns read from its move state machine (cycles,
   weighted random picks, conditional picks), carrying its Strength and the
-  player's Vulnerable forward while the order is known.
+  player's Vulnerable forward while the order is known. Where the order is
+  lost (a dead end, or a pick whose options go different ways), each later
+  turn lists the moves the pattern can still reach.
+- `shape`: a fight's shape from its lineup's patterns, keeping the spread
+  per turn: pressure (the typical turn that deals damage), spikes (certain
+  or possible), quiet turns, ramp, clocks (summons, blast, statuses, ramp,
+  revives), stages, gaps in the data, and its rules. Thresholds are in the
+  playbook's `fights`.
+- `rules`: fight rules read from monster powers' text (Slippery, Intangible,
+  Hardened Shell, Personal Hive, Slow, Enrage…), each with what it asks of
+  the deck (many hits, few big hits, few Skills…).
 - `survival`: whether a deck is on track against a fight. It plays the fight
   out on the simulator's average damage and block against the lineup's
   expected damage per turn, trying several attack/block splits. Status cards

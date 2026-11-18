@@ -1,6 +1,6 @@
 # Fight shapes, winning lines and card tags: plan
 
-Status: **decided**. Building starts with F1. Nothing here
+Status: **decided**. F1 (shapes and rules) is built; F1b (research) is next. Nothing here
 is built yet.
 
 ## The idea

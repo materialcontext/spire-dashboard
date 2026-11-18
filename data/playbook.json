@@ -739,6 +739,11 @@
     "max_orb_slots": 10,
     "status_cards": 2
   },
+  "fights": {
+    "spike": 1.5,
+    "quiet": 0.35,
+    "ramp": 1.3
+  },
   "relic_roles": [
     {
       "effect": "damage",

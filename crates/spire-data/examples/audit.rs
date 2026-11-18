@@ -26,7 +26,7 @@ fn main() {
         return;
     }
     if std::env::args().any(|a| a == "--patterns") {
-        patterns(&cat);
+        patterns(&cat, &pb);
         return;
     }
     if std::env::args().any(|a| a == "--outlook") {
@@ -144,21 +144,56 @@ fn starter_outlooks(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
     }
 }
 
-fn patterns(cat: &Catalog) {
-    use spire_core::analysis::threats::{Scaling, lineup_incoming, lineup_waves};
+fn patterns(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
+    use spire_core::analysis::pattern::power_words;
+    use spire_core::analysis::shape::{self, Gap};
+    use spire_core::analysis::threats::Scaling;
     use spire_core::catalog::RoomType;
     let mut fights: Vec<_> = cat.encounters.values().filter(|e| e.room != RoomType::Monster).collect();
     fights.sort_by_key(|e| (e.act.as_ref().and_then(|a| cat.acts.get(a)).map(|a| a.index), e.room, e.name.clone()));
     for e in fights {
-        let waves = lineup_waves(e, cat, Scaling::default(), 12);
-        let hp: Vec<String> = waves.iter().map(|w| w.hp.to_string()).collect();
-        let first = &waves[0];
-        let incoming: Vec<String> =
-            lineup_incoming(&first.plans, 12).iter().map(|(_, ex, _)| format!("{ex:.0}")).collect();
-        let community = e.stats.as_ref().map_or(String::new(), |s| {
-            format!("{:.1} turns, {:.0} dmg, {:.0}% die", s.avg_turns, s.avg_damage_taken, s.death_rate() * 100.0)
+        let s = shape::of(e, cat, Scaling::default(), &pb.fights);
+        let turns: Vec<String> = s.turns.iter().map(|l| format!("{:.0}", l.expected)).collect();
+        let hp: Vec<String> = s.stages.iter().map(u32::to_string).collect();
+        let community = e.stats.as_ref().map_or(String::new(), |st| {
+            format!("{:.1} turns, {:.0} dmg, {:.0}% die", st.avg_turns, st.avg_damage_taken, st.death_rate() * 100.0)
         });
-        println!("{:<24} {:?} hp {:<10} | {} | {community}", e.name, e.room, hp.join("+"), incoming.join(" "));
+        println!("{} ({:?}) hp {} | {community}", e.name, e.room, hp.join("+"));
+        println!("  {:<11} pressure {:.0} | {}", s.kind.label(), s.pressure, turns.join(" "));
+        let certain: Vec<String> =
+            s.spikes.iter().filter(|x| x.certain).map(|x| format!("t{} {:.0}", x.turn, x.load.expected)).collect();
+        let possible = s.spikes.iter().filter(|x| !x.certain).map(|x| x.load.high).max();
+        if !certain.is_empty() || possible.is_some() {
+            let up_to = possible.map_or(String::new(), |h| format!(" · possible up to {h}"));
+            println!("  spikes {}{up_to}", certain.join(", "));
+        }
+        if !s.windows.is_empty() {
+            println!("  quiet turns {:?}", s.windows);
+        }
+        if (s.ramp - 1.0).abs() > 0.05 {
+            println!("  ramp x{:.2}", s.ramp);
+        }
+        if !s.clocks.is_empty() {
+            println!("  clocks {:?}", s.clocks);
+        }
+        for g in &s.gaps {
+            let text = match g {
+                Gap::NoPattern { monster } => format!("{monster}: no pattern"),
+                Gap::OrderLost { monster, from } => format!("{monster}: order unknown from turn {from}"),
+                Gap::NoHp { monster } => format!("{monster}: no HP"),
+            };
+            println!("  gap: {text}");
+        }
+        for r in &s.rules {
+            let asks: Vec<&str> = r.kind.asks().iter().map(|a| a.label()).collect();
+            let amount = r.power.amount.map_or(String::new(), |a| format!(" {a}"));
+            println!(
+                "  rule: {}{amount} ({:?}){}",
+                power_words(&r.power.power),
+                r.kind,
+                if asks.is_empty() { String::new() } else { format!(" → {}", asks.join(", ")) }
+            );
+        }
     }
 }
 
