@@ -286,11 +286,13 @@ pub struct SimAssumptions {
     /// Further attack hits that bring a shot Arrow back (the Fool), per
     /// community guides; the card data only says "Dislodge".
     pub arrow_return_hits: u32,
+    /// Most orb slots a character can have (Spire Codex, orb mechanics).
+    pub max_orb_slots: u32,
 }
 
 impl Default for SimAssumptions {
     fn default() -> Self {
-        SimAssumptions { hand_size: 5, max_hand: 10, turns: 5, trials: 400, arrow_return_hits: 3 }
+        SimAssumptions { hand_size: 5, max_hand: 10, turns: 5, trials: 400, arrow_return_hits: 3, max_orb_slots: 10 }
     }
 }
 

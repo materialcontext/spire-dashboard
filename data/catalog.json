@@ -2,7 +2,7 @@
   "format": 1,
   "source": "spire-codex",
   "game_version": "v0.113.1 (beta)",
-  "fetched_at": "2026-11-17T11:53:21Z",
+  "fetched_at": "2026-11-18T01:17:58Z",
   "characters": [
     {
       "id": "DEFECT",
@@ -28904,9 +28904,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 107,
-        "avg_damage_taken": 36.728973,
-        "avg_turns": 7.1682243
+        "fights": 83,
+        "avg_damage_taken": 47.73494,
+        "avg_turns": 7.192771
       }
     },
     {
@@ -28924,21 +28924,21 @@
           "monsters": [
             "AXEBOT"
           ],
-          "share": 0.8888889
+          "share": 0.625
         },
         {
           "monsters": [
             "AXEBOT",
             "AXEBOT"
           ],
-          "share": 0.11111111
+          "share": 0.375
         }
       ],
       "spawns": [],
       "stats": {
-        "fights": 81,
-        "avg_damage_taken": 7.567901,
-        "avg_turns": 6.4938273
+        "fights": 88,
+        "avg_damage_taken": 9.727273,
+        "avg_turns": 5.840909
       }
     },
     {
@@ -28954,26 +28954,26 @@
           "monsters": [
             "BATTLE_FRIEND_V2"
           ],
-          "share": 0.475
+          "share": 0.7222222
         },
         {
           "monsters": [
             "BATTLE_FRIEND_V3"
           ],
-          "share": 0.3
+          "share": 0.14814815
         },
         {
           "monsters": [
             "BATTLE_FRIEND_V1"
           ],
-          "share": 0.225
+          "share": 0.12962963
         }
       ],
       "spawns": [],
       "stats": {
-        "fights": 40,
+        "fights": 54,
         "avg_damage_taken": 1.0,
-        "avg_turns": 2.75
+        "avg_turns": 2.7037036
       }
     },
     {
@@ -29037,10 +29037,10 @@
         {
           "monsters": [
             "BOWLBUG_EGG",
-            "BOWLBUG_NECTAR",
-            "BOWLBUG_ROCK"
+            "BOWLBUG_ROCK",
+            "BOWLBUG_SILK"
           ],
-          "share": 0.34814814
+          "share": 0.36956522
         },
         {
           "monsters": [
@@ -29048,22 +29048,22 @@
             "BOWLBUG_ROCK",
             "BOWLBUG_SILK"
           ],
-          "share": 0.34074074
+          "share": 0.32608697
         },
         {
           "monsters": [
             "BOWLBUG_EGG",
-            "BOWLBUG_ROCK",
-            "BOWLBUG_SILK"
+            "BOWLBUG_NECTAR",
+            "BOWLBUG_ROCK"
           ],
-          "share": 0.31111112
+          "share": 0.3043478
         }
       ],
       "spawns": [],
       "stats": {
-        "fights": 135,
-        "avg_damage_taken": 12.303703,
-        "avg_turns": 4.414815
+        "fights": 184,
+        "avg_damage_taken": 13.130435,
+        "avg_turns": 4.0597825
       }
     },
     {
@@ -29086,21 +29086,21 @@
             "BOWLBUG_EGG",
             "BOWLBUG_ROCK"
           ],
-          "share": 0.556213
+          "share": 0.5313225
         },
         {
           "monsters": [
             "BOWLBUG_NECTAR",
             "BOWLBUG_ROCK"
           ],
-          "share": 0.44378698
+          "share": 0.4686775
         }
       ],
       "spawns": [],
       "stats": {
-        "fights": 338,
-        "avg_damage_taken": 8.059172,
-        "avg_turns": 3.5325444
+        "fights": 431,
+        "avg_damage_taken": 10.693735,
+        "avg_turns": 3.5290024
       }
     },
     {
@@ -29123,9 +29123,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 315,
-        "avg_damage_taken": 18.774603,
-        "avg_turns": 5.088889
+        "fights": 350,
+        "avg_damage_taken": 22.3,
+        "avg_turns": 5.197143
       }
     },
     {
@@ -29148,9 +29148,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 315,
-        "avg_damage_taken": 18.939682,
-        "avg_turns": 4.457143
+        "fights": 372,
+        "avg_damage_taken": 21.561829,
+        "avg_turns": 4.639785
       }
     },
     {
@@ -29173,9 +29173,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 145,
-        "avg_damage_taken": 27.289656,
-        "avg_turns": 8.551724
+        "fights": 204,
+        "avg_damage_taken": 33.960785,
+        "avg_turns": 9.254902
       }
     },
     {
@@ -29201,9 +29201,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 163,
-        "avg_damage_taken": 12.319018,
-        "avg_turns": 5.2515335
+        "fights": 201,
+        "avg_damage_taken": 14.447762,
+        "avg_turns": 4.8208957
       }
     },
     {
@@ -29229,9 +29229,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 84,
-        "avg_damage_taken": 14.785714,
-        "avg_turns": 4.297619
+        "fights": 90,
+        "avg_damage_taken": 13.777778,
+        "avg_turns": 3.8222222
       }
     },
     {
@@ -29258,9 +29258,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 125,
-        "avg_damage_taken": 6.552,
-        "avg_turns": 4.216
+        "fights": 156,
+        "avg_damage_taken": 9.044871,
+        "avg_turns": 4.2884617
       }
     },
     {
@@ -29286,9 +29286,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 470,
-        "avg_damage_taken": 5.3595743,
-        "avg_turns": 4.0531917
+        "fights": 561,
+        "avg_damage_taken": 5.8395724,
+        "avg_turns": 4.110517
       }
     },
     {
@@ -29311,9 +29311,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 109,
-        "avg_damage_taken": 5.0733943,
-        "avg_turns": 4.1284404
+        "fights": 153,
+        "avg_damage_taken": 5.5686274,
+        "avg_turns": 4.0718956
       }
     },
     {
@@ -29338,9 +29338,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 122,
-        "avg_damage_taken": 7.532787,
-        "avg_turns": 4.647541
+        "fights": 168,
+        "avg_damage_taken": 9.416667,
+        "avg_turns": 4.8095236
       }
     },
     {
@@ -29367,9 +29367,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 309,
-        "avg_damage_taken": 22.770227,
-        "avg_turns": 4.449838
+        "fights": 389,
+        "avg_damage_taken": 25.077122,
+        "avg_turns": 4.082262
       }
     },
     {
@@ -29382,23 +29382,9 @@
         "WRIGGLER"
       ],
       "tags": [],
-      "lineups": [
-        {
-          "monsters": [
-            "WRIGGLER",
-            "WRIGGLER",
-            "WRIGGLER",
-            "WRIGGLER"
-          ],
-          "share": 1.0
-        }
-      ],
+      "lineups": [],
       "spawns": [],
-      "stats": {
-        "fights": 29,
-        "avg_damage_taken": 9.448276,
-        "avg_turns": 4.413793
-      }
+      "stats": null
     },
     {
       "id": "DEVOTED_SCULPTOR_WEAK",
@@ -29420,9 +29406,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 227,
-        "avg_damage_taken": 9.317181,
-        "avg_turns": 4.23348
+        "fights": 259,
+        "avg_damage_taken": 11.563706,
+        "avg_turns": 4.057915
       }
     },
     {
@@ -29445,9 +29431,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 286,
-        "avg_damage_taken": 20.195805,
-        "avg_turns": 5.325175
+        "fights": 345,
+        "avg_damage_taken": 23.608696,
+        "avg_turns": 5.0028987
       }
     },
     {
@@ -29475,9 +29461,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 140,
-        "avg_damage_taken": 9.678572,
-        "avg_turns": 3.9928572
+        "fights": 181,
+        "avg_damage_taken": 10.60221,
+        "avg_turns": 3.7016575
       }
     },
     {
@@ -29504,9 +29490,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 342,
-        "avg_damage_taken": 6.517544,
-        "avg_turns": 4.116959
+        "fights": 453,
+        "avg_damage_taken": 7.637969,
+        "avg_turns": 3.9139073
       }
     },
     {
@@ -29534,9 +29520,9 @@
         "ZAPBOT"
       ],
       "stats": {
-        "fights": 70,
-        "avg_damage_taken": 11.142858,
-        "avg_turns": 4.4428573
+        "fights": 92,
+        "avg_damage_taken": 14.75,
+        "avg_turns": 4.076087
       }
     },
     {
@@ -29572,23 +29558,23 @@
         {
           "monsters": [
             "FLYCONID",
-            "TWIG_SLIME_M"
+            "LEAF_SLIME_M"
           ],
-          "share": 0.5670103
+          "share": 0.5565217
         },
         {
           "monsters": [
             "FLYCONID",
-            "LEAF_SLIME_M"
+            "TWIG_SLIME_M"
           ],
-          "share": 0.4329897
+          "share": 0.44347826
         }
       ],
       "spawns": [],
       "stats": {
-        "fights": 97,
-        "avg_damage_taken": 10.14433,
-        "avg_turns": 4.6907215
+        "fights": 115,
+        "avg_damage_taken": 13.017391,
+        "avg_turns": 4.791304
       }
     },
     {
@@ -29614,9 +29600,9 @@
         "EYE_WITH_TEETH"
       ],
       "stats": {
-        "fights": 107,
-        "avg_damage_taken": 5.775701,
-        "avg_turns": 4.9439254
+        "fights": 151,
+        "avg_damage_taken": 7.0397353,
+        "avg_turns": 4.5430465
       }
     },
     {
@@ -29639,9 +29625,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 142,
-        "avg_damage_taken": 8.007042,
-        "avg_turns": 3.2957747
+        "fights": 186,
+        "avg_damage_taken": 9.091398,
+        "avg_turns": 3.6935484
       }
     },
     {
@@ -29664,9 +29650,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 83,
-        "avg_damage_taken": 10.710843,
-        "avg_turns": 5.2289157
+        "fights": 89,
+        "avg_damage_taken": 13.550562,
+        "avg_turns": 4.8651686
       }
     },
     {
@@ -29691,9 +29677,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 483,
-        "avg_damage_taken": 2.5341616,
-        "avg_turns": 4.2298136
+        "fights": 576,
+        "avg_damage_taken": 2.5659723,
+        "avg_turns": 4.048611
       }
     },
     {
@@ -29716,9 +29702,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 100,
-        "avg_damage_taken": 9.11,
-        "avg_turns": 3.86
+        "fights": 90,
+        "avg_damage_taken": 10.711111,
+        "avg_turns": 3.7
       }
     },
     {
@@ -29746,9 +29732,9 @@
         "SNEAKY_GREMLIN"
       ],
       "stats": {
-        "fights": 118,
-        "avg_damage_taken": 9.966102,
-        "avg_turns": 4.9745765
+        "fights": 189,
+        "avg_damage_taken": 9.920635,
+        "avg_turns": 5.010582
       }
     },
     {
@@ -29771,9 +29757,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 113,
-        "avg_damage_taken": 6.8495574,
-        "avg_turns": 4.362832
+        "fights": 193,
+        "avg_damage_taken": 8.601036,
+        "avg_turns": 4.279793
       }
     },
     {
@@ -29796,9 +29782,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 148,
-        "avg_damage_taken": 14.614865,
-        "avg_turns": 4.7364864
+        "fights": 217,
+        "avg_damage_taken": 18.281105,
+        "avg_turns": 4.474654
       }
     },
     {
@@ -29821,9 +29807,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 297,
-        "avg_damage_taken": 23.39394,
-        "avg_turns": 5.589226
+        "fights": 353,
+        "avg_damage_taken": 24.869688,
+        "avg_turns": 5.4589233
       }
     },
     {
@@ -29848,9 +29834,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 102,
-        "avg_damage_taken": 7.2352943,
-        "avg_turns": 3.6078432
+        "fights": 165,
+        "avg_damage_taken": 10.587879,
+        "avg_turns": 3.6727273
       }
     },
     {
@@ -29875,9 +29861,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 164,
-        "avg_damage_taken": 36.878048,
-        "avg_turns": 8.219512
+        "fights": 163,
+        "avg_damage_taken": 41.90184,
+        "avg_turns": 7.5766873
       }
     },
     {
@@ -29906,9 +29892,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 126,
-        "avg_damage_taken": 19.444445,
-        "avg_turns": 4.873016
+        "fights": 150,
+        "avg_damage_taken": 18.706667,
+        "avg_turns": 4.4933333
       }
     },
     {
@@ -29931,9 +29917,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 157,
-        "avg_damage_taken": 35.121017,
-        "avg_turns": 8.375796
+        "fights": 197,
+        "avg_damage_taken": 41.020306,
+        "avg_turns": 8.076142
       }
     },
     {
@@ -29956,9 +29942,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 113,
-        "avg_damage_taken": 28.017698,
-        "avg_turns": 9.194691
+        "fights": 176,
+        "avg_damage_taken": 32.767044,
+        "avg_turns": 9.318182
       }
     },
     {
@@ -29984,9 +29970,9 @@
         "GAS_BOMB"
       ],
       "stats": {
-        "fights": 119,
-        "avg_damage_taken": 8.378151,
-        "avg_turns": 4.9411764
+        "fights": 176,
+        "avg_damage_taken": 10.0,
+        "avg_turns": 5.005682
       }
     },
     {
@@ -30009,9 +29995,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 157,
-        "avg_damage_taken": 8.707006,
-        "avg_turns": 5.2929935
+        "fights": 210,
+        "avg_damage_taken": 12.685715,
+        "avg_turns": 5.2380953
       }
     },
     {
@@ -30034,9 +30020,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 107,
-        "avg_damage_taken": 7.803738,
-        "avg_turns": 4.542056
+        "fights": 186,
+        "avg_damage_taken": 6.9623656,
+        "avg_turns": 4.0053763
       }
     },
     {
@@ -30059,9 +30045,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 130,
-        "avg_damage_taken": 17.546154,
-        "avg_turns": 6.123077
+        "fights": 156,
+        "avg_damage_taken": 23.615385,
+        "avg_turns": 5.955128
       }
     },
     {
@@ -30085,8 +30071,8 @@
       "spawns": [],
       "stats": {
         "fights": 37,
-        "avg_damage_taken": 20.783783,
-        "avg_turns": 4.081081
+        "avg_damage_taken": 24.162163,
+        "avg_turns": 4.135135
       }
     },
     {
@@ -30110,9 +30096,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 160,
-        "avg_damage_taken": 12.0625,
-        "avg_turns": 4.70625
+        "fights": 201,
+        "avg_damage_taken": 13.691543,
+        "avg_turns": 4.432836
       }
     },
     {
@@ -30136,9 +30122,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 128,
-        "avg_damage_taken": 11.9765625,
-        "avg_turns": 5.1640625
+        "fights": 157,
+        "avg_damage_taken": 13.057324,
+        "avg_turns": 5.121019
       }
     },
     {
@@ -30163,9 +30149,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 502,
-        "avg_damage_taken": 4.123506,
-        "avg_turns": 4.0318723
+        "fights": 618,
+        "avg_damage_taken": 4.211974,
+        "avg_turns": 3.9368932
       }
     },
     {
@@ -30193,9 +30179,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 105,
-        "avg_damage_taken": 10.438095,
-        "avg_turns": 5.590476
+        "fights": 121,
+        "avg_damage_taken": 10.710744,
+        "avg_turns": 5.1900826
       }
     },
     {
@@ -30221,9 +30207,9 @@
         "TOUGH_EGG"
       ],
       "stats": {
-        "fights": 167,
-        "avg_damage_taken": 10.670659,
-        "avg_turns": 4.8742514
+        "fights": 227,
+        "avg_damage_taken": 12.819384,
+        "avg_turns": 4.6475773
       }
     },
     {
@@ -30246,9 +30232,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 88,
-        "avg_damage_taken": 11.727273,
-        "avg_turns": 5.125
+        "fights": 95,
+        "avg_damage_taken": 15.031579,
+        "avg_turns": 4.957895
       }
     },
     {
@@ -30274,9 +30260,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 322,
-        "avg_damage_taken": 16.440994,
-        "avg_turns": 5.5031056
+        "fights": 354,
+        "avg_damage_taken": 22.751413,
+        "avg_turns": 5.6101694
       }
     },
     {
@@ -30302,9 +30288,9 @@
         "WRIGGLER"
       ],
       "stats": {
-        "fights": 333,
-        "avg_damage_taken": 17.900902,
-        "avg_turns": 7.108108
+        "fights": 352,
+        "avg_damage_taken": 19.508522,
+        "avg_turns": 7.184659
       }
     },
     {
@@ -30327,9 +30313,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 142,
-        "avg_damage_taken": 5.1549296,
-        "avg_turns": 3.8873239
+        "fights": 170,
+        "avg_damage_taken": 6.9882355,
+        "avg_turns": 4.082353
       }
     },
     {
@@ -30368,9 +30354,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 136,
-        "avg_damage_taken": 36.72059,
-        "avg_turns": 8.419118
+        "fights": 112,
+        "avg_damage_taken": 47.25893,
+        "avg_turns": 8.026786
       }
     },
     {
@@ -30391,42 +30377,10 @@
         {
           "monsters": [
             "AXE_RUBY_RAIDER",
-            "BRUTE_RUBY_RAIDER",
-            "TRACKER_RUBY_RAIDER"
-          ],
-          "share": 0.15238096
-        },
-        {
-          "monsters": [
-            "BRUTE_RUBY_RAIDER",
             "CROSSBOW_RUBY_RAIDER",
             "TRACKER_RUBY_RAIDER"
           ],
-          "share": 0.13333334
-        },
-        {
-          "monsters": [
-            "ASSASSIN_RUBY_RAIDER",
-            "BRUTE_RUBY_RAIDER",
-            "CROSSBOW_RUBY_RAIDER"
-          ],
-          "share": 0.114285715
-        },
-        {
-          "monsters": [
-            "ASSASSIN_RUBY_RAIDER",
-            "AXE_RUBY_RAIDER",
-            "TRACKER_RUBY_RAIDER"
-          ],
-          "share": 0.104761906
-        },
-        {
-          "monsters": [
-            "ASSASSIN_RUBY_RAIDER",
-            "BRUTE_RUBY_RAIDER",
-            "TRACKER_RUBY_RAIDER"
-          ],
-          "share": 0.0952381
+          "share": 0.12345679
         },
         {
           "monsters": [
@@ -30434,7 +30388,7 @@
             "AXE_RUBY_RAIDER",
             "CROSSBOW_RUBY_RAIDER"
           ],
-          "share": 0.08571429
+          "share": 0.11728395
         },
         {
           "monsters": [
@@ -30442,15 +30396,7 @@
             "BRUTE_RUBY_RAIDER",
             "CROSSBOW_RUBY_RAIDER"
           ],
-          "share": 0.08571429
-        },
-        {
-          "monsters": [
-            "AXE_RUBY_RAIDER",
-            "CROSSBOW_RUBY_RAIDER",
-            "TRACKER_RUBY_RAIDER"
-          ],
-          "share": 0.08571429
+          "share": 0.11728395
         },
         {
           "monsters": [
@@ -30458,7 +30404,47 @@
             "AXE_RUBY_RAIDER",
             "BRUTE_RUBY_RAIDER"
           ],
-          "share": 0.07619048
+          "share": 0.11111111
+        },
+        {
+          "monsters": [
+            "ASSASSIN_RUBY_RAIDER",
+            "AXE_RUBY_RAIDER",
+            "TRACKER_RUBY_RAIDER"
+          ],
+          "share": 0.10493827
+        },
+        {
+          "monsters": [
+            "ASSASSIN_RUBY_RAIDER",
+            "BRUTE_RUBY_RAIDER",
+            "TRACKER_RUBY_RAIDER"
+          ],
+          "share": 0.09876543
+        },
+        {
+          "monsters": [
+            "AXE_RUBY_RAIDER",
+            "BRUTE_RUBY_RAIDER",
+            "TRACKER_RUBY_RAIDER"
+          ],
+          "share": 0.09259259
+        },
+        {
+          "monsters": [
+            "BRUTE_RUBY_RAIDER",
+            "CROSSBOW_RUBY_RAIDER",
+            "TRACKER_RUBY_RAIDER"
+          ],
+          "share": 0.086419754
+        },
+        {
+          "monsters": [
+            "ASSASSIN_RUBY_RAIDER",
+            "BRUTE_RUBY_RAIDER",
+            "CROSSBOW_RUBY_RAIDER"
+          ],
+          "share": 0.08024691
         },
         {
           "monsters": [
@@ -30466,14 +30452,14 @@
             "CROSSBOW_RUBY_RAIDER",
             "TRACKER_RUBY_RAIDER"
           ],
-          "share": 0.06666667
+          "share": 0.06790123
         }
       ],
       "spawns": [],
       "stats": {
-        "fights": 105,
-        "avg_damage_taken": 10.352381,
-        "avg_turns": 4.0
+        "fights": 162,
+        "avg_damage_taken": 13.58642,
+        "avg_turns": 4.1296296
       }
     },
     {
@@ -30501,9 +30487,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 66,
-        "avg_damage_taken": 12.712121,
-        "avg_turns": 3.1969697
+        "fights": 87,
+        "avg_damage_taken": 11.78161,
+        "avg_turns": 2.862069
       }
     },
     {
@@ -30530,9 +30516,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 239,
-        "avg_damage_taken": 7.1380754,
-        "avg_turns": 2.9079497
+        "fights": 253,
+        "avg_damage_taken": 7.2964425,
+        "avg_turns": 2.8498023
       }
     },
     {
@@ -30559,9 +30545,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 104,
-        "avg_damage_taken": 11.759615,
-        "avg_turns": 4.7115383
+        "fights": 149,
+        "avg_damage_taken": 14.295302,
+        "avg_turns": 4.892617
       }
     },
     {
@@ -30586,9 +30572,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 478,
-        "avg_damage_taken": 4.485356,
-        "avg_turns": 3.9832635
+        "fights": 563,
+        "avg_damage_taken": 4.689165,
+        "avg_turns": 3.9804618
       }
     },
     {
@@ -30611,9 +30597,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 126,
-        "avg_damage_taken": 5.8650794,
-        "avg_turns": 4.7777777
+        "fights": 167,
+        "avg_damage_taken": 5.9880238,
+        "avg_turns": 4.820359
       }
     },
     {
@@ -30638,9 +30624,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 485,
-        "avg_damage_taken": 1.9608247,
-        "avg_turns": 3.6948454
+        "fights": 562,
+        "avg_damage_taken": 2.5266905,
+        "avg_turns": 3.5338078
       }
     },
     {
@@ -30663,9 +30649,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 298,
-        "avg_damage_taken": 20.372482,
-        "avg_turns": 5.7919464
+        "fights": 341,
+        "avg_damage_taken": 20.31085,
+        "avg_turns": 5.6422286
       }
     },
     {
@@ -30688,9 +30674,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 83,
-        "avg_damage_taken": 8.590362,
-        "avg_turns": 5.626506
+        "fights": 99,
+        "avg_damage_taken": 13.191919,
+        "avg_turns": 5.585859
       }
     },
     {
@@ -30721,9 +30707,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 93,
-        "avg_damage_taken": 8.16129,
-        "avg_turns": 4.709677
+        "fights": 132,
+        "avg_damage_taken": 10.424242,
+        "avg_turns": 4.8863635
       }
     },
     {
@@ -30744,26 +30730,26 @@
       "lineups": [
         {
           "monsters": [
-            "LEAF_SLIME_M",
-            "LEAF_SLIME_S",
-            "TWIG_SLIME_S"
-          ],
-          "share": 0.51033056
-        },
-        {
-          "monsters": [
             "LEAF_SLIME_S",
             "TWIG_SLIME_M",
             "TWIG_SLIME_S"
           ],
-          "share": 0.4896694
+          "share": 0.51724136
+        },
+        {
+          "monsters": [
+            "LEAF_SLIME_M",
+            "LEAF_SLIME_S",
+            "TWIG_SLIME_S"
+          ],
+          "share": 0.4827586
         }
       ],
       "spawns": [],
       "stats": {
-        "fights": 484,
-        "avg_damage_taken": 3.7086778,
-        "avg_turns": 4.3657026
+        "fights": 580,
+        "avg_damage_taken": 3.9568965,
+        "avg_turns": 4.3206897
       }
     },
     {
@@ -30790,21 +30776,21 @@
             "SLITHERING_STRANGLER",
             "SNAPPING_JAXFRUIT"
           ],
-          "share": 0.33333334
-        },
-        {
-          "monsters": [
-            "LEAF_SLIME_M",
-            "SLITHERING_STRANGLER"
-          ],
-          "share": 0.18181819
+          "share": 0.3195266
         },
         {
           "monsters": [
             "SLITHERING_STRANGLER",
             "TWIG_SLIME_M"
           ],
-          "share": 0.17171717
+          "share": 0.18934911
+        },
+        {
+          "monsters": [
+            "LEAF_SLIME_M",
+            "SLITHERING_STRANGLER"
+          ],
+          "share": 0.17751479
         },
         {
           "monsters": [
@@ -30812,7 +30798,7 @@
             "SLITHERING_STRANGLER",
             "TWIG_SLIME_S"
           ],
-          "share": 0.15151516
+          "share": 0.17159763
         },
         {
           "monsters": [
@@ -30820,7 +30806,7 @@
             "LEAF_SLIME_S",
             "SLITHERING_STRANGLER"
           ],
-          "share": 0.09090909
+          "share": 0.07692308
         },
         {
           "monsters": [
@@ -30828,14 +30814,14 @@
             "TWIG_SLIME_S",
             "TWIG_SLIME_S"
           ],
-          "share": 0.07070707
+          "share": 0.06508876
         }
       ],
       "spawns": [],
       "stats": {
-        "fights": 99,
-        "avg_damage_taken": 9.767676,
-        "avg_turns": 4.6363635
+        "fights": 169,
+        "avg_damage_taken": 12.343195,
+        "avg_turns": 4.923077
       }
     },
     {
@@ -30858,9 +30844,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 463,
-        "avg_damage_taken": 3.5183585,
-        "avg_turns": 3.4946005
+        "fights": 582,
+        "avg_damage_taken": 4.041237,
+        "avg_turns": 3.4982817
       }
     },
     {
@@ -30889,9 +30875,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 122,
-        "avg_damage_taken": 14.5245905,
-        "avg_turns": 5.9590163
+        "fights": 167,
+        "avg_damage_taken": 16.58084,
+        "avg_turns": 5.7245507
       }
     },
     {
@@ -30919,9 +30905,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 114,
-        "avg_damage_taken": 11.798245,
-        "avg_turns": 4.5
+        "fights": 138,
+        "avg_damage_taken": 13.681159,
+        "avg_turns": 4.731884
       }
     },
     {
@@ -30944,9 +30930,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 156,
-        "avg_damage_taken": 28.596153,
-        "avg_turns": 9.724359
+        "fights": 202,
+        "avg_damage_taken": 32.20792,
+        "avg_turns": 9.806931
       }
     },
     {
@@ -30969,9 +30955,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 135,
-        "avg_damage_taken": 17.651852,
-        "avg_turns": 4.740741
+        "fights": 161,
+        "avg_damage_taken": 21.496895,
+        "avg_turns": 4.254658
       }
     },
     {
@@ -30994,9 +30980,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 151,
-        "avg_damage_taken": 12.913907,
-        "avg_turns": 4.6688743
+        "fights": 202,
+        "avg_damage_taken": 16.683168,
+        "avg_turns": 4.4257426
       }
     },
     {
@@ -31019,9 +31005,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 327,
-        "avg_damage_taken": 19.691132,
-        "avg_turns": 6.6085625
+        "fights": 339,
+        "avg_damage_taken": 21.050148,
+        "avg_turns": 6.439528
       }
     },
     {
@@ -31044,9 +31030,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 133,
-        "avg_damage_taken": 33.548874,
-        "avg_turns": 9.714286
+        "fights": 111,
+        "avg_damage_taken": 48.92793,
+        "avg_turns": 9.180181
       }
     },
     {
@@ -31083,9 +31069,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 137,
-        "avg_damage_taken": 28.605839,
-        "avg_turns": 7.372263
+        "fights": 208,
+        "avg_damage_taken": 35.79327,
+        "avg_turns": 7.7451925
       }
     },
     {
@@ -31111,9 +31097,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 144,
-        "avg_damage_taken": 34.32639,
-        "avg_turns": 9.486111
+        "fights": 185,
+        "avg_damage_taken": 36.183784,
+        "avg_turns": 9.2972975
       }
     },
     {
@@ -31138,9 +31124,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 85,
-        "avg_damage_taken": 9.341176,
-        "avg_turns": 4.717647
+        "fights": 101,
+        "avg_damage_taken": 14.386139,
+        "avg_turns": 4.920792
       }
     },
     {
@@ -31166,9 +31152,9 @@
         "PARAFRIGHT"
       ],
       "stats": {
-        "fights": 132,
-        "avg_damage_taken": 9.431818,
-        "avg_turns": 5.0454545
+        "fights": 215,
+        "avg_damage_taken": 13.725581,
+        "avg_turns": 5.055814
       }
     },
     {
@@ -31193,9 +31179,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 325,
-        "avg_damage_taken": 9.378462,
-        "avg_turns": 4.0
+        "fights": 451,
+        "avg_damage_taken": 10.505544,
+        "avg_turns": 3.9379158
       }
     },
     {
@@ -31219,9 +31205,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 464,
-        "avg_damage_taken": 4.7090516,
-        "avg_turns": 3.9956896
+        "fights": 546,
+        "avg_damage_taken": 5.340659,
+        "avg_turns": 3.9926739
       }
     },
     {
@@ -31238,9 +31224,28 @@
         "Burrower",
         "Chomper"
       ],
-      "lineups": [],
+      "lineups": [
+        {
+          "monsters": [
+            "BOWLBUG_EGG",
+            "TUNNELER"
+          ],
+          "share": 0.5833333
+        },
+        {
+          "monsters": [
+            "BOWLBUG_SILK",
+            "TUNNELER"
+          ],
+          "share": 0.41666666
+        }
+      ],
       "spawns": [],
-      "stats": null
+      "stats": {
+        "fights": 24,
+        "avg_damage_taken": 6.0416665,
+        "avg_turns": 4.4166665
+      }
     },
     {
       "id": "TUNNELER_WEAK",
@@ -31264,9 +31269,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 351,
-        "avg_damage_taken": 8.022792,
-        "avg_turns": 4.8319087
+        "fights": 475,
+        "avg_damage_taken": 10.248421,
+        "avg_turns": 4.774737
       }
     },
     {
@@ -31291,9 +31296,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 237,
-        "avg_damage_taken": 7.873418,
-        "avg_turns": 3.670886
+        "fights": 287,
+        "avg_damage_taken": 8.327526,
+        "avg_turns": 3.358885
       }
     },
     {
@@ -31318,9 +31323,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 131,
-        "avg_damage_taken": 8.312977,
-        "avg_turns": 3.9770992
+        "fights": 165,
+        "avg_damage_taken": 8.175757,
+        "avg_turns": 3.939394
       }
     },
     {
@@ -31343,9 +31348,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 159,
-        "avg_damage_taken": 30.893082,
-        "avg_turns": 8.761006
+        "fights": 215,
+        "avg_damage_taken": 34.693024,
+        "avg_turns": 8.553489
       }
     },
     {
@@ -31368,9 +31373,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 121,
-        "avg_damage_taken": 8.876033,
-        "avg_turns": 4.5206614
+        "fights": 142,
+        "avg_damage_taken": 9.894366,
+        "avg_turns": 4.183099
       }
     },
     {
@@ -31393,9 +31398,9 @@
       ],
       "spawns": [],
       "stats": {
-        "fights": 171,
-        "avg_damage_taken": 34.654972,
-        "avg_turns": 10.111111
+        "fights": 199,
+        "avg_damage_taken": 36.75377,
+        "avg_turns": 9.899497
       }
     }
   ],
@@ -33081,7 +33086,8 @@
       "passive_effect": "damage_all",
       "evoke": 8,
       "evoke_effect": "damage_all",
-      "focus": true
+      "focus": true,
+      "decay": 1
     },
     {
       "id": "LIGHTNING_ORB",
@@ -33113,6 +33119,7 @@
     "tougher_enemies_from": 8,
     "deadlier_enemies_from": 9,
     "double_boss_from": 10,
-    "double_boss_act": 2
+    "double_boss_act": 2,
+    "vulnerable_pct": 50
   }
 }

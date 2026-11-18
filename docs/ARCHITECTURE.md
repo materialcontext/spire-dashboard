@@ -73,10 +73,16 @@ kit, so old runs replay even after a data update.
   - star costs and orbs channelled
   - the character's energy, orb slots and arrow slots
 
-  It carries Strength, Dexterity, Focus, orbs, Poison, Aim, Stretch, Vigor,
-  Stars and Arrows between turns. Assumptions the data doesn't state (hand
-  size, hand limit, Arrow return) are in the playbook's `simulation` block.
-  The results are deterministic.
+  It carries Strength, Dexterity, Focus, orbs, Poison, Plating, Vulnerable,
+  Aim, Stretch, Vigor, Stars and Arrows between turns. Assumptions the data
+  doesn't state (hand limit, Arrow return, orb slot cap) are in the
+  playbook's `simulation` block. The results are deterministic. The order of
+  operations, with sources, is in `docs/SIMULATION.md`.
+- `mechanics` (top level in core): reads power and relic text into timed
+  triggers ("at the start of your turn", "whenever you play an Attack",
+  "every 3 turns") and passives (extra damage, Vulnerable, free Skills,
+  echoes). Sentences it can't read are kept, so the UI can show what isn't
+  simulated.
 
 `Dashboard::compute` bundles everything the Run tab needs. The app recomputes
 it only when the run or data changes, never per frame. Analytics (`timeline` +

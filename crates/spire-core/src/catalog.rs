@@ -340,6 +340,13 @@ pub struct Orb {
     /// Whether Focus changes this orb's values.
     #[serde(default = "yes")]
     pub focus: bool,
+    /// How much the passive drops after each trigger (Glass).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub decay: i32,
+}
+
+fn is_zero(n: &i32) -> bool {
+    *n == 0
 }
 
 fn yes() -> bool {
@@ -718,6 +725,10 @@ pub struct GameRules {
     /// Ascension from which the act at `double_boss_act` has two bosses.
     pub double_boss_from: Option<u32>,
     pub double_boss_act: u8,
+    /// How much more damage a Vulnerable creature takes from attacks, in
+    /// percent, read from the power's description. `None` if unknown.
+    #[serde(default)]
+    pub vulnerable_pct: Option<u32>,
 }
 
 impl Default for GameRules {
@@ -732,6 +743,7 @@ impl Default for GameRules {
             deadlier_enemies_from: Some(9),
             double_boss_from: Some(10),
             double_boss_act: 2,
+            vulnerable_pct: None,
         }
     }
 }

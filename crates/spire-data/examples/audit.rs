@@ -5,6 +5,7 @@
 //! `cargo run -p spire-data --example audit [-- --cards] [-- --sim]`
 //!
 //! `--sim` runs the deck simulator on every starter deck instead.
+//! `--mechanics` shows what the simulator reads from every power and relic.
 
 use std::collections::BTreeMap;
 
@@ -18,6 +19,10 @@ fn main() {
     let pb = spire_data::bundled_playbook();
     if std::env::args().any(|a| a == "--sim") {
         starter_sims(&cat, &pb);
+        return;
+    }
+    if std::env::args().any(|a| a == "--mechanics") {
+        mechanics(&cat);
         return;
     }
 
@@ -90,4 +95,29 @@ fn starter_sims(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
             sim.resources,
         );
     }
+}
+
+fn mechanics(cat: &Catalog) {
+    use spire_core::mechanics::read;
+    let orbs: Vec<_> = cat.orbs.values().cloned().collect();
+    let verbose = std::env::args().any(|a| a == "-v");
+    let report = |kind: &str, name: &str, text: &str, played: bool| -> bool {
+        let m = read(text, &orbs, played);
+        let ok = !m.is_empty();
+        if verbose || !ok {
+            println!("{kind} {} {name:<26} {:?} | unread: {:?}", if ok { "+" } else { "-" }, m.describe(), m.unread);
+        }
+        ok
+    };
+    let (mut p_ok, mut p_all) = (0, 0);
+    for c in cat.cards.values().filter(|c| c.card_type == CardType::Power) {
+        p_all += 1;
+        p_ok += usize::from(report("P", &c.name, &c.text, true));
+    }
+    let (mut r_ok, mut r_all) = (0, 0);
+    for r in cat.relics.values() {
+        r_all += 1;
+        r_ok += usize::from(report("R", &r.name, &r.text, false));
+    }
+    println!("powers read: {p_ok}/{p_all}  relics read: {r_ok}/{r_all}");
 }

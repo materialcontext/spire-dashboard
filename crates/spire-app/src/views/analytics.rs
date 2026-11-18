@@ -252,7 +252,10 @@ pub fn deck_section(ui: &mut Ui, salt: &str, sim: &DeckSim, show_all: &mut bool)
         return;
     }
     let note = format!("{} simulated fights", sim.trials);
-    panel(ui, "Damage and block per turn", Some(&note), |ui| per_turn(ui, salt, sim));
+    panel(ui, "Damage and block per turn", Some(&note), |ui| {
+        per_turn(ui, salt, sim);
+        relics_line(ui, sim);
+    });
     ui.add_space(GAP);
     panel(ui, "Draw and energy", None, |ui| draw_and_energy(ui, sim));
     ui.add_space(GAP);
@@ -307,13 +310,31 @@ fn per_turn(ui: &mut Ui, salt: &str, sim: &DeckSim) {
         });
     ui.label(
         RichText::new(format!(
-            "Shaded: the middle half of fights. {} cards and {} energy a turn; relics, potions, enchantments \
-             and enemy actions aren't simulated.",
+            "Shaded: the middle half of fights. {} cards and {} energy a turn; potions, enchantments and enemy \
+             actions aren't simulated.",
             sim.hand_size, sim.energy
         ))
         .small()
         .color(text_faint()),
     );
+}
+
+/// Which of the run's relics the simulation includes, with the rest on hover.
+fn relics_line(ui: &mut Ui, sim: &DeckSim) {
+    let (yes, no) = (&sim.relics_simulated, &sim.relics_not_simulated);
+    if yes.is_empty() && no.is_empty() {
+        return;
+    }
+    let text = format!("Relics simulated: {} of {}", yes.len(), yes.len() + no.len());
+    ui.label(RichText::new(text).small().color(text_dim())).on_hover_ui(|ui| {
+        if !yes.is_empty() {
+            ui.label(RichText::new(format!("Simulated: {}", yes.join(", "))).small());
+        }
+        if !no.is_empty() {
+            ui.label(RichText::new(format!("Not simulated: {}", no.join(", "))).small().color(text_dim()));
+        }
+        ui.label(RichText::new("See each relic in the Relics tab for what is read.").small().color(text_faint()));
+    });
 }
 
 fn draw_and_energy(ui: &mut Ui, sim: &DeckSim) {

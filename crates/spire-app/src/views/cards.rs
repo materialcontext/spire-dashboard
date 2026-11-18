@@ -301,6 +301,12 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser, out: &mut Vec<Actio
         ui.label(RichText::new("No upgrade").small().color(text_faint()));
     }
 
+    if card.card_type == CardType::Power {
+        ui.add_space(10.0);
+        let orbs: Vec<_> = v.catalog.orbs.values().cloned().collect();
+        crate::views::relics::simulator_reading(ui, &spire_core::mechanics::read(card.text_at(up), &orbs, true));
+    }
+
     ui.add_space(10.0);
     ui.label(eyebrow("Roles"));
     hairline(ui);

@@ -35,6 +35,14 @@ the card you took, HP and gold after. Then it re-analyses the run.
   turn 3, dead draws, and whether energy fits the deck. Character mechanics are
   simulated: orbs and Focus, Osty, Summon, Stars, Forge, Doom, Poison, Aim,
   Stretch, Vigor and the Fool's Arrows.
+  - Powers and relics are read from their text. That covers start- and
+    end-of-turn effects, "whenever you play…" triggers, every-N counters,
+    Vulnerable, Plating, and extra damage or Block for other cards.
+  - The order effects apply in, and its sources, is in
+    [docs/SIMULATION.md](docs/SIMULATION.md).
+- **Relic catalog**: every relic, filtered by pool, rarity, whether it's in
+  your run and whether the simulator uses it. Each relic shows what the
+  simulator reads from it and what it leaves out.
 - **History**: every run you end or abandon here, filtered by character and
   outcome, with the same charts, plus a floor-by-floor replay of the deck and
   relics.
@@ -59,7 +67,7 @@ Linux needs the usual X11/Wayland runtime libraries (e.g. `libxkbcommon-x11-0`).
 5. **End run** files the run in History.
 
 Keys are optional shortcuts: 1–8 pick the room, Ctrl+Enter commits, Ctrl+Z
-undoes, Ctrl+1–5 switch tabs and Esc closes dialogs.
+undoes, Ctrl+1–6 switch tabs and Esc closes dialogs.
 
 The run saves after every change and reloads on start.
 
