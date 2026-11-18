@@ -43,6 +43,13 @@ pub enum Action {
     /// Jump to a catalog entry.
     Open(Link),
     DismissToast,
+    /// Replace a run in history with an edited copy.
+    SaveHistory {
+        id: String,
+        run: Box<spire_core::Run>,
+    },
+    /// Delete a run from history for good.
+    DeleteHistory(String),
 }
 
 /// Something a name in the UI can link to.

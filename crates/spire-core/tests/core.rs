@@ -954,3 +954,42 @@ fn draw_and_energy_tags_come_from_numbers_and_text() {
     let strike = card("S", CardType::Attack, Rarity::Basic, "Deal 6 damage.");
     assert!(tags(&strike, false).is_empty());
 }
+
+#[test]
+fn history_edits_rewrite_the_log() {
+    let mut cat = catalog();
+    cat.rules.start_curse = Some(CardId::new("REGRET"));
+    let mut run = Run::default();
+    run.push(RunEvent::start(&cat, &CharacterId::new("HERO"), 0).unwrap());
+    let fight = |e: &str| {
+        RunEvent::Node(NodeReport {
+            kind: NodeKind::Monster,
+            encounter: Some(EncounterId::new(e)),
+            event: None,
+            changes: vec![],
+        })
+    };
+    run.push(fight("A"));
+    run.push(fight("B"));
+    run.push(RunEvent::End { outcome: Outcome::Abandoned, at: Some("t".into()) });
+
+    // Ascension: the start is resolved again (A5 adds the curse).
+    let a5 = run.with_ascension(&cat, 5).unwrap();
+    assert_eq!(a5.state().ascension, 5);
+    assert_eq!(a5.state().deck.len(), 4);
+    assert_eq!(a5.events.len(), run.events.len());
+
+    // Outcome: replaced, keeping the end time.
+    let died = run.with_outcome(Some(Outcome::Died { encounter: Some(EncounterId::new("B")) }));
+    assert!(matches!(died.events.last(), Some(RunEvent::End { outcome: Outcome::Died { .. }, at: Some(_) })));
+    assert_eq!(died.events.iter().filter(|e| matches!(e, RunEvent::End { .. })).count(), 1);
+
+    // Floors: numbered, removable, and their fight can change.
+    let floors: Vec<u32> = run.floors().iter().map(|(_, f, _)| *f).collect();
+    assert_eq!(floors, vec![1, 2]);
+    let (first, _, _) = run.floors()[0];
+    assert_eq!(run.without_floor(first).floors().len(), 1);
+    assert_eq!(run.without_floor(0).events.len(), run.events.len(), "only floors can be removed");
+    let changed = run.with_floor_encounter(first, Some(EncounterId::new("C")));
+    assert_eq!(changed.floors()[0].2.encounter, Some(EncounterId::new("C")));
+}

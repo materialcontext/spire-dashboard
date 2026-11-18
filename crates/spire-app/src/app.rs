@@ -482,6 +482,20 @@ impl SpireApp {
                 }
             }
             Action::ToggleDataWindow => self.ui.show_data = !self.ui.show_data,
+            Action::SaveHistory { id, run } => match self.store.update_archived(&id, &run) {
+                Ok(()) => {
+                    self.ui.history.invalidate();
+                    self.note("Run history updated.");
+                }
+                Err(e) => self.note(format!("Could not save the edited run: {e}")),
+            },
+            Action::DeleteHistory(id) => match self.store.delete_archived(&id) {
+                Ok(()) => {
+                    self.ui.history.invalidate();
+                    self.note("Run deleted from history.");
+                }
+                Err(e) => self.note(format!("Could not delete the run: {e}")),
+            },
         }
     }
 }

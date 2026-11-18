@@ -339,6 +339,9 @@ pub struct Run {
     /// RFC 3339 time the run was started (set by the app).
     #[serde(default)]
     pub started_at: Option<String>,
+    /// The player's own notes, added when editing history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
 }
 
 /// One line of run history.
@@ -393,6 +396,68 @@ impl Run {
 
     pub fn push(&mut self, event: RunEvent) {
         self.events.push(event);
+    }
+
+    /// The run as if started at another ascension: the start is resolved
+    /// again, so starting HP, potion slots and the ascension curse follow
+    /// the new level. Everything logged after it is kept as recorded.
+    pub fn with_ascension(&self, catalog: &Catalog, ascension: u32) -> Option<Run> {
+        let character = self.events.iter().find_map(|e| match e {
+            RunEvent::Start { character, .. } => Some(character.clone()),
+            _ => None,
+        })?;
+        let start = RunEvent::start(catalog, &character, ascension)?;
+        let mut run = self.clone();
+        let i = run.events.iter().position(|e| matches!(e, RunEvent::Start { .. }))?;
+        run.events[i] = start;
+        Some(run)
+    }
+
+    /// The run with its result set (or cleared), keeping when it ended.
+    pub fn with_outcome(&self, outcome: Option<Outcome>) -> Run {
+        let mut run = self.clone();
+        let at = run.events.iter().find_map(|e| match e {
+            RunEvent::End { at, .. } => at.clone(),
+            _ => None,
+        });
+        run.events.retain(|e| !matches!(e, RunEvent::End { .. }));
+        if let Some(outcome) = outcome {
+            run.events.push(RunEvent::End { outcome, at });
+        }
+        run
+    }
+
+    /// The run without the floor logged at `event` (an index into
+    /// `events`). Anything that isn't a floor is left alone.
+    pub fn without_floor(&self, event: usize) -> Run {
+        let mut run = self.clone();
+        if matches!(run.events.get(event), Some(RunEvent::Node(_))) {
+            run.events.remove(event);
+        }
+        run
+    }
+
+    /// The run with the fight on the floor at `event` changed.
+    pub fn with_floor_encounter(&self, event: usize, encounter: Option<EncounterId>) -> Run {
+        let mut run = self.clone();
+        if let Some(RunEvent::Node(n)) = run.events.get_mut(event) {
+            n.encounter = encounter;
+        }
+        run
+    }
+
+    /// Floors as `(event index, floor number, report)`, in order.
+    pub fn floors(&self) -> Vec<(usize, u32, &NodeReport)> {
+        self.events
+            .iter()
+            .enumerate()
+            .filter_map(|(i, e)| match e {
+                RunEvent::Node(n) => Some((i, n)),
+                _ => None,
+            })
+            .enumerate()
+            .map(|(floor, (i, n))| (i, floor as u32 + 1, n))
+            .collect()
     }
 
     pub fn undo(&mut self) -> Option<RunEvent> {

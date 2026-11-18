@@ -82,7 +82,7 @@ pub fn root(ui: &mut Ui, v: &ViewCtx, draft: &mut NodeDraft, st: &mut UiState, o
                 history::list(ui, v, &mut st.history);
             });
             egui::CentralPanel::default().frame(center).show(ui, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| history::detail(ui, v, &mut st.history));
+                egui::ScrollArea::vertical().show(ui, |ui| history::detail(ui, v, &mut st.history, out));
             });
             return;
         }
