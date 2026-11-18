@@ -2869,14 +2869,10 @@ version = "0.1.0"
 dependencies = [
  "eframe",
  "egui_plot",
- "muda",
- "objc2-app-kit 0.3.2",
- "objc2-foundation 0.3.2",
  "serde_json",
  "spire-core",
  "spire-data",
- "window-vibrancy",
- "windows",
+ "spire-platform",
 ]
 
 [[package]]
@@ -2897,6 +2893,19 @@ dependencies = [
  "serde_json",
  "spire-core",
  "ureq",
+]
+
+[[package]]
+name = "spire-platform"
+version = "0.1.0"
+dependencies = [
+ "muda",
+ "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
+ "raw-window-handle",
+ "window-vibrancy",
+ "windows",
 ]
 
 [[package]]

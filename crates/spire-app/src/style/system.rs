@@ -247,7 +247,8 @@ fn mac(light: bool, a: &Appearance) -> LookDef {
             pressed: if light { argb(0xFFE6E6E6) } else { Color32::from_white_alpha(64) },
         }),
         shadows: true,
-        translucent: false,
+        // The sidebar material shows where the app leaves the window clear.
+        translucent: a.transparency,
         ..BASE
     }
 }

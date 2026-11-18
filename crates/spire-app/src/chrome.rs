@@ -56,20 +56,38 @@ pub fn material(window: Window, dark: bool) {
     }
 }
 
-/// `window-vibrancy` sets the system backdrop (Mica, Windows 11 22H2 and
-/// later) and the dark title bar; it fails cleanly on older Windows.
-#[cfg(windows)]
+/// Sets the system backdrop (Mica, Windows 11 22H2 and later) and the dark
+/// title bar; fails cleanly on older Windows and does nothing elsewhere.
 fn apply_mica(window: Window, dark: bool) {
-    let ok = match window {
-        Window::Creation(cc) => window_vibrancy::apply_mica(cc, Some(dark)),
-        Window::Frame(f) => window_vibrancy::apply_mica(f, Some(dark)),
+    if !cfg!(windows) {
+        return;
     }
-    .is_ok();
+    let ok = match window {
+        Window::Creation(cc) => crate::platform::window::apply_mica(cc, dark),
+        Window::Frame(f) => crate::platform::window::apply_mica(f, dark),
+    };
     crate::style::set_material(ok);
 }
 
-#[cfg(not(windows))]
-fn apply_mica(_window: Window, _dark: bool) {}
+/// macOS: puts the sidebar material behind the window's content (the
+/// window must have been created transparent). Startup only.
+pub fn sidebar_material(cc: &eframe::CreationContext) {
+    if crate::platform::window::sidebar_material(cc) {
+        crate::style::set_material(true);
+    }
+}
+
+/// Windows: snap layouts on the app-drawn maximise button.
+static SNAP: std::sync::OnceLock<crate::platform::window::Snap> = std::sync::OnceLock::new();
+
+/// Hooks up snap layouts for the app-drawn title bar (Windows 11). Startup
+/// only; harmless while the system title bar is in use.
+pub fn install_snap(cc: &eframe::CreationContext) {
+    let ctx = cc.egui_ctx.clone();
+    if let Some(snap) = crate::platform::window::install_snap(cc, move || ctx.request_repaint()) {
+        let _ = SNAP.set(snap);
+    }
+}
 
 /// The native window, as eframe hands it over at startup or each frame.
 pub enum Window<'a> {
@@ -151,36 +169,57 @@ enum Glyph {
 /// Minimise, maximise/restore and close, right to left. Call inside a
 /// right-to-left layout. Icons are painted, so they never depend on fonts.
 pub fn window_buttons(ui: &mut Ui) {
+    let snap = SNAP.get();
     if !custom() {
+        if let Some(snap) = snap {
+            snap.set_button(None);
+        }
         return;
     }
     let ctx = ui.ctx().clone();
     ui.spacing_mut().item_spacing.x = 0.0;
-    if button(ui, Glyph::Close, "Close").clicked() {
+    if button(ui, Glyph::Close, "Close", None).clicked() {
         ctx.send_viewport_cmd(ViewportCommand::Close);
     }
     let max = maximized(&ctx);
     let (glyph, tip) = if max { (Glyph::Restore, "Restore") } else { (Glyph::Maximize, "Maximise") };
-    if button(ui, glyph, tip).clicked() {
-        ctx.send_viewport_cmd(ViewportCommand::Maximized(!max));
+    let r = button(ui, glyph, tip, snap);
+    match snap {
+        // Windows routes the pointer on this button to the system (that's
+        // what brings up snap layouts) and maximises on click itself.
+        Some(snap) => {
+            let ppp = ctx.pixels_per_point();
+            let px = |v: f32| (v * ppp).round() as i32;
+            let rect = r.rect;
+            snap.set_button(Some([px(rect.left()), px(rect.top()), px(rect.right()), px(rect.bottom())]));
+        }
+        None => {
+            if r.clicked() {
+                ctx.send_viewport_cmd(ViewportCommand::Maximized(!max));
+            }
+        }
     }
-    if button(ui, Glyph::Minimize, "Minimise").clicked() {
+    if button(ui, Glyph::Minimize, "Minimise", None).clicked() {
         ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
     }
     ui.spacing_mut().item_spacing.x = 8.0;
 }
 
-fn button(ui: &mut Ui, glyph: Glyph, tip: &str) -> egui::Response {
+/// One caption button. `snap` is set for the maximise button when Windows
+/// handles its pointer (snap layouts): its hover and press come from there.
+fn button(ui: &mut Ui, glyph: Glyph, tip: &str, snap: Option<&crate::platform::window::Snap>) -> egui::Response {
     // Windows 11 caption buttons are 46 wide; other looks keep them compact.
     let fluent = crate::style::current().native == Some(crate::style::Native::Windows);
     let size = if fluent { vec2(46.0, 32.0) } else { vec2(40.0, 30.0) };
     let (rect, r) = ui.allocate_exact_size(size, Sense::click());
-    let hovered = r.hovered();
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tip));
+    let hovered = r.hovered() || snap.is_some_and(|s| s.hovered());
+    let down = r.is_pointer_button_down_on() || snap.is_some_and(|s| s.pressed());
     let painter = ui.painter();
     if hovered {
         // Close turns red (Fluent's #C42B1C); the others take the subtle
         // hover fill, pressed one step further.
-        let fill = match (glyph, r.is_pointer_button_down_on()) {
+        let fill = match (glyph, down) {
             (Glyph::Close, false) => Color32::from_rgb(196, 43, 28),
             (Glyph::Close, true) => Color32::from_rgb(200, 64, 49),
             (_, false) => surface_hi(),

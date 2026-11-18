@@ -13,12 +13,20 @@
 //!   resolved for the current appearance.
 //! - Linux: defaults (no portable setting to read).
 //!
-//! This module depends on no UI crate (colours are plain RGBA), so it can
-//! be checked on its own for each target. Every OS call here is safe Rust:
-//! the workspace forbids `unsafe`.
+//! This crate depends on no UI crate (colours are plain RGBA), so it can be
+//! checked on its own for each target (`cargo clippy -p spire-platform
+//! --target …`).
+//!
+//! It is the one crate in the workspace allowed `unsafe`, and only in the
+//! native window plumbing that has no safe API: `window::mac` (the sidebar
+//! material behind egui's view), `window::win` (the window subclass for
+//! snap layouts) and the context-menu call in `menu`. Each such module is
+//! marked `#[allow(unsafe_code)]`, every block carries a `// SAFETY:`
+//! comment, and the crate denies `unsafe` everywhere else.
 
 mod fonts;
 pub mod menu;
+pub mod window;
 
 pub use fonts::{SystemFont, system_font};
 

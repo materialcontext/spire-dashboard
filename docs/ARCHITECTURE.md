@@ -100,16 +100,26 @@ reads archived runs from disk when its tab opens.
 
 ## App
 
-`platform/` is what the OS says and the few native things the app asks of
-it. It depends on no UI crate, so it can be checked on its own for each
-target, and every call in it is safe Rust:
+The `spire-platform` crate is what the OS says and the native pieces the
+app asks of it. It depends on no UI crate, so it can be checked on its
+own for each target. It is the one crate allowed `unsafe`, and only in
+`window::mac`, `window::win` and the context-menu call in `menu`, the
+native plumbing with no safe API. The rest of the workspace forbids it.
+The crate provides:
 
 - **Preferences:** text size, reduced motion.
 - **Appearance:** dark mode, the accent and its shades, contrast-theme
   colours, transparency, and macOS's semantic colours. It is read at
   startup and again when the window regains focus.
 - **The system font file.**
-- **The macOS menu bar** (`menu.rs`, through `muda`).
+- **The macOS menu bar** and native context menus (`menu.rs`, through
+  `muda`).
+- **Window pieces** (`window.rs`):
+  - Mica on Windows.
+  - The macOS sidebar material (an `NSVisualEffectView` placed in the
+    window's frame view below egui's view).
+  - Snap layouts for the app-drawn Windows title bar: a window subclass
+    reports the app's maximise button as `HTMAXBUTTON`.
 
 Light and dark mode also come live from eframe.
 

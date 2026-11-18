@@ -50,6 +50,40 @@ pub enum Action {
     },
     /// Delete a run from history for good.
     DeleteHistory(String),
+    /// Show a native context menu (macOS) and apply what's picked.
+    ContextMenu(Vec<MenuEntry>),
+}
+
+/// A context-menu entry and what picking it does.
+#[derive(Clone, Debug)]
+pub enum MenuEntry {
+    Item(String, Action),
+    Note(String),
+    Submenu(String, Vec<MenuEntry>),
+    Separator,
+}
+
+impl MenuEntry {
+    /// The platform menu, and each item's action in the same order.
+    pub fn split(entries: &[MenuEntry]) -> (Vec<spire_platform::menu::Entry>, Vec<Action>) {
+        use spire_platform::menu::Entry;
+        let mut actions = Vec::new();
+        fn walk(es: &[MenuEntry], actions: &mut Vec<Action>) -> Vec<Entry> {
+            es.iter()
+                .map(|e| match e {
+                    MenuEntry::Item(label, a) => {
+                        actions.push(a.clone());
+                        Entry::Item(label.clone())
+                    }
+                    MenuEntry::Note(label) => Entry::Note(label.clone()),
+                    MenuEntry::Submenu(label, children) => Entry::Submenu(label.clone(), walk(children, actions)),
+                    MenuEntry::Separator => Entry::Separator,
+                })
+                .collect()
+        }
+        let menu = walk(entries, &mut actions);
+        (menu, actions)
+    }
 }
 
 /// Something a name in the UI can link to.

@@ -576,6 +576,13 @@ impl SpireApp {
                 }
                 Err(e) => self.note(format!("Could not save the edited run: {e}")),
             },
+            Action::ContextMenu(entries) => {
+                let (menu, actions) = crate::actions::MenuEntry::split(&entries);
+                let picked = self.menu.as_mut().and_then(|m| m.context_menu(&menu));
+                if let Some(action) = picked.and_then(|i| actions.get(i).cloned()) {
+                    self.apply(action, ctx);
+                }
+            }
             Action::DeleteHistory(id) => match self.store.delete_archived(&id) {
                 Ok(()) => {
                     self.ui.history.invalidate();

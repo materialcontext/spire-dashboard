@@ -12,21 +12,13 @@ path = "src/main.rs"
 [dependencies]
 spire-core.workspace = true
 spire-data.workspace = true
+spire-platform.workspace = true
 eframe.workspace = true
 egui_plot.workspace = true
 
-# The system's preferences and look (see src/platform/), Mica behind the
-# window on Windows, the native menu bar on macOS, and screen-reader
-# support (AccessKit) on both.
-[target.'cfg(windows)'.dependencies]
-windows = { version = "0.62", default-features = false, features = ["std", "UI", "UI_ViewManagement"] }
-window-vibrancy = "0.8"
-eframe = { workspace = true, features = ["accesskit"] }
-
-[target.'cfg(target_os = "macos")'.dependencies]
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWorkspace", "NSAccessibility", "NSColor", "NSColorSpace", "objc2-core-foundation"] }
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSUserDefaults", "NSString"] }
-muda = { version = "0.21", default-features = false }
+# Screen-reader support (AccessKit) on Windows and macOS. Everything that
+# talks to the OS is in spire-platform.
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 eframe = { workspace = true, features = ["accesskit"] }
 
 [dev-dependencies]

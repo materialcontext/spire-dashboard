@@ -21,9 +21,12 @@ fn main() -> eframe::Result {
     let unified = system_look && spire_app::style::native() == Some(spire_app::style::Native::Mac);
     spire_app::chrome::init(!settings.system_title_bar);
     spire_app::chrome::init_unified(unified);
-    // Windows, System look in the system frame: a transparent window so
-    // Mica can show.
-    let transparent = spire_app::chrome::wants_material(system_look, settings.system_title_bar, &appearance);
+    // A transparent window so a system material can show: Mica (Windows,
+    // System look, system frame) or the sidebar material (macOS, System
+    // look, unless Reduce Transparency is on).
+    let mica = spire_app::chrome::wants_material(system_look, settings.system_title_bar, &appearance);
+    let vibrancy = unified && cfg!(target_os = "macos") && appearance.transparency;
+    let transparent = mica || vibrancy;
     let mut viewport = eframe::egui::ViewportBuilder::default()
         .with_title("Spire Dashboard")
         .with_inner_size([1400.0, 900.0])
@@ -55,9 +58,16 @@ fn main() -> eframe::Result {
             spire_app::style::set_large(&cc.egui_ctx, large);
             spire_app::style::set_appearance(&cc.egui_ctx, appearance);
             spire_app::style::set_look(&cc.egui_ctx, &look);
-            if transparent {
+            if mica {
                 let dark = !spire_app::style::current().light;
                 spire_app::chrome::material(spire_app::chrome::Window::Creation(cc), dark);
+            }
+            if vibrancy {
+                spire_app::chrome::sidebar_material(cc);
+            }
+            // Windows: snap layouts on the app-drawn maximise button.
+            if cfg!(windows) {
+                spire_app::chrome::install_snap(cc);
             }
             let idle = std::env::var("SPIRE_IDLE_CHECK").ok().and_then(|s| s.parse::<f64>().ok());
             let app: Box<dyn eframe::App> = match (bench, idle) {
@@ -71,7 +81,8 @@ fn main() -> eframe::Result {
                     // macOS: the native menu bar.
                     let ctx = cc.egui_ctx.clone();
                     let tabs: Vec<&str> = spire_app::views::Tab::ALL.iter().map(|t| t.label()).collect();
-                    app.set_menu(spire_app::platform::menu::MenuBar::install(&tabs, move || ctx.request_repaint()));
+                    let menu = spire_app::platform::menu::MenuBar::install(&tabs, cc, move || ctx.request_repaint());
+                    app.set_menu(menu);
                     if let Ok(tab) = std::env::var("SPIRE_TAB") {
                         app.open(&tab, std::env::var("SPIRE_SELECT").ok().as_deref());
                     }

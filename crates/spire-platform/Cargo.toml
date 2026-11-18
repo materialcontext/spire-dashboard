@@ -1,0 +1,51 @@
+[package]
+name = "spire-platform"
+description = "The OS's preferences and look, and the native window pieces, for Spire Dashboard."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+raw-window-handle = "0.6"
+
+# The system's preferences and look, Mica and the window subclass for snap
+# layouts on Windows; colours, the sidebar material, the menu bar and
+# context menus on macOS.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", default-features = false, features = [
+    "std",
+    "UI",
+    "UI_ViewManagement",
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+window-vibrancy = "0.8"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    "NSAccessibility",
+    "NSColor",
+    "NSColorSpace",
+    "NSGraphics",
+    "NSResponder",
+    "NSView",
+    "NSVisualEffectView",
+    "NSWorkspace",
+    "objc2-core-foundation",
+] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry", "NSString", "NSThread", "NSUserDefaults"] }
+muda = { version = "0.21", default-features = false }
+
+# The one crate in the workspace that may use `unsafe`, and only in the
+# modules marked `#[allow(unsafe_code)]` (native window plumbing), each
+# block with a `// SAFETY:` comment. Everything else here denies it.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+undocumented_unsafe_blocks = "warn"

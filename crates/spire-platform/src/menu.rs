@@ -26,23 +26,82 @@ pub struct Enabled {
     pub commit: bool,
 }
 
+/// One entry of a context menu.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Entry {
+    /// A command; picking it returns its index among all items, in order.
+    Item(String),
+    /// Greyed-out text, e.g. why something isn't available.
+    Note(String),
+    Submenu(String, Vec<Entry>),
+    Separator,
+}
+
+/// Whether native context menus are on (macOS, once the menu bar is in).
+pub fn native_context_menus() -> bool {
+    NATIVE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+static NATIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 pub use imp::MenuBar;
 
 #[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
 mod imp {
     use std::sync::mpsc::{Receiver, channel};
 
     use muda::accelerator::Accelerator;
-    use muda::{AboutMetadata, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
+    use muda::{AboutMetadata, ContextMenu, IsMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
+    use objc2::rc::Retained;
+    use objc2_app_kit::NSView;
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-    use super::{Command, Enabled};
+    use super::{Command, Enabled, Entry};
 
     pub struct MenuBar {
         /// Kept alive: the menu bar lives as long as this.
         _menu: Menu,
         items: Vec<(MenuItem, Command)>,
         events: Receiver<MenuEvent>,
+        /// Menu-bar events that came in while a context menu was up.
+        pending: Vec<MenuEvent>,
         enabled: Option<Enabled>,
+        /// The window's view, for context menus.
+        view: Option<Retained<NSView>>,
+    }
+
+    /// The window's content view, retained.
+    fn view_of(window: &impl HasWindowHandle) -> Option<Retained<NSView>> {
+        let handle = window.window_handle().ok()?;
+        let RawWindowHandle::AppKit(appkit) = handle.as_raw() else { return None };
+        // SAFETY: an AppKit handle's `ns_view` is the window's live NSView;
+        // retaining it keeps it valid for as long as we hold it.
+        unsafe { Retained::retain(appkit.ns_view.as_ptr().cast::<NSView>()) }
+    }
+
+    /// Adds `entries` to a context menu, numbering items as it goes.
+    fn add(target: &dyn Fn(&dyn IsMenuItem) -> bool, entries: &[Entry], next: &mut usize) {
+        for e in entries {
+            match e {
+                Entry::Item(label) => {
+                    let item = MenuItem::with_id(format!("ctx-{next}"), label, true, None);
+                    *next += 1;
+                    target(&item);
+                }
+                Entry::Note(label) => {
+                    target(&MenuItem::new(label, false, None));
+                }
+                Entry::Separator => {
+                    target(&PredefinedMenuItem::separator());
+                }
+                Entry::Submenu(label, children) => {
+                    let sub = Submenu::new(label, true);
+                    add(&|i| sub.append(i).is_ok(), children, next);
+                    target(&sub);
+                }
+            }
+        }
     }
 
     fn item(text: &str, accel: &str) -> MenuItem {
@@ -53,7 +112,12 @@ mod imp {
         /// Installs the menu bar on the running app. `wake` is called when
         /// a menu item is picked, so the UI can repaint and handle it.
         /// Call once, on the main thread, after the app has launched.
-        pub fn install(tabs: &[&str], wake: impl Fn() + Send + Sync + 'static) -> Option<MenuBar> {
+        pub fn install(
+            tabs: &[&str],
+            window: &impl HasWindowHandle,
+            wake: impl Fn() + Send + Sync + 'static,
+        ) -> Option<MenuBar> {
+            let ns_view = view_of(window);
             let menu = Menu::new();
             let mut items: Vec<(MenuItem, Command)> = Vec::new();
 
@@ -127,15 +191,40 @@ mod imp {
                 let _ = tx.send(e);
                 wake();
             }));
-            Some(MenuBar { _menu: menu, items, events: rx, enabled: None })
+            super::NATIVE.store(ns_view.is_some(), std::sync::atomic::Ordering::Relaxed);
+            Some(MenuBar { _menu: menu, items, events: rx, pending: Vec::new(), enabled: None, view: ns_view })
         }
 
         /// Commands picked since the last call.
-        pub fn poll(&self) -> Vec<Command> {
-            self.events
-                .try_iter()
+        pub fn poll(&mut self) -> Vec<Command> {
+            let events: Vec<MenuEvent> = self.pending.drain(..).chain(self.events.try_iter()).collect();
+            events
+                .into_iter()
                 .filter_map(|e| self.items.iter().find(|(i, _)| *i.id() == e.id).map(|(_, c)| *c))
                 .collect()
+        }
+
+        /// Shows a native context menu at the pointer and waits for it to
+        /// close. Returns the index of the item picked, counting every
+        /// `Entry::Item` in order, submenus included.
+        pub fn context_menu(&mut self, entries: &[Entry]) -> Option<usize> {
+            let view = self.view.as_ref()?;
+            let menu = Menu::new();
+            add(&|i| menu.append(i).is_ok(), entries, &mut 0);
+            let ptr = Retained::as_ptr(view).cast::<std::ffi::c_void>();
+            // SAFETY: `ptr` is the window's NSView, kept alive by the
+            // `Retained` in `self.view`; the menu runs modally on the main
+            // thread (where the app calls this) and returns when it closes.
+            let picked = unsafe { menu.show_context_menu_for_nsview(ptr, None) };
+            let mut chosen = None;
+            for e in self.events.try_iter() {
+                match e.id.0.strip_prefix("ctx-").and_then(|n| n.parse::<usize>().ok()) {
+                    Some(n) if picked => chosen = Some(n),
+                    Some(_) => {}
+                    None => self.pending.push(e),
+                }
+            }
+            chosen
         }
 
         /// Greys out what can't run now. Cheap when nothing changed.
@@ -160,18 +249,28 @@ mod imp {
 
 #[cfg(not(target_os = "macos"))]
 mod imp {
-    use super::{Command, Enabled};
+    use raw_window_handle::HasWindowHandle;
+
+    use super::{Command, Enabled, Entry};
 
     /// No native menu bar off macOS.
     pub struct MenuBar;
 
     impl MenuBar {
-        pub fn install(_tabs: &[&str], _wake: impl Fn() + Send + Sync + 'static) -> Option<MenuBar> {
+        pub fn install(
+            _tabs: &[&str],
+            _window: &impl HasWindowHandle,
+            _wake: impl Fn() + Send + Sync + 'static,
+        ) -> Option<MenuBar> {
             None
         }
 
-        pub fn poll(&self) -> Vec<Command> {
+        pub fn poll(&mut self) -> Vec<Command> {
             Vec::new()
+        }
+
+        pub fn context_menu(&mut self, _entries: &[Entry]) -> Option<usize> {
+            None
         }
 
         pub fn sync(&mut self, _enabled: Enabled) {}

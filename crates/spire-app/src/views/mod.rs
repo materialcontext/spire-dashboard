@@ -70,11 +70,17 @@ pub fn root(
     let side = egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 16, top: 0, bottom: 0 });
     let native = crate::style::current().native;
     // macOS: a sidebar of tabs down the left, under the traffic lights.
-    if native == Some(crate::style::Native::Mac) {
+    let mac = native == Some(crate::style::Native::Mac);
+    if mac {
         sidebar(ui, st);
+        // The toolbar sits on the window background too, not the sidebar
+        // material.
+        content_layer(ui);
     }
     egui::Panel::top("top").frame(side).show(ui, |ui| top::show(ui, v, st, out));
-    content_layer(ui);
+    if !mac {
+        content_layer(ui);
+    }
     dialogs::show(ui, v, st, out);
     toast(ui, st, out);
 
