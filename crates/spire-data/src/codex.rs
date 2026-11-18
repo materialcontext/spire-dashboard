@@ -590,14 +590,14 @@ fn powers_where(powers: &[WPowerDef], pick: impl Fn(&str) -> bool) -> Vec<(Strin
         .collect()
 }
 
-/// The monster's death blow, if any power it starts with or gains is one.
-fn death_blow(m: &Monster, blows: &[(String, String)]) -> Option<DeathBlow> {
+/// The first of `powers` the monster starts with or gains from its moves.
+fn death_power(m: &Monster, powers: &[(String, String)]) -> Option<DeathPower> {
     let gained = m.innate_powers.iter().map(|p| (p.power.as_str(), p.amount)).chain(m.moves.iter().flat_map(|mv| {
         mv.powers.iter().filter(|p| p.target == PowerTarget::Monster).map(|p| (p.power.as_str(), p.amount))
     }));
     for (power, amount) in gained {
-        if let Some((id, text)) = blows.iter().find(|(id, _)| id == power) {
-            return Some(DeathBlow { power: id.clone(), text: text.clone(), amount: Some(amount).filter(|a| *a > 0) });
+        if let Some((id, text)) = powers.iter().find(|(id, _)| id == power) {
+            return Some(DeathPower { power: id.clone(), text: text.clone(), amount: Some(amount).filter(|a| *a > 0) });
         }
     }
     None
@@ -846,8 +846,8 @@ pub fn to_pack(
         .into_iter()
         .map(map_monster)
         .map(|mut m| {
-            m.death_blow = death_blow(&m, &blows);
-            m.death_summons = death_blow(&m, &summons);
+            m.death_blow = death_power(&m, &blows);
+            m.death_summons = death_power(&m, &summons);
             m
         })
         .collect();
@@ -1117,7 +1117,7 @@ mod tests {
             death_blow: None,
             death_summons: None,
         };
-        let blow = death_blow(&giant, &blows).unwrap();
+        let blow = death_power(&giant, &blows).unwrap();
         assert_eq!((blow.power.as_str(), blow.amount), ("STEAM_ERUPTION", Some(15)));
     }
 

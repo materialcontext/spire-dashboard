@@ -669,17 +669,18 @@ pub struct Monster {
     /// It strikes once more after it dies (Waterfall Giant's Steam
     /// Eruption: "When killed, deals damage at the end of your next turn").
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub death_blow: Option<DeathBlow>,
+    pub death_blow: Option<DeathPower>,
     /// It summons more monsters when it dies (Phrog Parasite's Infested:
     /// "Upon dying, summons... something"). `amount` is the power's amount,
     /// read as how many; the encounter's `spawns` say what.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub death_summons: Option<DeathBlow>,
+    pub death_summons: Option<DeathPower>,
 }
 
-/// A power that makes a monster deal damage after it's killed.
+/// A power that acts when its monster dies (strikes after death, or
+/// summons), as the data names and words it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct DeathBlow {
+pub struct DeathPower {
     pub power: String,
     /// The power's text, as the data source words it.
     pub text: String,

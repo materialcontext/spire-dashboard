@@ -10,6 +10,7 @@
 //! game update that reshapes one field loses that field, not the record.
 
 use serde::Deserialize;
+use spire_core::catalog::NodeKind;
 
 /// The live run save (`current_run.save`) writes some ids as objects
 /// where a finished `.run` writes `"ACT.HIVE"`: the act, say, with its id
@@ -281,6 +282,21 @@ pub(crate) struct WStats {
 }
 
 /// `CARD.SNAP` → `SNAP`.
+/// A floor's room, from its `map_point_type`.
+pub(crate) fn node_kind(map_point_type: &str) -> Option<NodeKind> {
+    Some(match map_point_type {
+        "ancient" => NodeKind::Ancient,
+        "monster" => NodeKind::Monster,
+        "elite" => NodeKind::Elite,
+        "unknown" => NodeKind::Unknown,
+        "shop" => NodeKind::Shop,
+        "rest_site" => NodeKind::Rest,
+        "treasure" => NodeKind::Treasure,
+        "boss" => NodeKind::Boss,
+        _ => return None,
+    })
+}
+
 pub(crate) fn entry(id: &str) -> &str {
     id.split_once('.').map_or(id, |(_, rest)| rest)
 }

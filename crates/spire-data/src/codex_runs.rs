@@ -25,7 +25,7 @@ use spire_core::DataPack;
 use spire_core::catalog::{EncounterStats, FixedRoom, GameRules, Lineup, NodeKind};
 use spire_core::ids::MonsterId;
 
-use crate::run_file::{WRun, entry};
+use crate::run_file::{WRun, entry, node_kind};
 
 /// Fewer fights than this and an encounter is left unenriched.
 pub const MIN_FIGHTS: usize = 20;
@@ -128,20 +128,6 @@ pub struct ActLayout {
     pub act: usize,
     pub ascension: u32,
     pub rooms: Vec<NodeKind>,
-}
-
-fn node_kind(map_point_type: &str) -> Option<NodeKind> {
-    Some(match map_point_type {
-        "ancient" => NodeKind::Ancient,
-        "monster" => NodeKind::Monster,
-        "elite" => NodeKind::Elite,
-        "unknown" => NodeKind::Unknown,
-        "shop" => NodeKind::Shop,
-        "rest_site" => NodeKind::Rest,
-        "treasure" => NodeKind::Treasure,
-        "boss" => NodeKind::Boss,
-        _ => return None,
-    })
 }
 
 /// Room sequences of completed acts (last room a boss), single-player and

@@ -23,7 +23,7 @@
 use serde::Deserialize;
 use spire_core::Catalog;
 
-use crate::run_file::{WCard, WPlayer, WPoint, WRun, WStats, entry, lenient};
+use crate::run_file::{WCard, WPlayer, WPoint, WRun, WStats, entry, lenient, node_kind};
 use spire_core::ids::*;
 use spire_core::run::{Change, DeckCard, NodeKind, NodeReport, Outcome, RunEvent, RunState, apply};
 
@@ -36,19 +36,6 @@ fn deck_card(c: &WCard) -> DeckCard {
         card: CardId::new(entry(&c.id)),
         upgraded: c.current_upgrade_level.unwrap_or(0) > 0,
         enchantment: c.enchantment.as_ref().map(|e| EnchantmentId::new(entry(&e.id))),
-    }
-}
-
-fn kind(t: Option<&str>) -> NodeKind {
-    match t {
-        Some("monster") => NodeKind::Monster,
-        Some("elite") => NodeKind::Elite,
-        Some("boss") => NodeKind::Boss,
-        Some("rest_site") => NodeKind::Rest,
-        Some("shop") => NodeKind::Shop,
-        Some("treasure") => NodeKind::Treasure,
-        Some("ancient") => NodeKind::Ancient,
-        _ => NodeKind::Unknown,
     }
 }
 
@@ -214,7 +201,12 @@ pub fn read(json: &str, catalog: &Catalog, hint: &ActHint) -> Result<GameRun, Un
                 _ => (None, None),
             };
             let changes = stats.map(|s| changes(s, &state, catalog, &mut note)).unwrap_or_default();
-            let report = NodeReport { kind: kind(p.map_point_type.as_deref()), encounter, event, changes };
+            let report = NodeReport {
+                kind: p.map_point_type.as_deref().and_then(node_kind).unwrap_or(NodeKind::Unknown),
+                encounter,
+                event,
+                changes,
+            };
             push(&mut events, &mut state, RunEvent::Node(report));
             floors += 1;
         }
@@ -374,7 +366,7 @@ mod tests {
     fn ids_and_rooms_read_as_ours() {
         assert_eq!(entry("CARD.SNAP"), "SNAP");
         assert_eq!(none_id(&Some("NONE.NONE".into())), None);
-        assert_eq!(kind(Some("rest_site")), NodeKind::Rest);
+        assert_eq!(node_kind("rest_site"), Some(NodeKind::Rest));
         let c = WCard {
             id: "CARD.BASH".into(),
             current_upgrade_level: Some(1),
