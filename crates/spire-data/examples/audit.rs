@@ -8,6 +8,8 @@
 //! `--mechanics` shows what the simulator reads from every power and relic.
 //! `--outlook` plays every starter deck against every elite (the survival
 //! check), next to the community's outcomes.
+//! `--patterns` prints every elite's and boss's expected damage per enemy
+//! turn (12 turns), its HP, and the community's turns and damage taken.
 
 use std::collections::BTreeMap;
 
@@ -21,6 +23,10 @@ fn main() {
     let pb = spire_data::bundled_playbook();
     if std::env::args().any(|a| a == "--sim") {
         starter_sims(&cat, &pb);
+        return;
+    }
+    if std::env::args().any(|a| a == "--patterns") {
+        patterns(&cat);
         return;
     }
     if std::env::args().any(|a| a == "--outlook") {
@@ -135,6 +141,24 @@ fn starter_outlooks(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
                 joins.join(" "),
             );
         }
+    }
+}
+
+fn patterns(cat: &Catalog) {
+    use spire_core::analysis::threats::{Scaling, lineup_incoming, lineup_waves};
+    use spire_core::catalog::RoomType;
+    let mut fights: Vec<_> = cat.encounters.values().filter(|e| e.room != RoomType::Monster).collect();
+    fights.sort_by_key(|e| (e.act.as_ref().and_then(|a| cat.acts.get(a)).map(|a| a.index), e.room, e.name.clone()));
+    for e in fights {
+        let waves = lineup_waves(e, cat, Scaling::default(), 12);
+        let hp: Vec<String> = waves.iter().map(|w| w.hp.to_string()).collect();
+        let first = &waves[0];
+        let incoming: Vec<String> =
+            lineup_incoming(&first.plans, 12).iter().map(|(_, ex, _)| format!("{ex:.0}")).collect();
+        let community = e.stats.as_ref().map_or(String::new(), |s| {
+            format!("{:.1} turns, {:.0} dmg, {:.0}% die", s.avg_turns, s.avg_damage_taken, s.death_rate() * 100.0)
+        });
+        println!("{:<24} {:?} hp {:<10} | {} | {community}", e.name, e.room, hp.join("+"), incoming.join(" "));
     }
 }
 
