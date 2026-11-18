@@ -1088,3 +1088,52 @@ fn relics_that_add_potion_slots_say_so() {
     run.push(RunEvent::Adjust(vec![spire_core::run::Change::AddPotionSlots(2)]));
     assert_eq!(run.state().potion_slots, before + 2);
 }
+
+// ---------------------------------------------------------------- benchmarks
+
+#[test]
+fn benchmarks_group_by_character_and_fall_back_to_everyone() {
+    use spire_core::analysis::benchmark::{MIN_DECKS, Sample, for_run, measure};
+    let mut cat = catalog();
+    let mut pb = playbook();
+    pb.simulation = SimAssumptions { trials: 20, ..SimAssumptions::default() };
+    let hero = CharacterId::new("HERO");
+    let deck = sim_state(&cat, &[("STRIKE", false), ("STRIKE", true), ("DEFEND", false), ("INFLAME", false)]);
+    let sample = |character: &CharacterId, act| Sample { character: character.clone(), act, state: deck.clone() };
+    // The hero cleared act 1 enough times; a second character only a few.
+    let rare = CharacterId::new("RARE");
+    let mut samples: Vec<Sample> = (0..MIN_DECKS).map(|_| sample(&hero, 0)).collect();
+    samples.extend((0..3).map(|_| sample(&rare, 0)));
+    let benchmarks = measure(&samples, &cat, &pb);
+    assert_eq!(benchmarks.len(), 2, "the hero's, and everyone's");
+    let mine = &benchmarks[0];
+    assert_eq!((mine.character.as_ref(), mine.decks, mine.size.p50), (Some(&hero), MIN_DECKS as u32, 4.0));
+    assert_eq!(benchmarks[1].decks, MIN_DECKS as u32 + 3);
+    cat.benchmarks = benchmarks;
+    assert_eq!(for_run(&cat, &hero, 0).and_then(|b| b.character.clone()), Some(hero));
+    assert_eq!(for_run(&cat, &rare, 0).map(|b| b.character.is_none()), Some(true), "too few: everyone's decks");
+    assert!(for_run(&cat, &rare, 1).is_none());
+}
+
+#[test]
+fn an_endless_combo_ends_and_next_turn_energy_waits() {
+    let mut cat = catalog();
+    // Free, draws itself back: the game would let it loop.
+    let mut spin = card("SPIN", CardType::Skill, Rarity::Common, "Deal 1 damage. Draw 1 card.");
+    (spin.cost, spin.damage, spin.draw) = (Some(0), Some(1), Some(1));
+    cat.cards.insert(spin.id.clone(), spin);
+    let s = sim_state(&cat, &[("SPIN", false), ("SPIN", false)]);
+    let sim = sim::simulate(&s, &cat, &quick());
+    assert!(sim.turns[0].damage.mean > 0.0, "it plays, and stops");
+    // "Next turn, gain 2 Energy" is spent next turn, not now.
+    let mut invoke = card("INVOKE_ISH", CardType::Skill, Rarity::Common, "Next turn, gain 2 Energy.");
+    invoke.energy = Some(2);
+    invoke.vars.insert("energy".into(), 2);
+    cat.cards.insert(invoke.id.clone(), invoke);
+    let mut big = card("BIG", CardType::Attack, Rarity::Common, "Deal 20 damage.");
+    (big.cost, big.damage) = (Some(3), Some(20));
+    cat.cards.insert(big.id.clone(), big);
+    let s = sim_state(&cat, &[("INVOKE_ISH", false), ("BIG", false)]);
+    let sim = sim::simulate(&s, &cat, &quick());
+    assert_eq!(sim.turns[0].damage.mean, 0.0, "3 energy: Invoke, then Big is out of reach this turn");
+}

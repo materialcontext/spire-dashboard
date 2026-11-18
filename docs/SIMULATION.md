@@ -86,7 +86,11 @@ from relics, powers and orbs doesn't get Dexterity. *[Codex: "card block"]*
 3. Fire "whenever you play…" and "every N plays" triggers.
 4. **A power's own triggers start with the next card.** Afterimage doesn't
    give Block for itself. *[Player]* The test is `powers_trigger_on_later_cards_not_themselves`.
-5. Exhaust (Exhaust keyword, or Corruption) fires "whenever a card is
+5. A turn stops after 50 cards. Free cards that draw each other can loop
+   for ever (Capture Spirit's Souls with Invoke); the game would allow it,
+   the simulator doesn't. "Next turn, … gain N Energy" (Invoke) arrives next
+   turn.
+6. Exhaust (Exhaust keyword, or Corruption) fires "whenever a card is
    exhausted". Otherwise the card is discarded *after* it resolves, so its own
    draw can't shuffle it back in.
 

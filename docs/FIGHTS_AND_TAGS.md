@@ -1,6 +1,6 @@
 # Fight shapes, winning lines and card tags: plan
 
-Status: **decided**. F1 (shapes and rules), F1b (curated gaps), F2 (roles and jobs), F3 (ways to win) and F4 (tags) are built; F5 (benchmarks) is next. Nothing here
+Status: **decided**. F1 (shapes and rules), F1b (curated gaps), F2 (roles and jobs), F3 (ways to win), F4 (tags) and F5 (benchmarks) are built; F6 (setup value) is next. Nothing here
 is built yet.
 
 ## The idea
@@ -353,6 +353,22 @@ deck view checks the balance per turn and counts it in the bad-draws note:
   nothing to spend on.
 
 ### 5. Composition and benchmarks
+
+As built (F5): `analysis::benchmark` and `spire-data/src/benchmarks.rs`.
+Decks are rebuilt by replaying each community run's floors onto the
+starting deck (the same reader monitored runs use), not from
+`floor_added_to_deck`; the deck is taken just before the run enters the
+next act, and a won run's last act counts too. Each deck is tagged with the
+bundled playbook and simulated, relics included, at every ascension. The
+catalog keeps quartiles (25th, median, 75th) of deck size, starter share,
+each tag's share and each job, per character and act with 30 or more
+decks, and for all characters together. The deck panel lists where the deck
+is worse than three in four cleared decks (under the 25th percentile, or
+over the 75th for starter cards), worst first, then the rest in one line;
+hovering a shortfall names the tags to look for. The bundled numbers come
+from the six-page run export saved on 2026-11-17 (3,494 decks, 15 seconds
+in a release build); `refresh-bundle` and Update data recompute them. The
+Fool had no runs in that export, so it uses every character's decks.
 
 - **The deck panel:**
   - each tag's share of the deck;

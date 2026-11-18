@@ -869,6 +869,8 @@ pub fn to_pack(
         ascensions,
         orbs,
         rules,
+        // From community runs, added after (`fetch::add_community_data`).
+        benchmarks: Vec::new(),
     })
 }
 

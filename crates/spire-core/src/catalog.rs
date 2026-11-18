@@ -1047,6 +1047,57 @@ pub struct DataPack {
     pub orbs: Vec<Orb>,
     /// Game rules, when the source knows them; otherwise StS2 defaults.
     pub rules: Option<GameRules>,
+    /// What community decks that cleared each act had (from community runs).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub benchmarks: Vec<Benchmark>,
+}
+
+/// The middle half and median of a measure across community decks.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Quartiles {
+    pub p25: f32,
+    pub p50: f32,
+    pub p75: f32,
+}
+
+impl Quartiles {
+    /// From unsorted values; all zero when there are none.
+    pub fn of(mut values: Vec<f32>) -> Quartiles {
+        values.sort_by(f32::total_cmp);
+        let at = |p: f32| {
+            if values.is_empty() {
+                return 0.0;
+            }
+            // Linear between the closest ranks.
+            let x = p * (values.len() - 1) as f32;
+            let (lo, hi) = (x.floor() as usize, x.ceil() as usize);
+            values[lo] + (values[hi] - values[lo]) * (x - lo as f32)
+        };
+        Quartiles { p25: at(0.25), p50: at(0.5), p75: at(0.75) }
+    }
+}
+
+/// What the decks that cleared an act had at its end: their size, how much
+/// of them was starter Strikes and Defends, the share of cards carrying
+/// each tag, and each role's job as the deck simulator measures it.
+/// Built from community runs when the data is refreshed, with the bundled
+/// playbook's tags.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Benchmark {
+    /// `None`: every character's decks (the fallback for characters with
+    /// too few).
+    pub character: Option<CharacterId>,
+    /// 0-based act the decks cleared.
+    pub act: u8,
+    pub decks: u32,
+    pub size: Quartiles,
+    /// Share of the deck that is starter Strikes and Defends (0–1).
+    pub starter: Quartiles,
+    /// Share of the deck carrying each tag (0–1).
+    pub tags: BTreeMap<crate::analysis::tags::Tag, Quartiles>,
+    /// Each role's job (`analysis::jobs::Jobs::value`).
+    pub jobs: BTreeMap<crate::playbook::Role, Quartiles>,
 }
 
 impl DataPack {
@@ -1091,6 +1142,8 @@ pub struct Catalog {
     pub ascensions: BTreeMap<u32, AscensionLevel>,
     pub orbs: BTreeMap<OrbId, Orb>,
     pub rules: GameRules,
+    /// From the last layer that has any.
+    pub benchmarks: Vec<Benchmark>,
 }
 
 fn merge<K: Ord, V>(map: &mut BTreeMap<K, V>, items: Vec<V>, key: impl Fn(&V) -> K) {
@@ -1121,6 +1174,9 @@ impl Catalog {
             merge(&mut cat.orbs, pack.orbs, |v| v.id.clone());
             if let Some(rules) = pack.rules {
                 cat.rules = rules;
+            }
+            if !pack.benchmarks.is_empty() {
+                cat.benchmarks = pack.benchmarks;
             }
             cat
         })

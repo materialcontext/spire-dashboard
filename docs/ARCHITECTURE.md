@@ -288,6 +288,13 @@ The aggregation:
    higher share becomes a **variant**.
 6. Average damage taken and turns per encounter go into `stats`.
 
+`spire-data/src/benchmarks.rs` reads the same pages a second way: each run
+replays through `game_run::read`, and the deck at the end of every act it
+cleared becomes a sample. `analysis::benchmark::measure` tags and simulates
+them into `Catalog::benchmarks` (quartiles per character and act, plus all
+characters), and `benchmark::compare` lines the run's deck up against them
+for the deck panel.
+
 Results land in `Encounter::lineups`, `spawns` and `stats`. The update reads
 `run_pages` pages (default 3, about 3,000 runs) from the last 14 days, so
 lineups track the current game version. The export's own budget is 120

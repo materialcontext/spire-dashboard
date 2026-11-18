@@ -43,6 +43,18 @@ pub struct Combat {
     /// How well the deck does each role, from `sim`.
     pub jobs: spire_core::analysis::jobs::Jobs,
     pub outlooks: Vec<(spire_core::EncounterId, Outlook)>,
+    /// The deck next to community decks that cleared this act, when the
+    /// data has a benchmark for it.
+    pub bench: Option<Bench>,
+}
+
+/// The deck against a benchmark: which decks, and each measure.
+pub struct Bench {
+    pub decks: u32,
+    /// The character had too few decks: every character's are used.
+    pub all_characters: bool,
+    /// Shortfalls first.
+    pub rows: Vec<spire_core::analysis::benchmark::Comparison>,
 }
 
 impl Combat {
@@ -811,7 +823,15 @@ impl SpireApp {
                 }
             }
             let jobs = spire_core::analysis::jobs::measure(&sim);
-            self.combat = Some(Combat { generation: self.generation, sim, jobs, outlooks });
+            let bench = self.state.character.as_ref().and_then(|c| {
+                let b = spire_core::analysis::benchmark::for_run(&self.catalog, c, self.state.act_index)?;
+                Some(Bench {
+                    decks: b.decks,
+                    all_characters: b.character.is_none(),
+                    rows: spire_core::analysis::benchmark::compare(b, &self.dash.deck, &jobs),
+                })
+            });
+            self.combat = Some(Combat { generation: self.generation, sim, jobs, outlooks, bench });
         }
         match self.ui.tab {
             Tab::Analytics if self.analytics.as_ref().is_none_or(|(g, _)| *g != self.generation) => {

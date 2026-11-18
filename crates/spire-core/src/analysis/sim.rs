@@ -22,6 +22,9 @@ use crate::run::{DeckCard, RunState};
 
 /// A fight ends here even if the deck has not cycled (turnover is capped).
 const MAX_TURNS: usize = 20;
+
+/// Most cards played in one turn, so endless combos end.
+const MAX_PLAYS: usize = 50;
 /// Turns reported for draw odds.
 const ODDS_TURNS: usize = 3;
 
@@ -140,6 +143,8 @@ struct Effects {
     block: i32,
     draw: i32,
     energy: i32,
+    /// Energy that arrives next turn ("Next turn, … gain 2 Energy").
+    energy_next: i32,
     stars: i32,
     summon: i32,
     forge: i32,
@@ -194,6 +199,9 @@ fn play_of(card: &Card, upgraded: bool, group: usize, orbs: &[&Orb], all_orbs: &
     let power = card.card_type == CardType::Power;
     let on_self = matches!(card.target, Target::Own | Target::None | Target::AllAllies);
     let base_stars = card.value("stars", false);
+    // Invoke: "Next turn, Summon 2 and gain 2 Energy."
+    let next_turn_energy =
+        card.text_at(upgraded).split('.').any(|s| contains_ci(s, "next turn") && contains_ci(s, "energy"));
     let mut e = Effects::default();
     let mut mech = Mechanics::default();
     if power {
@@ -206,7 +214,8 @@ fn play_of(card: &Card, upgraded: bool, group: usize, orbs: &[&Orb], all_orbs: &
             osty: v("ostydamage"),
             block: v("block"),
             draw: if card.draw.is_some() { v("cards") } else { 0 },
-            energy: if card.energy.is_some() { v("energy") } else { 0 },
+            energy: if card.energy.is_some() && !next_turn_energy { v("energy") } else { 0 },
+            energy_next: if card.energy.is_some() && next_turn_energy { v("energy") } else { 0 },
             stars: if base_stars > 0 && contains_ci(&card.text, &format!("gain {base_stars} star")) {
                 v("stars")
             } else {
@@ -721,6 +730,7 @@ impl<'a> Fight<'a> {
         let debuffs = [e.vulnerable, e.weak, e.poison, e.doom].iter().filter(|n| **n > 0).count();
         self.log.debuffs += (debuffs as i32 * times) as f32;
         self.energy += e.energy;
+        self.next_energy += e.energy_next;
         self.stars += e.stars * times;
         self.strength += e.strength;
         self.dexterity += e.dexterity;
@@ -791,7 +801,7 @@ impl<'a> Fight<'a> {
         let setup = (e.strength + e.dexterity) as f32 * 4.0
             + e.focus as f32 * 3.0 * self.orb_slots as f32
             + e.draw as f32 * 3.0 * t
-            + e.energy as f32 * 4.0
+            + (e.energy + e.energy_next) as f32 * 4.0
             + e.stars as f32 * 2.0 * t
             + power
             + p.channels
@@ -897,7 +907,9 @@ impl<'a> Fight<'a> {
     }
 
     fn play_turn(&mut self, lean: Lean) {
-        loop {
+        // A deck can loop for ever (free cards that draw each other); the
+        // game would let it, the simulator stops.
+        for _ in 0..MAX_PLAYS {
             let best = self
                 .hand
                 .iter()
