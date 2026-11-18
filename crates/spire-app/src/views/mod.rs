@@ -134,7 +134,15 @@ pub fn root(ui: &mut Ui, v: &ViewCtx, draft: &mut NodeDraft, st: &mut UiState, o
         egui::ScrollArea::vertical().show(ui, |ui| deck::show(ui, v, out));
     });
     egui::Panel::right("log").frame(side).resizable(true).default_size(330.0).min_size(280.0).show(ui, |ui| {
-        egui::ScrollArea::vertical().show(ui, |ui| log::show(ui, v, draft, out));
+        // Until the act and its boss are set, the log is locked and dimmed so
+        // nothing gets logged against the wrong act.
+        let locked = log_locked(v);
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            ui.add_enabled_ui(!locked, |ui| log::show(ui, v, draft, out));
+        });
+        if locked {
+            dim(ui, if v.state.act.is_none() { "Choose the act first" } else { "Choose the boss first" });
+        }
     });
     egui::CentralPanel::default().frame(center).show(ui, |ui| {
         egui::ScrollArea::vertical().show(ui, |ui| {
@@ -163,6 +171,31 @@ pub fn root(ui: &mut Ui, v: &ViewCtx, draft: &mut NodeDraft, st: &mut UiState, o
             }
         });
     });
+}
+
+/// Whether the floor log waits on the act or its boss being chosen.
+pub fn log_locked(v: &ViewCtx) -> bool {
+    v.state.started() && (v.state.act.is_none() || v.state.boss.is_none())
+}
+
+/// Dims a locked panel and says why. Painted over the content, so the
+/// locked controls stay visible but plainly out of play.
+fn dim(ui: &mut Ui, why: &str) {
+    use crate::style::color::*;
+    let rect = ui.max_rect().expand2(egui::vec2(14.0, 0.0));
+    let painter = ui.painter();
+    painter.rect_filled(rect, 0.0, bg().gamma_multiply(0.82));
+    let title = egui::TextStyle::Heading.resolve(ui.style());
+    let small = egui::TextStyle::Body.resolve(ui.style());
+    let top = rect.top() + 90.0;
+    painter.text(egui::pos2(rect.center().x, top), egui::Align2::CENTER_CENTER, why, title, accent());
+    painter.text(
+        egui::pos2(rect.center().x, top + 28.0),
+        egui::Align2::CENTER_CENTER,
+        "The floor log unlocks once it's set.",
+        small,
+        text_dim(),
+    );
 }
 
 /// The commit notice, bottom centre, with Undo.

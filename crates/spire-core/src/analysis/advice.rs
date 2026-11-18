@@ -87,24 +87,6 @@ pub fn advise(state: &RunState, catalog: &Catalog, playbook: &Playbook, deck: &D
             ),
         });
     }
-    let mut permanent: Vec<String> = state
-        .deck
-        .iter()
-        .filter_map(|d| catalog.cards.get(&d.card))
-        .filter(|c| c.is_eternal() && c.card_type == crate::catalog::CardType::Curse)
-        .map(|c| c.name.clone())
-        .collect();
-    permanent.dedup();
-    if !permanent.is_empty() {
-        out.push(Advice {
-            severity: Severity::Info,
-            text: format!(
-                "{} can't be removed or transformed: plan around the dead draw (more draw, Retain, smaller deck).",
-                permanent.join(", ")
-            ),
-        });
-    }
-    out.extend(plan.notes.iter().map(|n| Advice { severity: Severity::Info, text: n.clone() }));
     out.sort_by_key(|a| a.severity);
     out
 }

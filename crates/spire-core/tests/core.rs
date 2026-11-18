@@ -165,8 +165,7 @@ fn playbook() -> Playbook {
         "index": 0, "weak_fights": 1,
         "targets": [{ "role": "frontload_damage", "min": 2 }, { "role": "scaling_damage", "min": 1 }],
         "needs_aoe": 1, "big_hit": 25,
-        "long_fight_hp": { "monster": 100, "elite": 150, "boss": 250 },
-        "notes": ["Take fights."]
+        "long_fight_hp": { "monster": 100, "elite": 150, "boss": 250 }
       }],
       "needs": { "low_hp": 0.5, "starter_cards": 2, "low_upgrades": 0.25 }
     }"#;
@@ -338,7 +337,6 @@ fn dashboard_advice_flags_gaps_and_boss() {
     let d = Dashboard::compute(&s, &cat, &pb);
     assert_eq!(d.bosses.len(), 1);
     assert!(d.advice.iter().any(|a| a.severity == Severity::Urgent));
-    assert!(d.advice.iter().any(|a| a.text == "Take fights."));
     assert_eq!(d.threats.len(), 3);
 }
 
@@ -495,13 +493,14 @@ fn eternal_curses_never_drive_removal_or_transform() {
 }
 
 #[test]
-fn advice_calls_eternal_curses_permanent() {
+fn eternal_curses_get_no_general_advice() {
     let cat = with_eternal_curse(catalog());
     let pb = playbook();
     let mut run = started(&cat);
     run.push(RunEvent::Adjust(vec![Change::AddCard(DeckCard::new("BANE".into()))]));
     let d = Dashboard::compute(&run.state(), &cat, &pb);
-    assert!(d.advice.iter().any(|a| a.text.starts_with("BANE can't be removed")));
+    // No general "can't be removed" reminder, and Eternal curses don't count as removable.
+    assert!(!d.advice.iter().any(|a| a.text.contains("can't be removed")));
     assert!(!d.advice.iter().any(|a| a.text.contains("removable curse")));
 }
 
@@ -893,4 +892,63 @@ fn vigor_counts_on_every_hit_of_the_attack_that_spends_it() {
     let sim = sim::simulate(&s, &cat, &quick());
     // (2 + 8) x 3 on turn 1; Vigor is spent, so 2 x 3 afterwards.
     assert_eq!((sim.turns[0].damage.mean, sim.turns[1].damage.mean), (30.0, 6.0));
+}
+
+// ---------------------------------------------------------------- healing and tags
+
+#[test]
+fn weary_traveler_lowers_starting_hp_and_ancient_heals() {
+    let cat = catalog();
+    let rules = &cat.rules;
+    assert_eq!(rules.ancient_heal_pct(1), 100);
+    assert_eq!(rules.ancient_heal_pct(2), 80);
+    // Community runs: Necrobinder 66 max starts at 52 on A2+ (52.8 rounded down).
+    assert_eq!(rules.start_hp(66, 2), 52);
+    assert_eq!(rules.start_hp(80, 1), 80);
+    let a0 = run::apply(RunState::default(), &RunEvent::start(&cat, &CharacterId::new("HERO"), 0).unwrap());
+    let a2 = run::apply(RunState::default(), &RunEvent::start(&cat, &CharacterId::new("HERO"), 2).unwrap());
+    assert_eq!((a0.hp, a2.hp, a2.max_hp), (80, 64, 80));
+
+    // Act 2: the heal is due once the boss is known, and only once.
+    let mut s = run::apply(a2, &RunEvent::Adjust(vec![Change::SetHp(30)]));
+    s = run::apply(s, &RunEvent::EnterAct { act: ActId::new("ACT1"), index: 1, boss: None });
+    assert_eq!(s.ancient_heal_due(rules), None, "boss not chosen yet");
+    s = run::apply(s, &RunEvent::SetBoss(EncounterId::new("BIG_BOSS")));
+    let pct = s.ancient_heal_due(rules).expect("heal due");
+    s = run::apply(s, &RunEvent::AncientHeal { percent: pct });
+    // 50 missing x 80% = 40.
+    assert_eq!(s.hp, 70);
+    assert_eq!(s.ancient_heal_due(rules), None, "already healed");
+}
+
+#[test]
+fn rest_heals_thirty_percent_plus_relic_bonus_capped_at_missing() {
+    let mut cat = catalog();
+    let mut s = run::apply(RunState::default(), &RunEvent::start(&cat, &CharacterId::new("HERO"), 0).unwrap());
+    s.hp = 20;
+    assert_eq!(analysis::healing::rest_heal(&s, &cat), 24, "30% of 80");
+    let pillow = with_relic(&mut cat, "PILLOW", "Whenever you Rest, heal an additional 15 HP.");
+    s.relics.push(pillow);
+    assert_eq!(analysis::healing::rest_heal(&s, &cat), 39);
+    s.hp = 70;
+    assert_eq!(analysis::healing::rest_heal(&s, &cat), 10, "never more than missing");
+}
+
+#[test]
+fn draw_and_energy_tags_come_from_numbers_and_text() {
+    use spire_core::analysis::deck::{CardTag, tags};
+    let mut pommel = card("POMMEL", CardType::Attack, Rarity::Common, "Deal 9 damage. Draw 1 card.");
+    pommel.draw = Some(1);
+    assert_eq!(tags(&pommel, false), vec![CardTag::Draw]);
+    let surge = card("SURGE", CardType::Skill, Rarity::Common, "Gain 2 Energy.");
+    assert_eq!(tags(&surge, false), vec![CardTag::Energy]);
+    let demesne = card(
+        "DEMESNE",
+        CardType::Power,
+        Rarity::Rare,
+        "At the start of your turn, gain 1 Energy and draw 1 additional card.",
+    );
+    assert_eq!(tags(&demesne, false), vec![CardTag::Draw, CardTag::Energy]);
+    let strike = card("S", CardType::Attack, Rarity::Basic, "Deal 6 damage.");
+    assert!(tags(&strike, false).is_empty());
 }

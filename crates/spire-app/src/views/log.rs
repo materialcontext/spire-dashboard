@@ -8,7 +8,7 @@ use crate::actions::Action;
 use crate::app::ViewCtx;
 use crate::draft::NodeDraft;
 use crate::style::color::*;
-use crate::widgets::{eyebrow, hairline, primary_button, search_pick, segmented};
+use crate::widgets::{combo_pick, eyebrow, hairline, primary_button, search_pick, segmented};
 
 fn describe(v: &ViewCtx, c: &Change) -> (String, egui::Color32) {
     let card = |d: &DeckCard| {
@@ -86,27 +86,26 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
                 },
                 |e| v.catalog.encounter_name(e),
             );
-            egui::ComboBox::from_id_salt("encounter").selected_text(label).width(width).show_ui(ui, |ui| {
-                ui.selectable_value(&mut d.encounter, None, "None");
-                for e in v.catalog.encounters_in(act, room) {
-                    ui.selectable_value(&mut d.encounter, Some(e.id.clone()), &e.name);
-                }
+            combo_pick(ui, "encounter", label, width, &mut d.encounter, || {
+                let mut list: Vec<_> =
+                    v.catalog.encounters_in(act, room).map(|e| (Some(e.id.clone()), e.name.clone())).collect();
+                list.sort_by(|a, b| a.1.cmp(&b.1));
+                std::iter::once((None, "None".to_string())).chain(list).collect()
             });
         }
         if event_room {
             let label = d.event.as_ref().map_or("Choose event".to_string(), |e| v.catalog.event_name(e));
-            egui::ComboBox::from_id_salt("event").selected_text(label).width(width).show_ui(ui, |ui| {
-                ui.selectable_value(&mut d.event, None, "None");
-                if d.kind == NodeKind::Ancient {
+            let ancient = d.kind == NodeKind::Ancient;
+            combo_pick(ui, "event", label, width, &mut d.event, || {
+                // Alphabetical, so a known name is quick to find.
+                let mut list: Vec<_> = if ancient {
                     let ancients = v.catalog.acts.get(act).map(|a| a.ancients.as_slice()).unwrap_or_default();
-                    for id in ancients {
-                        ui.selectable_value(&mut d.event, Some(id.clone()), v.catalog.event_name(id));
-                    }
+                    ancients.iter().map(|id| (Some(id.clone()), v.catalog.event_name(id))).collect()
                 } else {
-                    for e in v.catalog.events_in(act) {
-                        ui.selectable_value(&mut d.event, Some(e.id.clone()), &e.name);
-                    }
-                }
+                    v.catalog.events_in(act).map(|e| (Some(e.id.clone()), e.name.clone())).collect()
+                };
+                list.sort_by(|a, b| a.1.cmp(&b.1));
+                std::iter::once((None, "None".to_string())).chain(list).collect()
             });
         }
     }
@@ -114,7 +113,25 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
     step(ui, 3, "After the floor");
     egui::Grid::new("vitals").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
         ui.label(RichText::new("HP").color(text_dim()));
-        ui.add(egui::DragValue::new(&mut d.hp).range(0..=d.max_hp.max(1)));
+        ui.horizontal(|ui| {
+            ui.add(egui::DragValue::new(&mut d.hp).range(0..=d.max_hp.max(1)));
+            // Resting: one click sets the healed HP (30% of max, plus relics).
+            if d.kind == NodeKind::Rest {
+                let heal = spire_core::analysis::healing::rest_heal(s, v.catalog);
+                let tip = format!(
+                    "Rest heals {}% of max HP, plus relic bonuses: {heal} HP from {}.",
+                    v.catalog.rules.rest_heal_pct, s.hp
+                );
+                if heal > 0
+                    && ui
+                        .add(egui::Button::new(RichText::new(format!("Rest +{heal}")).small().color(good())))
+                        .on_hover_text(tip)
+                        .clicked()
+                {
+                    d.hp = (s.hp + heal).min(d.max_hp);
+                }
+            }
+        });
         ui.end_row();
         ui.label(RichText::new("Max HP").color(text_dim()));
         ui.add(egui::DragValue::new(&mut d.max_hp).range(1..=999));

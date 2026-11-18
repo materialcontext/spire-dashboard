@@ -126,8 +126,17 @@ fn card_row(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
             }
             ui.add_space(4.0);
             role_marks(ui, &row.roles);
+            tag_marks(ui, &row.tags);
         });
     });
+}
+
+/// "D" and "E" for cards that draw or gain energy, beside the role marks.
+fn tag_marks(ui: &mut Ui, tags: &[spire_core::analysis::deck::CardTag]) {
+    for t in tags.iter().rev() {
+        let letter = &t.label()[..1];
+        ui.label(RichText::new(letter).small().color(text_dim())).on_hover_text(t.describe());
+    }
 }
 
 /// One small square per role the card fills, in that role's colour.

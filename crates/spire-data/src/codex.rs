@@ -572,6 +572,13 @@ pub fn rules_from(levels: &[AscensionLevel]) -> Option<GameRules> {
         tougher_enemies_from: find(&["harder to kill"]),
         deadlier_enemies_from: find(&["deadlier"]),
         double_boss_from: find(&["2 bosses", "two bosses"]),
+        // "Ancients only heal 80% of your missing HP."
+        weary_from: find(&["ancients only heal"]),
+        weary_heal_pct: levels
+            .iter()
+            .find(|l| spire_core::playbook::contains_ci(&l.text, "ancients only heal"))
+            .and_then(|l| l.text.split('%').next()?.rsplit(' ').next()?.parse().ok())
+            .unwrap_or(100),
         ..defaults
     })
 }

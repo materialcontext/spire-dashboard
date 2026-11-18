@@ -226,8 +226,6 @@ pub struct ActPlan {
     pub big_hit: u32,
     /// Total enemy HP at or above this means a long fight (by room).
     pub long_fight_hp: RoomThresholds,
-    #[serde(default)]
-    pub notes: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

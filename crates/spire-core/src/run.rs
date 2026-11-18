@@ -99,6 +99,9 @@ pub enum RunEvent {
         /// Absent in runs saved before ascension rules were modelled.
         #[serde(default)]
         potion_slots: Option<u32>,
+        /// Starting HP, when below max (Weary Traveler). Older saves lack it.
+        #[serde(default)]
+        hp: Option<i32>,
     },
     EnterAct {
         act: ActId,
@@ -118,6 +121,10 @@ pub enum RunEvent {
     Node(NodeReport),
     /// Corrections outside a node.
     Adjust(Vec<Change>),
+    /// The act's Ancient heals this percent of missing HP (rounded down).
+    AncientHeal {
+        percent: u32,
+    },
 }
 
 impl RunEvent {
@@ -137,6 +144,7 @@ impl RunEvent {
             deck,
             relics: c.starting_relics.clone(),
             potion_slots: Some(rules.potion_slots(ascension)),
+            hp: Some(rules.start_hp(c.max_hp as i32, ascension)).filter(|hp| *hp != c.max_hp as i32),
         })
     }
 }
@@ -166,6 +174,8 @@ pub struct RunState {
     pub events_seen: Vec<EventId>,
     pub nodes: Vec<NodeKind>,
     pub outcome: Option<Outcome>,
+    /// The current act's Ancient heal has been applied.
+    pub ancient_healed: bool,
 }
 
 impl Default for RunState {
@@ -191,6 +201,7 @@ impl Default for RunState {
             events_seen: Vec::new(),
             nodes: Vec::new(),
             outcome: None,
+            ancient_healed: false,
         }
     }
 }
@@ -207,6 +218,14 @@ impl RunState {
 
     pub fn started(&self) -> bool {
         self.character.is_some()
+    }
+
+    /// The Ancient heal that's due: in act 2 and later, once the boss is
+    /// known and before anything has been logged in the act. Act 1's heal is
+    /// the starting HP. Returns the percent to heal.
+    pub fn ancient_heal_due(&self, rules: &crate::catalog::GameRules) -> Option<u32> {
+        let due = self.act_index > 0 && self.boss.is_some() && !self.ancient_healed && self.act_floor == 0;
+        due.then(|| rules.ancient_heal_pct(self.ascension))
     }
 }
 
@@ -264,10 +283,10 @@ pub fn apply_change(mut s: RunState, change: &Change) -> RunState {
 /// The single state-transition function.
 pub fn apply(s: RunState, event: &RunEvent) -> RunState {
     match event {
-        RunEvent::Start { character, ascension, max_hp, gold, deck, relics, potion_slots } => RunState {
+        RunEvent::Start { character, ascension, max_hp, gold, deck, relics, potion_slots, hp } => RunState {
             character: Some(character.clone()),
             ascension: *ascension,
-            hp: *max_hp,
+            hp: hp.unwrap_or(*max_hp),
             max_hp: *max_hp,
             gold: *gold,
             deck: deck.iter().cloned().map(DeckCard::new).collect(),
@@ -282,8 +301,12 @@ pub fn apply(s: RunState, event: &RunEvent) -> RunState {
             second_boss: None,
             act_floor: 0,
             hallway_fights_in_act: 0,
+            ancient_healed: false,
             ..s
         },
+        RunEvent::AncientHeal { percent } => {
+            RunState { hp: s.hp + (s.max_hp - s.hp).max(0) * *percent as i32 / 100, ancient_healed: true, ..s }
+        }
         RunEvent::SetBoss(boss) => RunState { boss: Some(boss.clone()), ..s },
         RunEvent::SetSecondBoss(boss) => RunState { second_boss: Some(boss.clone()), ..s },
         RunEvent::End { outcome, .. } => RunState { outcome: Some(outcome.clone()), ..s },

@@ -62,7 +62,9 @@ kit, so old runs replay even after a data update.
   the `demands` it places on a deck, and `next_threats` for a node type.
 - `events`: run `needs` (removal, heal, upgrade…), and a `watchlist` of
   act events ranked by how well they meet those needs.
-- `advice`: act targets, boss gaps and act notes.
+- `advice`: act targets, boss gaps, area damage and removable curses (run-specific only).
+- `healing`: the rest heal (rules percent plus "heal an additional N" relics); the Ancient heal and starting HP are `GameRules` methods.
+- `deck::tags`: Draw and Energy tags, from card numbers and text.
 - `timeline`: a run floor by floor (HP, gold, roles, dead cards, damage per
   fight against the community average, elites per act), folded from the event
   log, so archived runs work the same as the live one.
