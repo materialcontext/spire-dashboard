@@ -1,7 +1,7 @@
 # Fight shapes, winning lines and card tags: plan
 
-Status: **proposal**, waiting on the decisions at the end. Nothing here is
-built yet.
+Status: **decided**, except D6. See the decisions at the end. Nothing here
+is built yet.
 
 ## The idea
 
@@ -23,17 +23,22 @@ A deck either can or can't play each line. The dashboard should say:
 - which one players usually take;
 - what your deck is short of for the line that's closest to working.
 
-**Tags** are how that shortfall turns into a card pick. They say what each
-card does: Block, Damage, Weak and so on.
+**Jobs** replace the five roles. A job is something a deck has to be able to
+do in a fight: hold steady pressure, survive a big turn, kill fast, and so
+on. Lines are made of jobs, and a fight's shape says which jobs it asks for.
+
+**Tags** are how a shortfall in a job turns into a card pick. They say what
+each card does: Block, Damage, Weak and so on.
 
 There are three layers:
 
 1. **Fight shape** (enemy side): from move patterns, keeping spikes and
-   quiet turns rather than averaging them away.
-2. **Deck capabilities** (player side): from the deck simulator. Steady
-   block, block on a big turn, steady damage, burst, and ramp.
-3. **Lines:** shape against capabilities, giving per line whether it works,
-   how many turns, what it costs in HP, and the one number that limits it.
+   quiet turns rather than averaging them away. A shape asks for jobs.
+2. **Jobs** (player side): measured by the deck simulator, not by counting
+   cards. Each says how well the deck does it.
+3. **Lines:** made of jobs, played out against the shape. Each line gives
+   whether it works, how many turns, what it costs in HP, and the job that
+   limits it.
 
 ## What the data shows today
 
@@ -93,20 +98,65 @@ turn:
 
 **Gaps.** Where the pattern data is incomplete, the shape says so and falls
 back to the move set. Spikes become "any turn can be its biggest move", and
-the order is marked unknown. Decision **D7** is about filling those gaps.
+the order is marked unknown (D7).
 
-### 2. Deck capabilities (`analysis::capability`, core)
+Then each gap is researched, and the findings ship as a curated data layer.
 
-Read from the deck simulator's per-turn distributions, which we already
-compute (mean, low, high per turn):
+- **The layer.** It's `data/patterns.json`, read by its own adapter into a
+  `DataPack` layer over the Codex one, like every other data source. It's
+  game facts, so it goes in the catalog, not the playbook.
+- **Sources.** Every entry names its source: a wiki or Codex page, a
+  developer note, or a video timestamp. Nothing is taken from memory, and an
+  entry without a source isn't added.
+- **What's researched today** (the scan in `audit --patterns`):
 
-| Capability | Means |
-|---|---|
-| **Steady block** | Block a normal turn reliably gives (low end) |
-| **Big-turn block** | Block when the turn is spent on defense |
-| **Steady damage** | Damage per turn on average |
-| **Burst** | Damage in one all-in turn, and over two turns, including setup cashed in (Vigor, Aim, Strength) |
-| **Ramp** | How output grows from turn 1 to turn 5 |
+| Monster | Fight | Missing |
+|---|---|---|
+| Decimillipede segments (front, middle, back) | The Decimillipede | No pattern at all |
+| Entomancer | Entomancer | Order of Bees, Spear and Pheromone Spit |
+| Lagavulin Matriarch | Lagavulin Matriarch | When it wakes |
+| Test Subject | Test Subject | HP, and its phases |
+| Rocket | Kaiser Crab | What follows Precise Smash |
+
+  24 normal-fight monsters have gaps too. They come after the elites and
+  bosses.
+- **Re-checked at data refresh.** `refresh-bundle` reports when Codex
+  starts covering one of them, and the curated entry gives way to Codex.
+
+### 2. Jobs (`analysis::jobs`, core; replace the five roles)
+
+The roles (frontload or scaling damage and defense, "consistency") count
+cards by kind. They don't say whether the deck can *solve* anything. Jobs
+are what fights ask a deck to do. Each is measured by the deck simulator,
+from its per-turn distributions, so it reflects what the deck actually puts
+out, draws and energy included.
+
+| Job | The deck can… | Measured as | Asked for by |
+|---|---|---|---|
+| **Hold** | absorb steady pressure, turn after turn | Block on a normal turn (low end) | Steady and alternating fights (Gardeners, Terror Eel, Effigy once awake) |
+| **Brace** | take a big turn | Block when the turn goes all to defense, plus Weak's cut | Spikes (Knight Gang 58, Mecha Knight 40–50, Vantom 26) |
+| **Rush** | kill before the fight turns | Damage over the first 3 turns | Clocks: ramps, summons, blasts, status piles; and the Race line |
+| **Burst** | punish a window | Damage in one all-in turn, with setup cashed in | Quiet turns (Effigy asleep, Vantom's 0, Mecha Knight's 0s) |
+| **Grow** | win a long fight | How output rises from turn 1 to turn 5 | High HP, bosses, ramping enemies |
+| **Sweep** | handle a group | Share of damage that hits every enemy | Groups and summons (Phrog's Wrigglers) |
+| **Steady** | keep working on bad draws and junk | How narrow the spread is (draw, energy, cleanup) | Status fights; every line, at its limit |
+
+- **Lines are made of jobs:**
+  - Wall = Hold.
+  - Race = Rush.
+  - Windows = Brace + Burst.
+  - Scale = Grow, plus enough Hold to get there.
+  - Sweep and Steady modify any line.
+- **Everywhere roles appear today, jobs take their place:**
+  - **The deck panel** shows how well each job is done, next to decks
+    that cleared the act.
+  - **The act targets** become benchmarks per job.
+  - **Each enemy view** shows the jobs the fight asks for, from its shape,
+    instead of "role" demands.
+  - **Each card** shows the jobs it helps, by the change it makes to the
+    deck's jobs when added (simulated). Its tags show what it does.
+  - **Personal role overrides** go away; personal tag overrides replace
+    them.
 
 ### 3. Lines (`analysis::lines`, core; replaces the survival splits)
 
@@ -144,35 +194,43 @@ These are as in the earlier draft: read from card numbers and the mechanics
 reader, with playbook rules as a fallback and overrides kept. A tag carries
 its number where it has one.
 
-| Tag | Feeds |
+| Tag | Means |
 |---|---|
-| **Damage** (single target) | Steady damage, Burst |
-| **Area** | Damage against groups and summons |
-| **Block** | Steady and big-turn block |
-| **Weak** (incl. lowering enemy Strength) | Big-turn block, as damage avoided |
-| **Vulnerable** | Burst |
-| **Draw** | Reliability: the low end of every capability rises |
-| **Energy** | Reliability, Burst |
-| **Scaling** (damage or block side) | Ramp |
-| **Setup** (Aim, Stretch, Vigor) | Burst or big-turn block, once cashed in |
-| **Cleanup** (exhausts junk) | Reliability against Status fights |
+| **Damage** | Deals damage to one enemy |
+| **Area** | Hits every enemy |
+| **Block** | Gains Block |
+| **Weak** | Cuts what enemies deal (Weak, lowering their Strength) |
+| **Vulnerable** | Raises what enemies take |
+| **Draw** | Draws cards |
+| **Energy** | Gains energy or makes cards cheaper |
+| **Scaling** | Grows over the fight (Strength, Dexterity, Focus, Plating, Poison, Doom, powers acting every turn), on the damage or block side |
+| **Setup** | Boosts the next card of a kind: Aim (Arrow), Stretch (Block), Vigor (Attack) |
+| **Cleanup** | Exhausts or removes junk (Status, Curse) |
 
-A line's limit maps to the tags that raise it. "Block on big turns" points
-to Block, Weak and Setup (Stretch). "Damage over turns 1–2" points to
-Damage, Vulnerable, Energy and Setup (Vigor, Aim).
+A line's limiting job maps to the tags that raise it:
+
+| Job | Raised by tags |
+|---|---|
+| Hold | Block, Scaling (block side) |
+| Brace | Block, Weak, Setup (Stretch) |
+| Rush | Damage, Vulnerable, Energy |
+| Burst | Damage, Vulnerable, Setup (Vigor, Aim), Energy |
+| Grow | Scaling |
+| Sweep | Area |
+| Steady | Draw, Energy, Cleanup |
 
 ### 5. Composition and benchmarks
 
 - **The deck panel:**
   - each tag's share of the deck;
-  - your capabilities, next to decks of the same character that cleared
+  - your jobs, next to decks of the same character that cleared
     that act's boss;
   - the shortfalls first.
 - **Built at data refresh**, from community runs. Each deck is rebuilt at
   each act's end from the final deck (`floor_added_to_deck`) and the
   per-floor removals. Then:
   - each deck is tagged and *simulated*;
-  - the percentiles of tag shares and capabilities are stored in the catalog;
+  - the percentiles of tag shares and jobs are stored in the catalog;
   - there's a fallback to all characters below 30 decks.
 - **Cost.** About 600 decks, at a few ms each, at refresh time only.
 
@@ -184,8 +242,8 @@ Aim, Stretch and Vigor last until first used, across turns (confirmed).
   only those in hand.
 - **Deck view.** It flags setup that piles up: many Aim cards, few Shoot
   cards.
-- **Capabilities.** Burst and big-turn block include setup cashed in, which
-  is where the value of Aim and Stretch shows.
+- **Jobs.** Burst and Brace include setup cashed in, which is where the
+  value of Aim and Stretch shows.
 
 ## Milestones
 
@@ -194,37 +252,29 @@ Each ships as its own PR.
 | | What | Done when |
 |---|---|---|
 | **F1** | Fight shape, from patterns with distributions; gaps marked; `audit --patterns` prints shapes | Entomancer shows spikes and unknown order; Effigy shows 2 windows then steady; Matriarch and Test Subject are marked as gaps |
-| **F2** | Deck capabilities from the simulator | Starter decks give sensible numbers; tests on known decks |
+| **F1b** | Research the gaps; `data/patterns.json` with sources, as its own data layer | Entomancer, Matriarch, Test Subject, Decimillipede and Rocket read with sourced patterns |
+| **F2** | Jobs from the simulator, replacing roles in the deck panel, act targets and enemy demands | Starter decks give sensible numbers; tests on known decks |
 | **F3** | Lines (Wall, Race, Windows, Scale), phase by phase, with the limiting number; they replace the survival splits and the outlook text | Terror Eel: Wall works for a block-heavy deck, Race for a damage deck. Entomancer reads Windows. |
-| **F4** | Tags (core, then UI), replacing roles; limits mapped to tags | Every class card is tagged or listed in `audit --tags` |
-| **F5** | Benchmarks from community runs: tag shares and capabilities of decks that cleared each act; community pace per fight | The catalog carries percentiles with sample sizes; the deck panel shows shortfalls |
+| **F4** | Tags (core, then UI), with personal tag overrides; limiting jobs mapped to tags; each card's job contributions | Every class card is tagged or listed in `audit --tags` |
+| **F5** | Benchmarks from community runs: tag shares and jobs of decks that cleared each act; community pace per fight | The catalog carries percentiles with sample sizes; the deck panel shows shortfalls |
 | **F6** | Setup value: Aim, Stretch and Vigor scored by their consumers | The Fool's Nock test; the pile-up warning |
 
 The order puts the fight model first, because it decides what the deck is
 measured against. Tags come once lines need a vocabulary for "what to add".
 
-## Decisions for you
+## Decisions
 
-- **D1 Tags.** The ten above?
-- **D2 Roles.** Replace the five roles with tags?
-  - **Recommended:** yes.
-- **D3 Benchmark decks.** Which decks count as having succeeded?
-  - **Recommended:** decks that cleared that act's boss, by character,
-    falling back to all characters.
-- **D4 Starter cards.** Count Strikes and Defends in the shares?
-  - **Recommended:** count them, shown apart.
-- **D6 Anything else undervalued?** For example, Arrows or Stars.
-- **D7 Pattern gaps.** For Entomancer, Matriarch, Test Subject and any
-  others, the options are:
-  - **(a)** Use the move set (the spike is the biggest move, order unknown).
-    No new data needed.
-  - **(b)** While following the game, have the mod also record each enemy's
-    intent per turn, and learn the real order from your fights. This
-    extends monitored runs into combat, which was out of scope (M3).
-  - **(c)** Both: (a) now, (b) later.
-  - **Recommended:** (c).
-- **D8 Choosing a line.** When several lines work, which does the dashboard
-  lead with?
-  - **Recommended:** the one losing least HP, unless it takes clearly longer
-    than the community's pace in a fight with a clock or a ramp. There,
-    speed wins.
+- **D1 Tags:** the ten. *Decided.*
+- **D2 Roles:** replaced, by jobs rather than tags, so the deck is described
+  by how it solves fights. *Decided; jobs are proposed above.*
+- **D3 Benchmark decks:** decks that cleared that act's boss, by character,
+  falling back to all characters. *Decided.*
+- **D4 Starter cards:** counted in tag shares, and shown apart.
+  *Decided.*
+- **D5 Aim and Stretch:** last until first used, across turns. *Answered.*
+- **D6 Arrows and Stars:** *open*; explained in the chat.
+- **D7 Pattern gaps:** use the move set for now, then research each gap
+  into a sourced data layer (F1b). *Decided.*
+- **D8 Choosing a line:** lead with the one losing least HP, unless it takes
+  clearly longer than the community's pace in a fight with a clock or a
+  ramp. There, speed wins. *Decided.*
