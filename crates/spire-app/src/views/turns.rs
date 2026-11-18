@@ -154,7 +154,14 @@ fn lines(plans: &[MonsterPlan], stats: Option<&EncounterStats>) -> Vec<Line> {
                 break;
             }
         }
-        let tail = tail(&mp.plan).filter(|_| !collapsed);
+        let mut tail = tail(&mp.plan).filter(|_| !collapsed);
+        if mp.death_blow {
+            let blow = "explodes the turn after it dies".to_string();
+            tail = Some(match tail {
+                Some(t) => format!("{t}; {blow}"),
+                None => blow,
+            });
+        }
         out.push(Line { plan: pi, name, any: None, chips, tail });
     }
     out
@@ -206,6 +213,11 @@ fn move_on(plans: &[MonsterPlan], n: u32) -> Option<String> {
     t.known().then(|| t.options[0].name.clone())
 }
 
+/// "STEAM_ERUPTION" reads "Steam eruption".
+pub fn power_name(id: &str) -> String {
+    spire_core::analysis::pattern::power_words(id)
+}
+
 /// "1 in 5 runs that reach this fight end here, most on turn 7 (Dismember)."
 pub fn deaths(
     ui: &mut Ui,
@@ -237,9 +249,17 @@ fn deaths_text(plans: &[MonsterPlan], s: &EncounterStats) -> String {
     let turns: Vec<String> = deadly(Some(s))
         .iter()
         .take(3)
-        .map(|(t, share)| match move_on(plans, *t) {
-            Some(m) => format!("turn {t} ({m}, {:.0}%)", share * 100.0),
-            None => format!("turn {t} ({:.0}%)", share * 100.0),
+        .map(|(t, share)| {
+            let pct = share * 100.0;
+            // A monster that explodes after dying can kill on the turn after
+            // its own death, as well as with that turn's move.
+            let blast = plans.iter().any(|p| p.death_blow) && *t > 1;
+            match (move_on(plans, *t), blast) {
+                (Some(m), true) => format!("turn {t} ({m}, or its blast after a turn {} kill, {pct:.0}%)", t - 1),
+                (None, true) => format!("turn {t} (or its blast after a turn {} kill, {pct:.0}%)", t - 1),
+                (Some(m), false) => format!("turn {t} ({m}, {pct:.0}%)"),
+                (None, false) => format!("turn {t} ({pct:.0}%)"),
+            }
         })
         .collect();
     let mut text = format!("{:.0}% of runs that reach this fight end here", rate * 100.0);
@@ -263,12 +283,20 @@ pub fn outlook(ui: &mut Ui, o: &Outlook, stats: Option<&EncounterStats>) {
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
         ui.label(RichText::new(o.verdict.label()).small().strong().color(verdict_color(o.verdict)));
-        let text = match o.best.kill_turn {
-            Some(t) if o.best.hp_loss as i32 >= o.hp => {
+        let text = match (o.best.kill_turn, o.best.blast_turn) {
+            (Some(t), Some(b)) if o.best.hp_loss as i32 >= o.hp => format!(
+                "kill on about turn {t}, but its blast on turn {b} brings the loss to about {} HP; you have {}",
+                o.best.hp_loss, o.hp
+            ),
+            (Some(t), Some(b)) => format!(
+                "kill on about turn {t} and survive its blast on turn {b}, losing about {} of your {} HP",
+                o.best.hp_loss, o.hp
+            ),
+            (Some(t), None) if o.best.hp_loss as i32 >= o.hp => {
                 format!("would lose about {} HP over {t} turns; you have {}", o.best.hp_loss, o.hp)
             }
-            Some(t) => format!("win in about {t} turns, losing about {} of your {} HP", o.best.hp_loss, o.hp),
-            None => format!("no win within 20 turns; about {} HP lost by then", o.best.hp_loss),
+            (Some(t), None) => format!("win in about {t} turns, losing about {} of your {} HP", o.best.hp_loss, o.hp),
+            (None, _) => format!("no win within 20 turns; about {} HP lost by then", o.best.hp_loss),
         };
         ui.label(RichText::new(text).small().color(text_dim()));
     })
@@ -282,6 +310,13 @@ pub fn outlook(ui: &mut Ui, o: &Outlook, stats: Option<&EncounterStats>) {
             Split::NeedFrom(at) => format!("blocking turns that bring {at}+ damage, attacking all-out otherwise"),
         };
         ui.label(format!("Best simple plan: {plan}."));
+        if let Some(b) = o.best.blast_turn {
+            ui.label(format!(
+                "It explodes at the end of your turn after it dies, so the fight costs one more enemy turn \
+                 than the kill: what matters is killing it a turn sooner. The blast is counted as at least \
+                 its starting size and that turn's usual hit (turn {b}); it grows over the fight."
+            ));
+        }
         if o.best != o.race {
             match o.race.kill_turn {
                 Some(t) => ui.label(format!("All-out attack: win on turn {t}, losing about {} HP.", o.race.hp_loss)),
@@ -326,7 +361,7 @@ pub fn table(ui: &mut Ui, mp: &MonsterPlan, stats: Option<&EncounterStats>, sing
                     if let Some(c) = &o.condition {
                         name.push_str(&format!("  if {c}"));
                     }
-                    ui.label(RichText::new(name).small().color(text()));
+                    ui.add(egui::Label::new(RichText::new(name).small().color(text())).extend());
                 }
             });
             ui.vertical(|ui| {

@@ -324,6 +324,7 @@ mod tests {
             hp_min_asc: None,
             hp_max_asc: None,
             pattern: Some(pattern),
+            death_blow: None,
         }
     }
 

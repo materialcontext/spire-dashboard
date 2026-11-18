@@ -288,6 +288,44 @@ pub struct EnrichSummary {
 
 /// The usual number of weak-pool hallway fights in each act index, from
 /// acts that reached their boss (so short, dead runs don't skew it).
+/// Repeats rarer than this share count as never happening.
+const NEVER_SHARE: f32 = 0.005;
+/// Fewer fights than this and the repeat rules stay unmeasured.
+const RULE_MIN_FIGHTS: usize = 500;
+
+/// How encounters repeat within an act: whether a hallway encounter ever
+/// comes up twice, and whether an elite ever comes up twice in a row.
+/// Each is `Some(true)` when it (practically) never happens, `None` when
+/// there are too few fights to say.
+pub fn repeat_rules(pack: &DataPack, fights: &[Fight]) -> (Option<bool>, Option<bool>) {
+    use spire_core::catalog::RoomType;
+    let rooms: BTreeMap<&str, RoomType> = pack.encounters.iter().map(|e| (e.id.as_str(), e.room)).collect();
+    // (run, act) -> (hallway encounters, elite encounters), in order.
+    type Seen<'a> = (Vec<&'a str>, Vec<&'a str>);
+    let mut acts: BTreeMap<(usize, usize), Seen> = BTreeMap::new();
+    for f in fights {
+        let entry = acts.entry((f.run, f.act)).or_default();
+        match rooms.get(f.encounter.as_str()) {
+            Some(RoomType::Monster) => entry.0.push(&f.encounter),
+            Some(RoomType::Elite) => entry.1.push(&f.encounter),
+            _ => {}
+        }
+    }
+    let (mut hall, mut hall_repeats, mut elites, mut elite_repeats) = (0usize, 0usize, 0usize, 0usize);
+    for (halls, els) in acts.values() {
+        for (i, e) in halls.iter().enumerate() {
+            hall += 1;
+            hall_repeats += usize::from(halls[..i].contains(e));
+        }
+        for (i, e) in els.iter().enumerate() {
+            elites += 1;
+            elite_repeats += usize::from(i > 0 && els[i - 1] == *e);
+        }
+    }
+    let never = |n: usize, repeats: usize| (n >= RULE_MIN_FIGHTS).then_some((repeats as f32) < n as f32 * NEVER_SHARE);
+    (never(hall, hall_repeats), never(elites, elite_repeats))
+}
+
 pub fn weak_fights_per_act(pack: &DataPack, fights: &[Fight]) -> Vec<(u8, u32)> {
     use spire_core::catalog::RoomType;
     let encounters: BTreeMap<&str, (RoomType, bool)> =
@@ -481,6 +519,15 @@ pub fn enrich(pack: &mut DataPack, fights: &[Fight]) -> EnrichSummary {
     }
 
     let weak = weak_fights_per_act(pack, fights);
+    let (unique_hallway, no_elite_twice) = repeat_rules(pack, fights);
+    if let Some(rules) = pack.rules.as_mut() {
+        if let Some(r) = unique_hallway {
+            rules.unique_hallway_fights = r;
+        }
+        if let Some(r) = no_elite_twice {
+            rules.no_elite_twice_in_a_row = r;
+        }
+    }
     for act in &mut pack.acts {
         if let Some((_, n)) = weak.iter().find(|(i, _)| *i == act.index) {
             act.weak_fights = Some(*n);
@@ -627,5 +674,47 @@ mod tests {
         assert_eq!(stats.death_turns, vec![0, 0, 0, 0, 0, 0, 1]);
         assert_eq!(stats.win_damage, Some((10, 10)));
         assert_eq!(stats.hp_in, Some((50, 40)));
+    }
+
+    #[test]
+    fn measures_how_encounters_repeat_within_an_act() {
+        use spire_core::catalog::{Encounter, RoomType};
+        let enc = |id: &str, room| Encounter {
+            id: id.into(),
+            name: id.into(),
+            room,
+            weak: false,
+            act: None,
+            monsters: vec![],
+            tags: vec![],
+            lineups: vec![],
+            spawns: vec![],
+            stats: None,
+        };
+        let pack = DataPack {
+            encounters: vec![
+                enc("H1", RoomType::Monster),
+                enc("H2", RoomType::Monster),
+                enc("E1", RoomType::Elite),
+                enc("E2", RoomType::Elite),
+            ],
+            ..Default::default()
+        };
+        let fight = |run, e: &str| Fight {
+            run,
+            act: 0,
+            encounter: e.into(),
+            monsters: vec![],
+            damage_taken: None,
+            turns: None,
+            hp_in: None,
+            died: false,
+        };
+        // Hallway fights never repeat; elites repeat, but never back to back.
+        let fights: Vec<Fight> = (0..300).flat_map(|r| ["H1", "E1", "H2", "E2", "E1"].map(|e| fight(r, e))).collect();
+        assert_eq!(repeat_rules(&pack, &fights), (Some(true), Some(true)));
+        let twice: Vec<Fight> = (0..300).flat_map(|r| ["H1", "H1", "E1", "E1"].map(|e| fight(r, e))).collect();
+        assert_eq!(repeat_rules(&pack, &twice), (Some(false), Some(false)));
+        assert_eq!(repeat_rules(&pack, &fights[..10]), (None, None));
     }
 }

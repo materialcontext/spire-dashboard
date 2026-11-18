@@ -737,5 +737,125 @@
     "trials": 400,
     "arrow_return_hits": 3,
     "max_orb_slots": 10
-  }
+  },
+  "relic_roles": [
+    {
+      "effect": "damage",
+      "recurring": false,
+      "role": "frontload_damage"
+    },
+    {
+      "effect": "damage",
+      "recurring": true,
+      "role": "scaling_damage"
+    },
+    {
+      "effect": "damage_all",
+      "recurring": false,
+      "role": "frontload_damage"
+    },
+    {
+      "effect": "damage_all",
+      "recurring": true,
+      "role": "scaling_damage"
+    },
+    {
+      "effect": "vulnerable",
+      "role": "frontload_damage"
+    },
+    {
+      "effect": "vigor",
+      "role": "frontload_damage"
+    },
+    {
+      "effect": "extra_damage",
+      "role": "frontload_damage"
+    },
+    {
+      "effect": "first_attack_bonus",
+      "role": "frontload_damage"
+    },
+    {
+      "effect": "vulnerable_bonus",
+      "role": "frontload_damage"
+    },
+    {
+      "effect": "extra_hit",
+      "role": "frontload_damage"
+    },
+    {
+      "effect": "strength",
+      "role": "scaling_damage"
+    },
+    {
+      "effect": "focus",
+      "role": "scaling_damage"
+    },
+    {
+      "effect": "poison",
+      "role": "scaling_damage"
+    },
+    {
+      "effect": "doom",
+      "role": "scaling_damage"
+    },
+    {
+      "effect": "poison_ticks",
+      "role": "scaling_damage"
+    },
+    {
+      "effect": "aim",
+      "role": "scaling_damage"
+    },
+    {
+      "effect": "block",
+      "recurring": false,
+      "role": "frontload_defense"
+    },
+    {
+      "effect": "block",
+      "recurring": true,
+      "role": "scaling_defense"
+    },
+    {
+      "effect": "extra_block",
+      "role": "frontload_defense"
+    },
+    {
+      "effect": "stretch",
+      "role": "frontload_defense"
+    },
+    {
+      "effect": "dexterity",
+      "role": "scaling_defense"
+    },
+    {
+      "effect": "plating",
+      "role": "scaling_defense"
+    },
+    {
+      "effect": "energy",
+      "role": "consistency"
+    },
+    {
+      "effect": "draw",
+      "role": "consistency"
+    },
+    {
+      "effect": "retain_hand",
+      "role": "consistency"
+    },
+    {
+      "effect": "conserve_energy",
+      "role": "consistency"
+    },
+    {
+      "effect": "echo",
+      "role": "consistency"
+    },
+    {
+      "effect": "free_skills",
+      "role": "consistency"
+    }
+  ]
 }
