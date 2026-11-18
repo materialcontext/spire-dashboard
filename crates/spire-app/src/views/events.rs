@@ -5,7 +5,7 @@ use spire_core::analysis::EventWatch;
 
 use crate::app::ViewCtx;
 use crate::style::color::*;
-use crate::widgets::{chip, culled, eyebrow, opportunity_color};
+use crate::widgets::{chip, culled, eyebrow, opportunity_color, secondary};
 
 pub fn show(ui: &mut Ui, v: &ViewCtx) {
     let (fresh, seen): (Vec<_>, Vec<_>) = v.dash.events.iter().partition(|e| !e.seen);
@@ -14,7 +14,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
         let wants: Vec<_> = v.dash.needs.iter().filter(|n| n.weight >= 2).collect();
         if !wants.is_empty() {
             ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new("This run wants").small().color(text_dim()));
+                ui.label(secondary("This run wants"));
                 for n in wants {
                     chip(ui, n.opportunity.label(), opportunity_color(n.opportunity)).on_hover_text(&n.reason);
                 }
@@ -48,7 +48,7 @@ fn event_entry(ui: &mut Ui, v: &ViewCtx, e: &EventWatch) {
         ui.label(RichText::new(&e.name).family(crate::style::strong_family()).color(text())).on_hover_ui(|ui| {
             for o in v.catalog.events.get(&e.event).map_or(&[][..], |ev| ev.options.as_slice()) {
                 ui.label(RichText::new(&o.title).strong());
-                ui.label(RichText::new(&o.text).small().color(text_dim()));
+                ui.label(secondary(&o.text));
             }
         });
         if e.score > 0 {

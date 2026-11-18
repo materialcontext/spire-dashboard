@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use crate::catalog::{Card, CardType, Catalog, Rarity};
-use crate::playbook::{ActPlan, Capability, Playbook, Role};
+use crate::playbook::{ActPlan, Playbook, Role};
 use crate::run::DeckCard;
 
 /// One deck card with its catalog entry and derived roles.
@@ -12,7 +12,6 @@ pub struct ClassifiedCard<'a> {
     pub deck: &'a DeckCard,
     pub card: Option<&'a Card>,
     pub roles: Vec<Role>,
-    pub aoe: bool,
     pub tags: Vec<CardTag>,
 }
 
@@ -72,7 +71,6 @@ pub fn classify<'a>(deck: &'a [DeckCard], catalog: &'a Catalog, playbook: &Playb
                 deck: d,
                 card,
                 roles: card.map(|c| playbook.roles_of(c)).unwrap_or_default(),
-                aoe: card.is_some_and(|c| playbook.is_aoe(c)),
                 tags: card.map(|c| tags(c, d.upgraded)).unwrap_or_default(),
             }
         })
@@ -125,7 +123,6 @@ pub struct DeckProfile {
     pub by_role: BTreeMap<Role, u32>,
     /// Role counts contributed by starter Strikes/Defends.
     pub starter_roles: BTreeMap<Role, u32>,
-    pub aoe: u32,
     pub upgraded: u32,
     /// Cards not found in the catalog.
     pub unknown: u32,
@@ -157,13 +154,6 @@ impl DeckProfile {
         self.by_type.get(&t).copied().unwrap_or(0)
     }
 
-    pub fn capability(&self, cap: Capability) -> u32 {
-        match cap {
-            Capability::Role(r) => self.role(r),
-            Capability::Aoe => self.aoe,
-        }
-    }
-
     pub fn upgraded_fraction(&self) -> f32 {
         if self.total == 0 { 0.0 } else { self.upgraded as f32 / self.total as f32 }
     }
@@ -182,7 +172,6 @@ pub fn profile(cards: &[ClassifiedCard<'_>]) -> DeckProfile {
         for r in &c.roles {
             *roles.entry(*r).or_default() += 1;
         }
-        p.aoe += u32::from(c.aoe);
         p.draw += u32::from(c.tags.contains(&CardTag::Draw));
         p.energy += u32::from(c.tags.contains(&CardTag::Energy));
         p.upgraded += u32::from(c.deck.upgraded);
@@ -219,17 +208,12 @@ impl Coverage {
     }
 }
 
-/// Coverage of a capability, judged against the act plan's target for it.
+/// Coverage of a role, judged against the act plan's target for it.
 /// Without a target, two cards count as covered.
-pub fn coverage(profile: &DeckProfile, cap: Capability, plan: Option<&ActPlan>) -> Coverage {
-    let have = profile.capability(cap);
-    let want = plan
-        .and_then(|p| match cap {
-            Capability::Role(r) => p.targets.iter().find(|t| t.role == r).map(|t| t.min),
-            Capability::Aoe => Some(p.needs_aoe),
-        })
-        .filter(|w| *w > 0)
-        .unwrap_or(2);
+pub fn coverage(profile: &DeckProfile, role: Role, plan: Option<&ActPlan>) -> Coverage {
+    let have = profile.role(role);
+    let want =
+        plan.and_then(|p| p.targets.iter().find(|t| t.role == role).map(|t| t.min)).filter(|w| *w > 0).unwrap_or(2);
     match have {
         0 => Coverage::Missing,
         h if h < want => Coverage::Thin,

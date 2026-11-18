@@ -5,8 +5,8 @@ use spire_core::catalog::CardType;
 use spire_core::playbook::Role;
 
 use crate::app::ViewCtx;
-use crate::style::{self, color::*};
-use crate::widgets::{bar, panel};
+use crate::style;
+use crate::widgets::{bar, caption, panel};
 
 pub fn show(ui: &mut Ui, v: &ViewCtx) {
     let d = &v.dash.deck;
@@ -38,35 +38,34 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
         });
 
         ui.add_space(crate::style::space::s());
-        ui.label(
-            RichText::new("Roles · bright: cards you added · faded: starter Strikes/Defends · tick: target this act")
-                .small()
-                .color(text_faint()),
-        );
+        ui.label(caption(
+            "Roles · bright: cards you added · faded: starter Strikes/Defends · tick: target this act · \
+             under each, how well the deck does it (simulated)",
+        ));
         let target = |r: Role| plan.and_then(|p| p.targets.iter().find(|t| t.role == r)).map(|t| t.min);
         let max_role =
             Role::ALL.iter().map(|r| (d.role(*r) + d.starter_role(*r)).max(target(*r).unwrap_or(0))).max().unwrap_or(1);
+        let jobs = v.combat.map(|c| &c.jobs);
         for r in Role::ALL {
             bar(ui, r.label(), d.role(r), d.starter_role(r), max_role, target(r), style::role_color(r));
+            if let Some(j) = jobs {
+                ui.horizontal(|ui| {
+                    ui.add_space(crate::widgets::BAR_LABEL_WIDTH);
+                    ui.label(caption(j.describe(r)));
+                });
+            }
         }
-        bar(
-            ui,
-            "Area damage",
-            d.aoe,
-            0,
-            max_role,
-            plan.map(|p| p.needs_aoe).filter(|n| *n > 0),
-            style::role_color(Role::FrontloadDamage),
-        );
-        // What the acceleration cards actually do.
-        bar(ui, "Draw", d.draw, 0, max_role, None, style::role_color(Role::Consistency));
-        bar(ui, "Energy gain", d.energy, 0, max_role, None, style::role_color(Role::Consistency));
+        if let Some(j) = jobs {
+            ui.label(caption(format!(
+                "On a bad draw (1 hand in 4) the deck deals {:.0}% of its usual damage.",
+                j.floor * 100.0
+            )));
+        }
+        // Draw and energy aren't roles: they help every role on bad draws.
+        bar(ui, "Draw", d.draw, 0, max_role, None, style::tag_color());
+        bar(ui, "Energy gain", d.energy, 0, max_role, None, style::tag_color());
 
         ui.add_space(crate::style::space::xs());
-        ui.label(
-            RichText::new(format!("{} upgraded · {} with no role · {} unknown", d.upgraded, d.no_role, d.unknown))
-                .small()
-                .color(text_faint()),
-        );
+        ui.label(caption(format!("{} upgraded · {} with no role · {} unknown", d.upgraded, d.no_role, d.unknown)));
     });
 }

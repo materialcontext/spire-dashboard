@@ -4,7 +4,7 @@ use crate::analysis::deck::{Coverage, DeckProfile, coverage};
 use crate::analysis::pattern;
 use crate::catalog::{Catalog, Encounter, Monster, RoomType};
 use crate::ids::EncounterId;
-use crate::playbook::{ActPlan, Capability, Playbook, Role};
+use crate::playbook::{ActPlan, Playbook, Role};
 use crate::run::{NodeKind, RunState};
 
 /// Numbers that describe how an encounter pressures a deck.
@@ -23,6 +23,11 @@ pub struct ThreatProfile {
     pub peak_turn: u32,
     pub buffs: bool,
     pub summons: bool,
+    /// Phases a monster revives into, counting the first (0 or 1: none).
+    pub phases: u32,
+    /// A fight rule that wants many hits or damage spread over turns
+    /// (Slippery, Intangible, Skittish, Hardened Shell), as its reason.
+    pub chip: Option<String>,
     pub debuffs: bool,
     pub statuses: bool,
 }
@@ -56,10 +61,25 @@ pub fn typical_turns(enc: &Encounter) -> usize {
 
 fn lineup_profile(monsters: &[&Monster], scaling: Scaling, vulnerable_pct: u32, turns: usize) -> ThreatProfile {
     let mut t = monsters.iter().fold(ThreatProfile::default(), |mut t, m| {
-        let (hp_min, hp_max) = m.hp_at(scaling.tough);
+        // A monster that revives into phases has to be beaten once per phase.
+        let (hp_min, hp_max) = m
+            .phases
+            .iter()
+            .map(|p| p.hp_at(scaling.tough))
+            .fold(m.hp_at(scaling.tough), |acc, p| (acc.0 + p.0, acc.1 + p.1));
         t.enemies += 1;
         t.hp_min += hp_min;
         t.hp_max += hp_max;
+        if !m.phases.is_empty() {
+            t.phases = t.phases.max(m.phases.len() as u32 + 1);
+        }
+        if t.chip.is_none() {
+            use crate::analysis::rules::{self, Ask};
+            t.chip = rules::of(m)
+                .into_iter()
+                .find(|r| r.kind.asks().iter().any(|a| matches!(a, Ask::ManyHits | Ask::SpreadDamage)))
+                .map(|r| format!("{}: wants many hits", crate::analysis::pattern::power_words(&r.power.power)));
+        }
         let biggest = m.moves.iter().map(|mv| mv.total_damage_at(scaling.deadly)).max().unwrap_or(0);
         t.max_hit = t.max_hit.max(biggest);
         t.buffs |= m.moves.iter().any(|mv| mv.intent_has("buff"));
@@ -99,6 +119,8 @@ pub fn threat_profile(enc: &Encounter, catalog: &Catalog, playbook: &Playbook, s
             peak_turn: acc.peak_turn.max(p.peak_turn),
             buffs: acc.buffs || p.buffs,
             summons: acc.summons || p.summons,
+            phases: acc.phases.max(p.phases),
+            chip: acc.chip.or(p.chip.clone()),
             debuffs: acc.debuffs || p.debuffs,
             statuses: acc.statuses || p.statuses,
         })
@@ -145,8 +167,8 @@ pub fn lineup_plans(enc: &Encounter, catalog: &Catalog, scaling: Scaling, turns:
     (plans, hp)
 }
 
-/// Monsters that fight together: the starting lineup, or the ones a power
-/// summons when the wave before dies.
+/// Monsters that fight together: the starting lineup, a phase a monster
+/// revives into, or the ones a power summons when the wave before dies.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Wave {
     pub plans: Vec<MonsterPlan>,
@@ -156,7 +178,8 @@ pub struct Wave {
     pub summoned_by: Option<String>,
 }
 
-/// The most common lineup, then the monsters its on-death powers summon.
+/// The most common lineup, then the phases its monsters revive into, then
+/// the monsters its on-death powers summon.
 ///
 /// The data says a power summons and gives its amount; it doesn't say how
 /// many monsters that is, so the amount is read as the count:
@@ -189,7 +212,22 @@ pub fn lineup_waves(enc: &Encounter, catalog: &Catalog, scaling: Scaling, turns:
             MonsterPlan { monster: id.clone(), name: m.name.clone(), count, plan, death_blow: m.death_blow.is_some() };
         Some(Wave { plans: vec![mp], hp: (lo + hi) / 2 * count, summoned_by: Some(power.to_string()) })
     };
+    // Phases a monster revives into: one more stage each, from the phase's
+    // opening move. (A revive that skips a turn isn't counted.)
+    let phases: Vec<Wave> = plans
+        .iter()
+        .filter_map(|mp| catalog.monsters.get(&mp.monster))
+        .flat_map(|m| {
+            m.phases.iter().map(move |ph| {
+                let (lo, hi) = ph.hp_at(scaling.tough);
+                let plan = pattern::plan_from(m, &ph.start, scaling.deadly, vulnerable, turns);
+                let mp = MonsterPlan { monster: m.id.clone(), name: m.name.clone(), count: 1, plan, death_blow: false };
+                Wave { plans: vec![mp], hp: (lo + hi) / 2, summoned_by: None }
+            })
+        })
+        .collect();
     let mut waves = vec![Wave { plans, hp, summoned_by: None }];
+    waves.extend(phases);
     for (id, n, power, in_place) in &summoned {
         let (repeats, count) = if *in_place { (*n, 1) } else { (1, *n) };
         waves.extend((0..repeats).filter_map(|_| wave_of(id, count, power)));
@@ -242,14 +280,14 @@ pub fn lineup_incoming(plans: &[MonsterPlan], turns: usize) -> Vec<(u32, f32, u3
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Demand {
-    pub capability: Capability,
+    pub role: Role,
     pub reason: String,
 }
 
 /// What an encounter asks of a deck, given the act's thresholds.
 pub fn demands(t: &ThreatProfile, room: RoomType, plan: Option<&ActPlan>) -> Vec<Demand> {
     let mut out = Vec::new();
-    let mut push = |capability, reason: String| out.push(Demand { capability, reason });
+    let mut push = |role, reason: String| out.push(Demand { role, reason });
 
     if t.enemies >= 2 || t.group || t.summons {
         let why = match (t.summons, t.enemies) {
@@ -257,11 +295,11 @@ pub fn demands(t: &ThreatProfile, room: RoomType, plan: Option<&ActPlan>) -> Vec
             (true, _) => "adds join mid-fight".to_string(),
             _ => "several enemies".to_string(),
         };
-        push(Capability::Aoe, why);
+        push(Role::Aoe, why);
     }
     if let Some(plan) = plan {
         if t.peak_turn >= plan.big_hit {
-            push(Capability::Role(Role::FrontloadDefense), format!("up to {} damage in one turn", t.peak_turn));
+            push(Role::Survival, format!("up to {} damage in one turn", t.peak_turn));
         }
         let long = match room {
             RoomType::Monster => plan.long_fight_hp.monster,
@@ -269,15 +307,15 @@ pub fn demands(t: &ThreatProfile, room: RoomType, plan: Option<&ActPlan>) -> Vec
             RoomType::Boss => plan.long_fight_hp.boss,
         };
         if t.hp_min >= long {
-            push(Capability::Role(Role::ScalingDamage), format!("{} total HP", t.hp_min));
-            push(Capability::Role(Role::ScalingDefense), "long fight".into());
+            push(Role::ScalingDamage, format!("{} total HP", t.hp_min));
+            push(Role::Mitigation, "long fight".into());
         }
     }
     if t.buffs {
-        push(Capability::Role(Role::FrontloadDamage), "buffs itself: end it early".into());
+        push(Role::FastDamage, "buffs itself: end it early".into());
     }
-    if t.statuses {
-        push(Capability::Role(Role::Consistency), "adds status cards".into());
+    if let Some(why) = &t.chip {
+        push(Role::Chip, why.clone());
     }
     out
 }
@@ -304,8 +342,6 @@ pub struct ThreatPreview {
     pub stats: Option<crate::catalog::EncounterStats>,
     /// The most common lineup, turn by turn.
     pub plans: Vec<MonsterPlan>,
-    /// Its combined HP.
-    pub lineup_hp: u32,
 }
 
 impl ThreatPreview {
@@ -326,14 +362,10 @@ pub fn preview(
 ) -> ThreatPreview {
     let plan = playbook.act(act_index);
     let profile = threat_profile(enc, catalog, playbook, scaling);
-    let (plans, lineup_hp) = lineup_plans(enc, catalog, scaling, pattern::HORIZON);
+    let (plans, _) = lineup_plans(enc, catalog, scaling, pattern::HORIZON);
     let checks = demands(&profile, enc.room, plan)
         .into_iter()
-        .map(|d| DemandCheck {
-            have: deck.capability(d.capability),
-            coverage: coverage(deck, d.capability, plan),
-            demand: d,
-        })
+        .map(|d| DemandCheck { have: deck.role(d.role), coverage: coverage(deck, d.role, plan), demand: d })
         .collect();
     ThreatPreview {
         encounter: enc.id.clone(),
@@ -346,7 +378,6 @@ pub fn preview(
         spawns: enc.spawns.iter().map(|m| catalog.monster_name(m)).collect(),
         stats: enc.stats.clone(),
         plans,
-        lineup_hp,
     }
 }
 

@@ -637,10 +637,6 @@ impl MonsterMove {
         self.powers.iter().filter(|p| p.target == PowerTarget::Monster && p.power == "STRENGTH").map(|p| p.amount).sum()
     }
 
-    pub fn total_damage(&self) -> u32 {
-        self.total_damage_at(false)
-    }
-
     /// Damage × hits, using the ascension value when `deadly` and known.
     pub fn total_damage_at(&self, deadly: bool) -> u32 {
         self.per_hit_at(deadly).unwrap_or(0) * self.hits.unwrap_or(1).max(1)
@@ -673,17 +669,50 @@ pub struct Monster {
     /// It strikes once more after it dies (Waterfall Giant's Steam
     /// Eruption: "When killed, deals damage at the end of your next turn").
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub death_blow: Option<DeathBlow>,
+    pub death_blow: Option<MonsterPower>,
     /// It summons more monsters when it dies (Phrog Parasite's Infested:
     /// "Upon dying, summons... something"). `amount` is the power's amount,
     /// read as how many; the encounter's `spawns` say what.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub death_summons: Option<DeathBlow>,
+    pub death_summons: Option<MonsterPower>,
+    /// Every power it starts with or gives itself, with the data's text:
+    /// what fight rules are read from.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub powers: Vec<MonsterPower>,
+    /// Further phases it revives into (Test Subject): each fought as one
+    /// more stage, with its own HP and opening move.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub phases: Vec<Phase>,
 }
 
-/// A power that makes a monster deal damage after it's killed.
+/// A phase a monster revives into.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct DeathBlow {
+pub struct Phase {
+    pub hp_min: u32,
+    #[serde(default)]
+    pub hp_max: Option<u32>,
+    #[serde(default)]
+    pub hp_min_asc: Option<u32>,
+    #[serde(default)]
+    pub hp_max_asc: Option<u32>,
+    /// The move its pattern starts from in this phase.
+    pub start: String,
+}
+
+impl Phase {
+    /// HP range, using the Ascension values when `tough` and known.
+    pub fn hp_at(&self, tough: bool) -> (u32, u32) {
+        let base = (self.hp_min, self.hp_max.unwrap_or(self.hp_min));
+        match (tough, self.hp_min_asc) {
+            (true, Some(lo)) => (lo, self.hp_max_asc.unwrap_or(lo)),
+            _ => base,
+        }
+    }
+}
+
+/// A power a monster has, as the data names and words it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct MonsterPower {
     pub power: String,
     /// The power's text, as the data source words it.
     pub text: String,
@@ -1157,11 +1186,5 @@ impl Catalog {
             EventKind::Act => e.acts.is_empty() || e.acts.contains(act),
             EventKind::Ancient => false,
         })
-    }
-
-    /// Cards a character can find: their pool plus colorless.
-    pub fn character_pool<'a>(&'a self, character: &CharacterId) -> impl Iterator<Item = &'a Card> + 'a {
-        let color = character.as_str().to_lowercase();
-        self.cards.values().filter(move |c| c.color == color || c.color == "colorless")
     }
 }

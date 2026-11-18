@@ -37,7 +37,7 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
     "NSWorkspace",
     "objc2-core-foundation",
 ] }
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry", "NSString", "NSThread", "NSUserDefaults"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry", "NSString", "NSThread"] }
 muda = { version = "0.21", default-features = false }
 
 # The one crate in the workspace that may use `unsafe`, and only in the

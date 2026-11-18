@@ -333,3 +333,27 @@ pub fn window_edges(ctx: &egui::Context) {
         ctx.send_viewport_cmd(ViewportCommand::BeginResize(dir));
     }
 }
+
+/// Lays the pass out again when a tooltip ran past the window's edge.
+///
+/// egui keeps a tooltip inside the window using the size it had the frame
+/// before, and clips what goes past the edge. A tooltip that grows from one
+/// frame to the next (a chart's label as the pointer moves along a line)
+/// is placed for its old size, so its new edge is cut off, and nothing
+/// repaints until the pointer moves again. Seen here, the pass is discarded
+/// and run again with the size now known (egui allows one more pass). Not
+/// for one too big to fit at all: placing it again wouldn't help.
+pub fn keep_tooltips_inside(ctx: &egui::Context) {
+    let window = ctx.content_rect();
+    let spills = ctx.memory(|m| {
+        m.areas().visible_layer_ids().into_iter().filter(|l| l.order == egui::Order::Tooltip).any(|l| {
+            m.area_rect(l.id).is_some_and(|r| {
+                let fits = r.width() <= window.width() && r.height() <= window.height();
+                fits && !window.expand(0.5).contains_rect(r)
+            })
+        })
+    });
+    if spills {
+        ctx.request_discard("a tooltip grew past the window's edge");
+    }
+}

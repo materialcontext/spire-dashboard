@@ -3,7 +3,8 @@
 //! The data gives numbers for a card's own effect (`vars`), but powers and
 //! relics describe what they do in prose: "At the start of your turn, gain 3
 //! Strength", "Whenever you play an Attack, gain 1 Block". This module reads
-//! that prose into [`Trigger`]s and [`Passive`]s the deck simulator can run.
+//! that prose into timed triggers ([`When`] with its [`Effect`]s) and
+//! [`Passive`]s the deck simulator can run.
 //!
 //! The reader is deliberately small: a timing phrase, then simple effects
 //! ("gain N X", "deal N damage", "draw N cards", "apply N X", "Channel N X").
@@ -202,12 +203,6 @@ impl Passive {
             Passive::FirstAttackBonus(n) => format!("First attack each turn +{n}%"),
         }
     }
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Trigger {
-    pub when: Option<When>,
-    pub effects: Vec<Effect>,
 }
 
 /// What the simulator understood of a text, and what it didn't.

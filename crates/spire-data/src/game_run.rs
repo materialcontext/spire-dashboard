@@ -22,247 +22,10 @@
 
 use serde::Deserialize;
 use spire_core::Catalog;
+
+use crate::run_file::{WCard, WPlayer, WPoint, WRun, WStats, entry, lenient, node_kind};
 use spire_core::ids::*;
 use spire_core::run::{Change, DeckCard, NodeKind, NodeReport, Outcome, RunEvent, RunState, apply};
-
-/// The live run save (`current_run.save`) writes some ids as objects
-/// where a finished `.run` writes `"ACT.HIVE"`: the act, say, with its id
-/// inside, or an id as `{category, entry}`. These read either, so the same
-/// record types serve both files.
-mod lenient {
-    use serde::{Deserialize, Deserializer};
-    use serde_json::Value;
-
-    /// `CATEGORY.ENTRY`, as the game writes ids.
-    fn looks_like_id(s: &str) -> bool {
-        s.split_once('.').is_some_and(|(c, e)| {
-            !c.is_empty() && !e.is_empty() && c.chars().all(|ch| ch.is_ascii_uppercase() || ch == '_')
-        })
-    }
-
-    /// The id a value stands for: a string, a `{category, entry}` pair, an
-    /// `id`-like key, or else the first `CATEGORY.ENTRY` string inside.
-    pub fn id_of(v: &Value) -> Option<String> {
-        match v {
-            Value::String(s) => Some(s.clone()),
-            Value::Number(n) => Some(n.to_string()),
-            Value::Object(m) => pair(m)
-                .or_else(|| ["id", "model_id", "modelid"].iter().find_map(|k| get(m, k).and_then(id_of)))
-                .or_else(|| deep(v)),
-            _ => None,
-        }
-    }
-
-    fn get<'a>(m: &'a serde_json::Map<String, Value>, k: &str) -> Option<&'a Value> {
-        m.iter().find(|(key, _)| key.eq_ignore_ascii_case(k)).map(|(_, v)| v)
-    }
-
-    /// `{"category": "ACT", "entry": "HIVE"}` is `ACT.HIVE`.
-    fn pair(m: &serde_json::Map<String, Value>) -> Option<String> {
-        match (get(m, "category"), get(m, "entry")) {
-            (Some(Value::String(c)), Some(Value::String(e))) => Some(format!("{c}.{e}")),
-            _ => None,
-        }
-    }
-
-    /// The first string inside `v` that starts with `prefix` (`CHARACTER.`).
-    pub fn with_prefix(v: &Value, prefix: &str) -> Option<String> {
-        match v {
-            Value::String(s) if s.starts_with(prefix) => Some(s.clone()),
-            Value::Object(m) => match pair(m) {
-                Some(id) if id.starts_with(prefix) => Some(id),
-                _ => m.values().find_map(|x| with_prefix(x, prefix)),
-            },
-            Value::Array(a) => a.iter().find_map(|x| with_prefix(x, prefix)),
-            _ => None,
-        }
-    }
-
-    fn deep(v: &Value) -> Option<String> {
-        match v {
-            Value::String(s) if looks_like_id(s) => Some(s.clone()),
-            Value::Object(m) => pair(m).or_else(|| m.values().find_map(deep)),
-            Value::Array(a) => a.iter().find_map(deep),
-            _ => None,
-        }
-    }
-
-    pub fn id<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
-        Ok(id_of(&Value::deserialize(d)?).unwrap_or_default())
-    }
-
-    pub fn opt_id<'de, D: Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
-        Ok(id_of(&Value::deserialize(d)?))
-    }
-
-    pub fn ids<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
-        Ok(match Value::deserialize(d)? {
-            Value::Array(a) => a.iter().filter_map(id_of).collect(),
-            other => id_of(&other).into_iter().collect(),
-        })
-    }
-
-    pub fn acts<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<super::WAct>, D::Error> {
-        let Value::Array(items) = Value::deserialize(d)? else { return Ok(Vec::new()) };
-        Ok(items
-            .iter()
-            .filter_map(|a| {
-                let rooms = &a["rooms"];
-                Some(super::WAct {
-                    id: id_of(a)?,
-                    boss: rooms.get("boss_id").and_then(id_of),
-                    second_boss: rooms.get("second_boss_id").and_then(id_of),
-                })
-            })
-            .collect())
-    }
-
-    pub fn opt_i64<'de, D: Deserializer<'de>>(d: D) -> Result<Option<i64>, D::Error> {
-        Ok(match Value::deserialize(d)? {
-            Value::Number(n) => n.as_i64(),
-            Value::String(s) => s.parse().ok(),
-            _ => None,
-        })
-    }
-}
-
-#[derive(Deserialize, Default)]
-#[serde(default)]
-struct WRun {
-    #[serde(deserialize_with = "lenient::acts")]
-    acts: Vec<WAct>,
-    /// The act in progress (live saves).
-    current_act_index: Option<usize>,
-    ascension: u32,
-    #[serde(deserialize_with = "lenient::opt_id")]
-    seed: Option<String>,
-    #[serde(deserialize_with = "lenient::opt_i64")]
-    start_time: Option<i64>,
-    players: Vec<WPlayer>,
-    /// Live saves keep the seed here rather than at the top.
-    rng: WRng,
-    map_point_history: Vec<Vec<WPoint>>,
-    win: Option<bool>,
-    was_abandoned: Option<bool>,
-    #[serde(deserialize_with = "lenient::opt_id")]
-    killed_by_encounter: Option<String>,
-}
-
-#[derive(Deserialize, Default)]
-#[serde(default)]
-struct WPlayer {
-    #[serde(alias = "net_id")]
-    id: Option<serde_json::Value>,
-    #[serde(alias = "character_id", deserialize_with = "lenient::opt_id")]
-    character: Option<String>,
-    /// Live saves only: the player's HP, max HP and gold right now.
-    current_hp: Option<i32>,
-    max_hp: Option<i32>,
-    gold: Option<i32>,
-    deck: Vec<WCard>,
-    relics: Vec<WId>,
-    potions: Vec<WId>,
-    max_potion_slot_count: Option<u32>,
-}
-
-#[derive(Deserialize, Default, Clone)]
-#[serde(default)]
-struct WCard {
-    #[serde(deserialize_with = "lenient::id")]
-    id: String,
-    current_upgrade_level: Option<u32>,
-    enchantment: Option<WId>,
-}
-
-#[derive(Deserialize, Default, Clone)]
-#[serde(default)]
-struct WId {
-    #[serde(deserialize_with = "lenient::id")]
-    id: String,
-}
-
-#[derive(Deserialize, Default)]
-#[serde(default)]
-struct WRng {
-    #[serde(deserialize_with = "lenient::opt_id")]
-    seed: Option<String>,
-}
-
-/// An act: an id in finished runs; in live saves, an object with its
-/// rooms, which name the boss before it's fought.
-#[derive(Default)]
-struct WAct {
-    id: String,
-    boss: Option<String>,
-    second_boss: Option<String>,
-}
-
-#[derive(Deserialize, Default)]
-#[serde(default)]
-struct WPoint {
-    #[serde(deserialize_with = "lenient::opt_id")]
-    map_point_type: Option<String>,
-    player_stats: Vec<WStats>,
-    rooms: Vec<WRoom>,
-}
-
-#[derive(Deserialize, Default)]
-#[serde(default)]
-struct WRoom {
-    #[serde(deserialize_with = "lenient::id")]
-    model_id: String,
-}
-
-#[derive(Deserialize, Default)]
-#[serde(default)]
-struct WChoice {
-    #[serde(deserialize_with = "lenient::id")]
-    choice: String,
-    was_picked: bool,
-}
-
-#[derive(Deserialize, Default)]
-#[serde(default)]
-struct WEnchanted {
-    card: WCard,
-    #[serde(deserialize_with = "lenient::id")]
-    enchantment: String,
-}
-
-#[derive(Deserialize, Default)]
-#[serde(default)]
-struct WTransformed {
-    original_card: WCard,
-    final_card: WCard,
-}
-
-#[derive(Deserialize, Default)]
-#[serde(default)]
-struct WStats {
-    player_id: Option<serde_json::Value>,
-    current_hp: Option<i32>,
-    max_hp: Option<i32>,
-    current_gold: Option<i32>,
-    cards_gained: Vec<WCard>,
-    cards_removed: Vec<WCard>,
-    #[serde(deserialize_with = "lenient::ids")]
-    upgraded_cards: Vec<String>,
-    cards_enchanted: Vec<WEnchanted>,
-    cards_transformed: Vec<WTransformed>,
-    relic_choices: Vec<WChoice>,
-    #[serde(deserialize_with = "lenient::ids")]
-    relics_removed: Vec<String>,
-    potion_choices: Vec<WChoice>,
-    #[serde(deserialize_with = "lenient::ids")]
-    potion_used: Vec<String>,
-    #[serde(deserialize_with = "lenient::ids")]
-    potion_discarded: Vec<String>,
-}
-
-/// `CARD.SNAP` → `SNAP`.
-fn entry(id: &str) -> &str {
-    id.split_once('.').map_or(id, |(_, rest)| rest)
-}
 
 fn none_id(id: &Option<String>) -> Option<&str> {
     id.as_deref().map(entry).filter(|e| !e.is_empty() && *e != "NONE")
@@ -273,19 +36,6 @@ fn deck_card(c: &WCard) -> DeckCard {
         card: CardId::new(entry(&c.id)),
         upgraded: c.current_upgrade_level.unwrap_or(0) > 0,
         enchantment: c.enchantment.as_ref().map(|e| EnchantmentId::new(entry(&e.id))),
-    }
-}
-
-fn kind(t: Option<&str>) -> NodeKind {
-    match t {
-        Some("monster") => NodeKind::Monster,
-        Some("elite") => NodeKind::Elite,
-        Some("boss") => NodeKind::Boss,
-        Some("rest_site") => NodeKind::Rest,
-        Some("shop") => NodeKind::Shop,
-        Some("treasure") => NodeKind::Treasure,
-        Some("ancient") => NodeKind::Ancient,
-        _ => NodeKind::Unknown,
     }
 }
 
@@ -451,7 +201,12 @@ pub fn read(json: &str, catalog: &Catalog, hint: &ActHint) -> Result<GameRun, Un
                 _ => (None, None),
             };
             let changes = stats.map(|s| changes(s, &state, catalog, &mut note)).unwrap_or_default();
-            let report = NodeReport { kind: kind(p.map_point_type.as_deref()), encounter, event, changes };
+            let report = NodeReport {
+                kind: p.map_point_type.as_deref().and_then(node_kind).unwrap_or(NodeKind::Unknown),
+                encounter,
+                event,
+                changes,
+            };
             push(&mut events, &mut state, RunEvent::Node(report));
             floors += 1;
         }
@@ -601,6 +356,7 @@ fn reconcile(state: &RunState, player: &WPlayer) -> Vec<Change> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::run_file::WId;
 
     fn catalog() -> Catalog {
         Catalog::from_layers([crate::bundled_pack()])
@@ -610,7 +366,7 @@ mod tests {
     fn ids_and_rooms_read_as_ours() {
         assert_eq!(entry("CARD.SNAP"), "SNAP");
         assert_eq!(none_id(&Some("NONE.NONE".into())), None);
-        assert_eq!(kind(Some("rest_site")), NodeKind::Rest);
+        assert_eq!(node_kind("rest_site"), Some(NodeKind::Rest));
         let c = WCard {
             id: "CARD.BASH".into(),
             current_upgrade_level: Some(1),
@@ -681,11 +437,11 @@ mod tests {
 
     #[test]
     fn names_the_field_that_did_not_read() {
-        let v = serde_json::json!({"acts": [], "players": "nobody", "ascension": 1});
+        let v = serde_json::json!({"acts": [], "players": [], "ascension": "high"});
         let Err(Unreadable::Shape(why)) = read(&v.to_string(), &catalog(), &ActHint::default()) else {
             panic!("should not read")
         };
-        assert!(why.starts_with("field `players`"), "{why}");
+        assert!(why.starts_with("field `ascension`"), "{why}");
     }
 
     #[test]

@@ -402,11 +402,6 @@ impl Run {
         }
     }
 
-    /// The state with extra, not-yet-committed events applied (for previews).
-    pub fn state_with(&self, pending: &RunEvent) -> RunState {
-        apply(self.state(), pending)
-    }
-
     pub fn push(&mut self, event: RunEvent) {
         self.events.push(event);
     }

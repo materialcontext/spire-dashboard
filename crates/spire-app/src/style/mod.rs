@@ -558,12 +558,18 @@ pub fn gold() -> Color32 {
 
 pub fn role_color(r: Role) -> Color32 {
     adapt(match r {
-        Role::FrontloadDamage => rgb(232, 112, 96),
+        Role::Mitigation => rgb(90, 140, 240),
+        Role::Survival => rgb(80, 200, 188),
+        Role::FastDamage => rgb(232, 112, 96),
         Role::ScalingDamage => rgb(224, 180, 60),
-        Role::FrontloadDefense => rgb(90, 140, 240),
-        Role::ScalingDefense => rgb(80, 200, 188),
-        Role::Consistency => rgb(186, 146, 232),
+        Role::Aoe => rgb(240, 150, 70),
+        Role::Chip => rgb(226, 118, 178),
     })
+}
+
+/// What a card does beside its roles (draw, energy): a tag, not a role.
+pub fn tag_color() -> Color32 {
+    adapt(rgb(186, 146, 232))
 }
 
 /// Accent per character, matching their in-game card colours.

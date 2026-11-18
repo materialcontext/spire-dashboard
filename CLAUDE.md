@@ -9,7 +9,7 @@ Slay the Spire 2 macro dashboard: Rust workspace, egui UI. Read `docs/ARCHITECTU
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo fmt --all --check`
 - `cargo run -p spire-data --bin refresh-bundle`: regenerate `data/catalog.json` from Spire Codex
-- `cargo run -p spire-data --example audit [-- --cards | --sim | --mechanics | --outlook]`: see how the playbook reads the data, simulate every starter deck, list what the simulator reads from every power and relic, or play every starter deck against every elite
+- `cargo run -p spire-data --example audit [-- --cards | --sim | --mechanics | --outlook | --patterns]`: see how the playbook reads the data, simulate every starter deck, list what the simulator reads from every power and relic, play every starter deck against every elite, or print every elite and boss turn by turn
 - `dotnet build mod/SpireDashboardLink/SpireDashboardLink.csproj -c Release`: build the companion mod (.NET 8 SDK; builds without the game)
 
 fmt, clippy and test must pass before pushing (CI runs them, and builds the mod).
@@ -20,6 +20,7 @@ fmt, clippy and test must pass before pushing (CI runs them, and builds the mod)
 - Dependency direction is one-way: `spire-app` → `spire-data` → `spire-core`, and `spire-app` → `spire-platform`.
 - `unsafe` is forbidden everywhere except `spire-platform`, and there only in the native window modules marked `#[allow(unsafe_code)]`, each block with a `// SAFETY:` comment. Check it for both OSes with `cargo clippy -p spire-platform --target x86_64-pc-windows-msvc` and `--target aarch64-apple-darwin`.
 - Game facts go in the catalog (from data sources). Strategy beliefs go in `data/playbook.json`, not in code.
+- Gaps in the source data are fixed in `data/patterns.json`, each entry citing its sources and whether each was read directly; never from memory.
 - Run state changes only through `RunEvent`/`Change` and `run::apply`. Never mutate `RunState` elsewhere.
 - UI views push `Action`s; only `SpireApp::apply` changes state.
 - Never fetch data without an explicit user action. No background or startup updates.

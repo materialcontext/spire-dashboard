@@ -62,8 +62,6 @@ pub struct Accent {
     pub light: [Rgba; 3],
     /// Dark 1–3, darkest last.
     pub dark: [Rgba; 3],
-    /// macOS "Multicolor": the app may use its own accent.
-    pub multicolor: bool,
 }
 
 /// A Windows contrast theme's colours.
@@ -73,7 +71,6 @@ pub struct Contrast {
     pub window_text: Rgba,
     pub highlight: Rgba,
     pub highlight_text: Rgba,
-    pub gray_text: Rgba,
     pub hotlight: Rgba,
     pub button_face: Rgba,
     pub button_text: Rgba,
@@ -84,7 +81,6 @@ pub struct Contrast {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MacColors {
     pub window_background: Rgba,
-    pub control_background: Rgba,
     pub text_background: Rgba,
     pub label: Rgba,
     pub secondary_label: Rgba,
@@ -148,7 +144,7 @@ mod imp {
             [color(UIColorType::AccentDark1), color(UIColorType::AccentDark2), color(UIColorType::AccentDark3)],
         ) {
             (Some(base), [Some(l1), Some(l2), Some(l3)], [Some(d1), Some(d2), Some(d3)]) => {
-                Some(Accent { base, light: [l1, l2, l3], dark: [d1, d2, d3], multicolor: false })
+                Some(Accent { base, light: [l1, l2, l3], dark: [d1, d2, d3] })
             }
             _ => None,
         };
@@ -160,17 +156,15 @@ mod imp {
                 element(UIElementType::WindowText),
                 element(UIElementType::Highlight),
                 element(UIElementType::HighlightText),
-                element(UIElementType::GrayText),
                 element(UIElementType::Hotlight),
                 element(UIElementType::ButtonFace),
                 element(UIElementType::ButtonText),
             ) {
-                (Some(w), Some(wt), Some(h), Some(ht), Some(g), Some(hl), Some(bf), Some(bt)) => Some(Contrast {
+                (Some(w), Some(wt), Some(h), Some(ht), Some(hl), Some(bf), Some(bt)) => Some(Contrast {
                     window: w,
                     window_text: wt,
                     highlight: h,
                     highlight_text: ht,
-                    gray_text: g,
                     hotlight: hl,
                     button_face: bf,
                     button_text: bt,
@@ -188,7 +182,6 @@ mod imp {
 #[cfg(target_os = "macos")]
 mod imp {
     use objc2_app_kit::{NSColor, NSColorSpace, NSWorkspace};
-    use objc2_foundation::{NSUserDefaults, ns_string};
 
     use super::{Accent, Appearance, MacColors, Rgba};
 
@@ -209,7 +202,6 @@ mod imp {
         let colors = (|| {
             Some(MacColors {
                 window_background: rgba(&NSColor::windowBackgroundColor())?,
-                control_background: rgba(&NSColor::controlBackgroundColor())?,
                 text_background: rgba(&NSColor::textBackgroundColor())?,
                 label: rgba(&NSColor::labelColor())?,
                 secondary_label: rgba(&NSColor::secondaryLabelColor())?,
@@ -227,14 +219,8 @@ mod imp {
             let [r, g, b, _] = c.label;
             (r as u32 + g as u32 + b as u32) > 3 * 128
         });
-        // "Multicolor" leaves AppleAccentColor unset.
-        let multicolor = NSUserDefaults::standardUserDefaults().stringForKey(ns_string!("AppleAccentColor")).is_none();
-        let accent = rgba(&NSColor::controlAccentColor()).map(|base| Accent {
-            base,
-            light: [base; 3],
-            dark: [base; 3],
-            multicolor,
-        });
+        let accent =
+            rgba(&NSColor::controlAccentColor()).map(|base| Accent { base, light: [base; 3], dark: [base; 3] });
         Appearance {
             dark,
             accent,

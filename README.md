@@ -13,12 +13,14 @@ the card you took, HP and gold after. Then it re-analyses the run.
 - **Deck, relics and potions**, with each card's role on hover. Relics are
   marked with a role too when what they do is plain from their text (Vajra:
   scaling damage), and relics that add potion slots add them when logged.
-- **Deck breakdown** by card type (attack, skill, power, curse…) and by role:
-  frontloaded damage, scaling damage, frontloaded defense, scaling defense,
-  and consistency/acceleration, against per-act targets. Area damage is
-  tracked too, and so are cards that draw or gain energy (tagged D and E in
-  the deck). Starter Strikes/Defends are shown separately: targets count
-  what you've *added*.
+- **Deck breakdown** by card type (attack, skill, power, curse…) and by role,
+  the problems a deck solves: Mitigation, Survival, Fast Damage, Scaling
+  Damage, AoE and Chip, against per-act targets. Under each role, how well
+  the deck actually does it, simulated: Block on an ordinary and a defending
+  turn, damage over the first turns, how damage grows, how much hits every
+  enemy, hits a turn. Cards that draw or gain energy are tagged (D and E in
+  the deck), and the deck's output on a bad draw is noted. Starter
+  Strikes/Defends are shown separately: targets count what you've *added*.
 - **Act and boss**: the boss's HP, what it does turn by turn, and what it
   demands, each marked covered, thin or missing for your deck.
 - **Enemy turns**: every monster's move order from the game data (fixed

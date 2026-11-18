@@ -6,7 +6,7 @@ use spire_core::run::Outcome;
 use crate::actions::Action;
 use crate::app::{UiState, ViewCtx};
 use crate::style::color::*;
-use crate::widgets::{eyebrow, hairline, primary_button};
+use crate::widgets::{eyebrow, hairline, primary_button, secondary};
 
 pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
     let ctx = ui.ctx().clone();
@@ -21,7 +21,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
             } else {
                 "The run is filed in history with this result."
             };
-            ui.label(RichText::new(note).small().color(text_dim()));
+            ui.label(secondary(note));
             hairline(ui);
             if !dead && primary_button(ui, "Victory", true).clicked() {
                 out.push(Action::EndRun(Outcome::Victory));

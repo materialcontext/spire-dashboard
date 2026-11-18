@@ -56,13 +56,6 @@ pub fn advise(state: &RunState, catalog: &Catalog, playbook: &Playbook, deck: &D
             });
         }
     }
-    if plan.needs_aoe > 0 && deck.aoe < plan.needs_aoe {
-        out.push(Advice {
-            severity: Severity::Watch,
-            text: format!("Area damage: {}/{} for multi-enemy fights.", deck.aoe, plan.needs_aoe),
-        });
-    }
-
     for boss in boss_previews(state, catalog, playbook, deck) {
         for check in boss.checks.iter().filter(|c| c.coverage != Coverage::Covered) {
             out.push(Advice {
@@ -70,7 +63,7 @@ pub fn advise(state: &RunState, catalog: &Catalog, playbook: &Playbook, deck: &D
                 text: format!(
                     "{} wants {} ({}): you have {}.",
                     boss.name,
-                    check.demand.capability.label(),
+                    check.demand.role.label(),
                     check.demand.reason,
                     check.have
                 ),

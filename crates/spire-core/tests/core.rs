@@ -57,6 +57,8 @@ fn monster(id: &str, hp: u32, hit: u32, intent: &str) -> Monster {
         pattern: None,
         death_blow: None,
         death_summons: None,
+        powers: Vec::new(),
+        phases: Vec::new(),
     }
 }
 
@@ -155,11 +157,11 @@ fn playbook() -> Playbook {
     let json = r#"{
       "version": 1,
       "role_rules": [
-        { "role": "frontload_damage", "when": "has_damage" },
+        { "role": "fast_damage", "when": "has_damage" },
         { "role": "frontload_defense", "when": "has_block" },
-        { "role": "scaling_damage", "when": { "applies_power": "Strength" } }
+        { "role": "scaling_damage", "when": { "applies_power": "Strength" } },
+        { "role": "aoe", "when": { "all": ["has_damage", { "target": "all_enemies" }] } }
       ],
-      "aoe": { "all": ["has_damage", { "target": "all_enemies" }] },
       "multi_enemy_names": ["pair"],
       "opportunity_rules": [
         { "opportunity": "card_removal", "any_text": ["remove"] },
@@ -167,8 +169,10 @@ fn playbook() -> Playbook {
       ],
       "acts": [{
         "index": 0, "weak_fights": 1,
-        "targets": [{ "role": "frontload_damage", "min": 2 }, { "role": "scaling_damage", "min": 1 }],
-        "needs_aoe": 1, "big_hit": 25,
+        "targets": [
+          { "role": "fast_damage", "min": 2 }, { "role": "scaling_damage", "min": 1 }, { "role": "aoe", "min": 1 }
+        ],
+        "big_hit": 25,
         "long_fight_hp": { "monster": 100, "elite": 150, "boss": 250 }
       }],
       "needs": { "low_hp": 0.5, "starter_cards": 2, "low_upgrades": 0.25 }
@@ -256,23 +260,25 @@ fn profile_splits_starters_from_added_cards() {
     assert_eq!(p.total, 5);
     assert_eq!(p.of_type(CardType::Attack), 2);
     assert_eq!(p.of_type(CardType::Curse), 1);
-    assert_eq!(p.role(Role::FrontloadDamage), 1, "Strike is a starter, Cleave is added");
-    assert_eq!(p.starter_role(Role::FrontloadDamage), 1);
+    assert_eq!(p.role(Role::FastDamage), 1, "Strike is a starter, Cleave is added");
+    assert_eq!(p.starter_role(Role::FastDamage), 1);
     assert_eq!(p.role(Role::ScalingDamage), 1);
-    assert_eq!(p.aoe, 1);
+    assert_eq!(p.role(Role::Aoe), 1);
+    // "frontload_defense" in the rules reads as Mitigation (old names load).
+    assert_eq!(p.starter_role(Role::Mitigation), 1);
     assert_eq!(p.starter_basics, 2);
     let plan = pb.act(0);
-    assert_eq!(coverage(&p, Capability::Role(Role::FrontloadDamage), plan), Coverage::Thin);
-    assert_eq!(coverage(&p, Capability::Aoe, plan), Coverage::Covered);
-    assert_eq!(coverage(&p, Capability::Role(Role::ScalingDefense), plan), Coverage::Missing);
+    assert_eq!(coverage(&p, Role::FastDamage, plan), Coverage::Thin);
+    assert_eq!(coverage(&p, Role::Aoe, plan), Coverage::Covered);
+    assert_eq!(coverage(&p, Role::Survival, plan), Coverage::Missing);
 }
 
 #[test]
 fn card_role_overrides_replace_rules() {
     let cat = catalog();
     let mut pb = playbook();
-    pb.card_roles.insert(CardId::new("STRIKE"), vec![Role::Consistency]);
-    assert_eq!(pb.roles_of(&cat.cards[&CardId::new("STRIKE")]), vec![Role::Consistency]);
+    pb.card_roles.insert(CardId::new("STRIKE"), vec![Role::Chip]);
+    assert_eq!(pb.roles_of(&cat.cards[&CardId::new("STRIKE")]), vec![Role::Chip]);
 }
 
 #[test]
@@ -295,9 +301,9 @@ fn hallway_threats_follow_weak_then_normal_pool() {
     assert_eq!(later.len(), 1);
     let pair = &later[0];
     assert_eq!(pair.name, "CULTIST_PAIR");
-    let caps: Vec<Capability> = pair.checks.iter().map(|c| c.demand.capability).collect();
-    assert!(caps.contains(&Capability::Aoe), "two enemies want area damage");
-    assert!(caps.contains(&Capability::Role(Role::FrontloadDamage)), "a buffer wants a fast kill");
+    let roles: Vec<Role> = pair.checks.iter().map(|c| c.demand.role).collect();
+    assert!(roles.contains(&Role::Aoe), "two enemies want area damage");
+    assert!(roles.contains(&Role::FastDamage), "a buffer wants a fast kill");
 }
 
 #[test]
@@ -309,11 +315,11 @@ fn elite_and_boss_threats_read_damage_and_hp() {
 
     let elite = &next_threats(&s, NodeKind::Elite, &cat, &pb, &deck)[0];
     assert_eq!(elite.profile.peak_turn, 30);
-    assert!(elite.checks.iter().any(|c| c.demand.capability == Capability::Role(Role::FrontloadDefense)));
+    assert!(elite.checks.iter().any(|c| c.demand.role == Role::Survival), "a big hit wants Survival");
 
     let boss = &next_threats(&s, NodeKind::Boss, &cat, &pb, &deck)[0];
     assert_eq!(boss.name, "BIG_BOSS");
-    assert!(boss.checks.iter().any(|c| c.demand.capability == Capability::Role(Role::ScalingDamage)));
+    assert!(boss.checks.iter().any(|c| c.demand.role == Role::ScalingDamage));
 }
 
 #[test]
@@ -620,10 +626,10 @@ fn role_source_explains_rules_and_overrides() {
         RoleSource::Rules(m) => assert_eq!(m, vec![(Role::ScalingDamage, "applies Strength".to_string())]),
         other => panic!("expected rules, got {other:?}"),
     }
-    pb.card_roles.insert(inflame.id.clone(), vec![Role::Consistency]);
+    pb.card_roles.insert(inflame.id.clone(), vec![Role::Chip]);
     assert!(matches!(pb.role_source(inflame), RoleSource::Playbook(_)));
-    pb.personal_roles.insert(inflame.id.clone(), vec![Role::FrontloadDamage]);
-    assert_eq!(pb.roles_of(inflame), vec![Role::FrontloadDamage], "personal overrides win");
+    pb.personal_roles.insert(inflame.id.clone(), vec![Role::FastDamage]);
+    assert_eq!(pb.roles_of(inflame), vec![Role::FastDamage], "personal overrides win");
     let rule = Condition::All(vec![Condition::CardType(CardType::Power), Condition::TextContains("block".into())]);
     assert_eq!(rule.describe(), "is a Power and mentions \"block\"");
 }

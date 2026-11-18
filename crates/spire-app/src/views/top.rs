@@ -5,7 +5,7 @@ use eframe::egui::{self, RichText, Ui};
 use crate::actions::Action;
 use crate::app::{UiState, ViewCtx};
 use crate::style::{self, color::*};
-use crate::widgets::{hp_bar, slots, stat};
+use crate::widgets::{caption, hp_bar, slots, stat};
 
 pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
     let s = v.state;
@@ -20,7 +20,14 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
     ui.add_space(crate::style::space::s());
     let native = style::current().native;
     let toolbar = native == Some(style::Native::Mac);
-    ui.horizontal(|ui| {
+    // The row is as tall as the vitals (measured last frame): they're drawn
+    // in a child of their own, so the row wouldn't grow for them, and they'd
+    // spill under the panels when nothing else in it is as tall (the system
+    // title bar takes the tall window buttons away).
+    let row = ui.ctx().data(|d| d.get_temp::<f32>(row_height_id())).unwrap_or(0.0).max(ui.spacing().interact_size.y);
+    let width = ui.available_width();
+    ui.allocate_ui_with_layout(egui::vec2(width, row), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+        ui.set_min_height(row);
         let full = ui.max_rect();
         // macOS's unified title bar: the traffic lights sit at the left
         // (in the sidebar, with the System look).
@@ -92,7 +99,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
     }
     match st.messages.last() {
         Some(msg) => {
-            ui.label(RichText::new(msg).small().color(text_faint()));
+            ui.label(caption(msg));
         }
         None => ui.add_space(crate::style::space::xs()),
     }
@@ -202,7 +209,7 @@ fn vitals(ui: &mut Ui, v: &ViewCtx, tight: bool, minimal: bool) {
     ui.add_space(gap);
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 2.0;
-        ui.label(RichText::new("HP").small().color(text_faint()));
+        ui.label(caption("HP"));
         hp_bar(ui, s.hp, s.max_hp, if tight { 110.0 } else { 140.0 });
     });
     ui.add_space(gap);
@@ -220,13 +227,17 @@ fn potions(ui: &mut Ui, v: &ViewCtx) {
     let s = v.state;
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 4.0;
-        let caption = if style::current().caps_headings { "POTIONS" } else { "Potions" };
-        ui.label(RichText::new(caption).small().color(text_faint()));
+        let title = if style::current().caps_headings { "POTIONS" } else { "Potions" };
+        ui.label(caption(title));
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 3.0;
             slots(ui, s.potions.len(), s.potion_slots);
         });
     });
+}
+
+fn row_height_id() -> egui::Id {
+    egui::Id::unique("header-row-height")
 }
 
 /// Draws `vitals` centred on the whole header (`full`), kept clear of the
@@ -258,6 +269,12 @@ fn centred_vitals(ui: &mut Ui, v: &ViewCtx, full: egui::Rect, free: egui::Rect) 
     }
     if (measured - width).abs() > 0.5 {
         ui.ctx().data_mut(|d| d.insert_temp(id, measured));
+        ui.ctx().request_repaint();
+    }
+    let height = child.min_rect().height();
+    let row: f32 = ui.ctx().data(|d| d.get_temp(row_height_id())).unwrap_or(0.0);
+    if (height - row).abs() > 0.5 {
+        ui.ctx().data_mut(|d| d.insert_temp(row_height_id(), height));
         ui.ctx().request_repaint();
     }
 }

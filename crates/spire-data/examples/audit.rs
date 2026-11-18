@@ -8,6 +8,8 @@
 //! `--mechanics` shows what the simulator reads from every power and relic.
 //! `--outlook` plays every starter deck against every elite (the survival
 //! check), next to the community's outcomes.
+//! `--patterns` prints every elite's and boss's expected damage per enemy
+//! turn (12 turns), its HP, and the community's turns and damage taken.
 
 use std::collections::BTreeMap;
 
@@ -17,10 +19,14 @@ use spire_core::playbook::Role;
 
 fn main() {
     let show_cards = std::env::args().any(|a| a == "--cards");
-    let cat = Catalog::from_layers([spire_data::bundled_pack()]);
+    let cat = spire_data::bundled_catalog();
     let pb = spire_data::bundled_playbook();
     if std::env::args().any(|a| a == "--sim") {
         starter_sims(&cat, &pb);
+        return;
+    }
+    if std::env::args().any(|a| a == "--patterns") {
+        patterns(&cat, &pb);
         return;
     }
     if std::env::args().any(|a| a == "--outlook") {
@@ -47,7 +53,7 @@ fn main() {
             *by_color.entry(&c.color).or_default().entry(r).or_default() += 1;
         }
         if show_cards {
-            println!("{:<24} {:?} aoe={} | {}", c.name, pb.roles_of(c), pb.is_aoe(c), c.text.replace('\n', " "));
+            println!("{:<24} {:?} | {}", c.name, pb.roles_of(c), c.text.replace('\n', " "));
         }
     }
     for (color, roles) in &by_color {
@@ -100,6 +106,21 @@ fn starter_sims(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
             sim.stranded_energy,
             sim.resources,
         );
+        let jobs = spire_core::analysis::jobs::measure(&sim);
+        let described: Vec<String> =
+            Role::ALL.iter().map(|r| format!("{}: {}", r.short(), jobs.describe(*r))).collect();
+        println!("{:<12} {} · bad draws {:.0}%", "", described.join(" · "), jobs.floor * 100.0);
+        let p = sim.play;
+        println!(
+            "{:<12} hits {:.1}/turn at {:.1} each · area {:.0}% · cards {:.1} (skills {:.1}) · debuffs {:.1}",
+            "",
+            p.hits,
+            p.per_hit,
+            p.area_share * 100.0,
+            p.cards,
+            p.skills,
+            p.debuffs
+        );
     }
 }
 
@@ -133,6 +154,59 @@ fn starter_outlooks(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
                 o.best.hp_loss,
                 o.best.junk,
                 joins.join(" "),
+            );
+        }
+    }
+}
+
+fn patterns(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
+    use spire_core::analysis::pattern::power_words;
+    use spire_core::analysis::shape::{self, Gap};
+    use spire_core::analysis::threats::Scaling;
+    use spire_core::catalog::RoomType;
+    let mut fights: Vec<_> = cat.encounters.values().filter(|e| e.room != RoomType::Monster).collect();
+    fights.sort_by_key(|e| (e.act.as_ref().and_then(|a| cat.acts.get(a)).map(|a| a.index), e.room, e.name.clone()));
+    for e in fights {
+        let s = shape::of(e, cat, Scaling::default(), &pb.fights);
+        let turns: Vec<String> = s.turns.iter().map(|l| format!("{:.0}", l.expected)).collect();
+        let hp: Vec<String> = s.stages.iter().map(u32::to_string).collect();
+        let community = e.stats.as_ref().map_or(String::new(), |st| {
+            format!("{:.1} turns, {:.0} dmg, {:.0}% die", st.avg_turns, st.avg_damage_taken, st.death_rate() * 100.0)
+        });
+        println!("{} ({:?}) hp {} | {community}", e.name, e.room, hp.join("+"));
+        println!("  {:<11} pressure {:.0} | {}", s.kind.label(), s.pressure, turns.join(" "));
+        let certain: Vec<String> =
+            s.spikes.iter().filter(|x| x.certain).map(|x| format!("t{} {:.0}", x.turn, x.load.expected)).collect();
+        let possible = s.spikes.iter().filter(|x| !x.certain).map(|x| x.load.high).max();
+        if !certain.is_empty() || possible.is_some() {
+            let up_to = possible.map_or(String::new(), |h| format!(" · possible up to {h}"));
+            println!("  spikes {}{up_to}", certain.join(", "));
+        }
+        if !s.windows.is_empty() {
+            println!("  quiet turns {:?}", s.windows);
+        }
+        if (s.ramp - 1.0).abs() > 0.05 {
+            println!("  ramp x{:.2}", s.ramp);
+        }
+        if !s.clocks.is_empty() {
+            println!("  clocks {:?}", s.clocks);
+        }
+        for g in &s.gaps {
+            let text = match g {
+                Gap::NoPattern { monster } => format!("{monster}: no pattern"),
+                Gap::OrderLost { monster, from } => format!("{monster}: order unknown from turn {from}"),
+                Gap::NoHp { monster } => format!("{monster}: no HP"),
+            };
+            println!("  gap: {text}");
+        }
+        for r in &s.rules {
+            let asks: Vec<&str> = r.kind.asks().iter().map(|a| a.label()).collect();
+            let amount = r.power.amount.map_or(String::new(), |a| format!(" {a}"));
+            println!(
+                "  rule: {}{amount} ({:?}){}",
+                power_words(&r.power.power),
+                r.kind,
+                if asks.is_empty() { String::new() } else { format!(" → {}", asks.join(", ")) }
             );
         }
     }

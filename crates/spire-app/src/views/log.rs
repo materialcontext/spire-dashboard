@@ -8,7 +8,7 @@ use crate::actions::Action;
 use crate::app::ViewCtx;
 use crate::draft::NodeDraft;
 use crate::style::color::*;
-use crate::widgets::{combo_pick, eyebrow, hairline, primary_button, search_pick, segmented};
+use crate::widgets::{caption, combo_pick, eyebrow, hairline, primary_button, search_pick, segmented};
 
 fn describe(v: &ViewCtx, c: &Change) -> (String, egui::Color32) {
     let card = |d: &DeckCard| {
@@ -48,13 +48,13 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
     let s = v.state;
     ui.add_space(crate::style::space::s());
     ui.label(crate::widgets::title(format!("Log floor {}", s.floor + 1)));
-    ui.label(RichText::new("After finishing a floor, record what happened.").small().color(text_faint()));
+    ui.label(caption("After finishing a floor, record what happened."));
     hairline(ui);
 
     step(ui, 1, "Room");
     let rooms: Vec<(NodeKind, &str)> = NodeKind::ALL.iter().map(|k| (*k, k.label())).collect();
     segmented(ui, &mut d.kind, &rooms);
-    ui.label(RichText::new("Keys: 1–8 room · Ctrl+Enter commit · Ctrl+Z undo").small().color(text_faint()));
+    ui.label(caption("Keys: 1–8 room · Ctrl+Enter commit · Ctrl+Z undo"));
     let length = spire_core::analysis::floors::act_length(s, v.catalog);
     let position = match length {
         Some(l) => format!("Act floor {} of {l}", s.act_floor + 1),
@@ -181,13 +181,9 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
 
     step(ui, 5, "Review");
     if d.changes.is_empty() {
-        ui.label(
-            RichText::new(
-                "No card, relic or potion changes yet. Right-click a deck card to upgrade, enchant or remove it.",
-            )
-            .small()
-            .color(text_faint()),
-        );
+        ui.label(caption(
+            "No card, relic or potion changes yet. Right-click a deck card to upgrade, enchant or remove it.",
+        ));
     }
     let mut remove = None;
     for (i, c) in d.changes.iter().enumerate() {

@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use spire_core::playbook::Role;
 use spire_core::{Catalog, DataPack, Playbook, Run};
 
 use crate::fetch::Source;
@@ -102,10 +103,11 @@ impl Store {
     /// Builds the catalog from all layers and loads the playbook.
     pub fn load(&self) -> Loaded {
         let mut warnings = Vec::new();
-        let layers: Vec<DataPack> = std::iter::once(bundled_pack())
-            .chain(self.optional_pack(DOWNLOADED, &mut warnings))
-            .chain(self.optional_pack(USER_PACK, &mut warnings))
-            .collect();
+        let mut layers: Vec<DataPack> =
+            std::iter::once(bundled_pack()).chain(self.optional_pack(DOWNLOADED, &mut warnings)).collect();
+        // Sourced fixes for gaps the data above still has.
+        layers.extend(crate::curated::pack(&layers));
+        layers.extend(self.optional_pack(USER_PACK, &mut warnings));
         let playbook = match self.read(PLAYBOOK).map(|r| r.and_then(|s| parse_playbook(&s))) {
             Some(Ok(p)) => p,
             Some(Err(e)) => {
@@ -115,11 +117,23 @@ impl Store {
             None => bundled_playbook(),
         };
         let mut playbook = playbook;
-        match self
-            .read(MY_ROLES)
-            .map(|r| r.and_then(|s| serde_json::from_str(&s).map_err(|e| DataError::Parse(e.to_string()))))
-        {
-            Some(Ok(roles)) => playbook.personal_roles = roles,
+        // Saved by name, so roles from before the role change still load:
+        // old names map onto the new roles, and "consistency" is dropped.
+        let parse = |s: String| {
+            serde_json::from_str::<std::collections::BTreeMap<spire_core::CardId, Vec<String>>>(&s)
+                .map_err(|e| DataError::Parse(e.to_string()))
+        };
+        match self.read(MY_ROLES).map(|r| r.and_then(parse)) {
+            Some(Ok(saved)) => {
+                playbook.personal_roles = saved
+                    .into_iter()
+                    .map(|(card, names)| {
+                        let roles: Vec<Role> = names.iter().filter_map(|n| Role::from_name(n)).collect();
+                        (card, roles)
+                    })
+                    .filter(|(_, roles)| !roles.is_empty())
+                    .collect();
+            }
             Some(Err(e)) => warnings.push(format!("Ignored {MY_ROLES}: {e}")),
             None => {}
         }
@@ -232,14 +246,6 @@ impl Store {
         runs
     }
 
-    /// Forgets the in-progress run (after archiving it).
-    pub fn clear_run(&self) -> Result<(), DataError> {
-        match fs::remove_file(self.path(RUN)) {
-            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.into()),
-            _ => Ok(()),
-        }
-    }
-
     /// A writer thread for this store's run file (see [`RunSaver`]).
     pub fn run_saver(&self) -> RunSaver {
         RunSaver::spawn(self.clone())
@@ -345,7 +351,9 @@ mod tests {
         let loaded = store.load();
         assert!(loaded.warnings.is_empty());
         assert_eq!(loaded.catalog.cards[&card.id].name, "Renamed");
-        assert_eq!(loaded.catalog.layers.len(), 2);
+        // Bundled, the curated fixes, then the user's.
+        let sources: Vec<&str> = loaded.catalog.layers.iter().map(|l| l.source.as_str()).collect();
+        assert_eq!(sources, ["spire-codex", "curated", "user"]);
     }
 
     #[test]
@@ -407,16 +415,35 @@ mod tests {
     }
 
     #[test]
+    fn personal_roles_saved_before_the_role_change_migrate() {
+        let store = temp_store("old-roles");
+        store
+            .write(
+                MY_ROLES,
+                r#"{"STRIKE_IRONCLAD": ["frontload_damage", "consistency"], "DEFEND_IRONCLAD": ["consistency"],
+                   "BASH": ["scaling_defense"]}"#,
+            )
+            .unwrap();
+        let loaded = store.load();
+        assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
+        let roles = &loaded.playbook.personal_roles;
+        use spire_core::playbook::Role;
+        assert_eq!(roles[&spire_core::CardId::new("STRIKE_IRONCLAD")], vec![Role::FastDamage]);
+        assert_eq!(roles[&spire_core::CardId::new("BASH")], vec![Role::Mitigation]);
+        assert!(!roles.contains_key(&spire_core::CardId::new("DEFEND_IRONCLAD")), "consistency alone: no override");
+    }
+
+    #[test]
     fn personal_roles_layer_over_the_playbook() {
         use spire_core::playbook::{Role, RoleSource};
         let store = temp_store("roles");
         let cat = Catalog::from_layers([bundled_pack()]);
         let strike = cat.cards.values().find(|c| c.name == "Strike").unwrap().clone();
         let mut roles = std::collections::BTreeMap::new();
-        roles.insert(strike.id.clone(), vec![Role::Consistency]);
+        roles.insert(strike.id.clone(), vec![Role::Chip]);
         store.save_personal_roles(&roles).unwrap();
         let loaded = store.load();
-        assert_eq!(loaded.playbook.roles_of(&strike), vec![Role::Consistency]);
+        assert_eq!(loaded.playbook.roles_of(&strike), vec![Role::Chip]);
         assert!(matches!(loaded.playbook.role_source(&strike), RoleSource::Personal(_)));
         // The shipped playbook file is untouched.
         assert!(bundled_playbook().personal_roles.is_empty());

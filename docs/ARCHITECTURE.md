@@ -22,7 +22,10 @@ Dependencies point one way. `spire-core` depends only on `serde`.
 `catalog.rs`. Cards, characters, relics, potions, enchantments, monsters,
 encounters, events and acts, in a source-agnostic shape. A `DataPack` is the
 serialized form. A `Catalog` is built by layering packs: **bundled →
-downloaded → user**, where later layers override earlier ones by id.
+downloaded → curated → user**, where later layers override earlier ones by
+id. The curated layer (`data/patterns.json`, `spire-data::curated`) holds
+sourced fixes for gaps in the monster data, applied only while the gap is
+still there.
 
 ### Playbook: strategy knowledge, as data
 
@@ -56,14 +59,29 @@ kit, so old runs replay even after a data update.
 
 `analysis/` holds pure functions over (state, catalog, playbook):
 
-- `deck`: classify cards into roles; `DeckProfile` (by type and by role, with
-  starter cards counted separately); `coverage` against act targets.
+- `deck`: classify cards into roles (Mitigation, Survival, Fast Damage,
+  Scaling Damage, AoE, Chip: the problems a deck solves); `DeckProfile` (by
+  type and by role, with starter cards counted separately); `coverage`
+  against act targets.
+- `jobs`: how well the deck does each role, measured from the simulator's
+  spreads (Block on an ordinary and a defending turn, damage over turns
+  1–3, growth, area share, hits a turn), plus a bad-draw note.
 - `threats`: `ThreatProfile` per encounter (HP, peak turn, buffs, groups),
   the `demands` it places on a deck, `next_threats` for a node type, and the
   most common lineup's turn plans.
 - `pattern`: a monster's turns read from its move state machine (cycles,
   weighted random picks, conditional picks), carrying its Strength and the
-  player's Vulnerable forward while the order is known.
+  player's Vulnerable forward while the order is known. Where the order is
+  lost (a dead end, or a pick whose options go different ways), each later
+  turn lists the moves the pattern can still reach.
+- `shape`: a fight's shape from its lineup's patterns, keeping the spread
+  per turn: pressure (the typical turn that deals damage), spikes (certain
+  or possible), quiet turns, ramp, clocks (summons, blast, statuses, ramp,
+  revives), stages, gaps in the data, and its rules. Thresholds are in the
+  playbook's `fights`.
+- `rules`: fight rules read from monster powers' text (Slippery, Intangible,
+  Hardened Shell, Personal Hive, Slow, Enrage…), each with what it asks of
+  the deck (many hits, few big hits, few Skills…).
 - `survival`: whether a deck is on track against a fight. It plays the fight
   out on the simulator's average damage and block against the lineup's
   expected damage per turn, trying several attack/block splits. Status cards
@@ -144,11 +162,19 @@ The style layer (`style/`) has these parts:
 - **Motion constants:** `FADE` 83 ms and `MOVE` 167 ms.
 - **Per-look flags:** `caps_headings`, `motion`.
 
-`monitor.rs` follows the game for monitored runs. A background thread
-watches the companion mod's link file and the run save it names, and sends
-them on when they change. `SpireApp` then reads the save into events
-(`spire-data::game_run`) and adopts, updates or files the run. The mod
-itself is in `mod/SpireDashboardLink` (C#); see `docs/MONITORED_RUN.md`.
+Monitored runs are split three ways:
+
+- `monitor.rs` does the IO. A background thread watches the companion
+  mod's link file and every profile's run save, and sends them on when
+  they change.
+- `follow.rs` decides, as pure functions. `read` turns what arrived into
+  the game's run (`spire-data::game_run`) or the reason following stopped;
+  `step` says what that does to the app's run: advance, adopt, ask
+  (conflict), wait, or nothing.
+- `SpireApp::sync_game` applies the step.
+
+The mod itself is in `mod/SpireDashboardLink` (C#); see
+`docs/MONITORED_RUN.md`.
 
 `chrome.rs` sets up the window frame. There are three kinds:
 
@@ -226,7 +252,9 @@ Notes:
 ## Community runs: exact lineups
 
 `spire-data/src/codex_runs.rs` reads `/api/exports/runs`, which returns
-gzipped JSON lines with one community-submitted run each. Every fight records
+gzipped JSON lines with one community-submitted run each. Those are the
+game's own run files, so it shares `run_file.rs` with `game_run.rs`: one
+description of the format, for finished runs and the live save alike. Every fight records
 its `monster_ids`, duplicates included.
 
 The aggregation:
