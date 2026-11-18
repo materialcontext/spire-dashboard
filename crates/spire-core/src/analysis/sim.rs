@@ -44,6 +44,22 @@ impl Spread {
     }
 }
 
+/// How a deck plays, averaged per turn: what fight rules ask about (many
+/// hits, few Skills, cards a turn, debuffs) and how much damage hits all.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PlayStats {
+    /// Attack hits landed.
+    pub hits: f32,
+    /// Damage per attack hit (attack damage only).
+    pub per_hit: f32,
+    /// Share of damage that hits every enemy (0–1).
+    pub area_share: f32,
+    pub cards: f32,
+    pub skills: f32,
+    /// Debuffs put on enemies.
+    pub debuffs: f32,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct TurnOutput {
     /// Damage this turn when playing for damage.
@@ -107,6 +123,8 @@ pub struct DeckSim {
     pub stranded_energy: f32,
     /// Per-turn averages of the resources this deck produces (non-zero only).
     pub resources: Vec<(Resource, f32)>,
+    /// How the deck plays, per turn, when playing for damage.
+    pub play: PlayStats,
     /// Relics whose combat effects are simulated, and those that aren't.
     pub relics_simulated: Vec<String>,
     pub relics_not_simulated: Vec<String>,
@@ -128,6 +146,8 @@ struct Effects {
     doom: i32,
     poison: i32,
     vulnerable: i32,
+    /// Weak it puts on an enemy.
+    weak: i32,
     aim: i32,
     stretch: i32,
     vigor: i32,
@@ -150,6 +170,8 @@ struct Play {
     mech: Mechanics,
     /// (orb index, count, once per energy)
     channels: Vec<(usize, i32, bool)>,
+    /// Hits every enemy.
+    all: bool,
     /// Needs and spends an Arrow.
     shoots: bool,
     aim_multiplier: i32,
@@ -195,6 +217,7 @@ fn play_of(card: &Card, upgraded: bool, group: usize, orbs: &[&Orb], all_orbs: &
             doom: either("doom", "doompower"),
             poison: either("poison", "poisonpower"),
             vulnerable: if on_self { 0 } else { either("vulnerable", "vulnerablepower") },
+            weak: if on_self { 0 } else { either("weak", "weakpower") },
             ..Effects::default()
         };
         if card.target != Target::Ally {
@@ -233,6 +256,7 @@ fn play_of(card: &Card, upgraded: bool, group: usize, orbs: &[&Orb], all_orbs: &
             .iter()
             .filter_map(|c| Some((orbs.iter().position(|o| o.id == c.orb)?, i32::from(c.count), c.x)))
             .collect(),
+        all: card.target == Target::AllEnemies,
         shoots: contains_ci(&card.text, "shoot an arrow"),
         aim_multiplier: v("aimmultiplier").max(1),
         dislodges: card.card_type == CardType::Attack
@@ -337,6 +361,16 @@ struct OrbState {
 #[derive(Clone, Copy, Default)]
 struct TurnLog {
     damage: f32,
+    /// Damage that hit every enemy.
+    area: f32,
+    /// Attack hits landed, and the damage they dealt.
+    hits: f32,
+    attack_damage: f32,
+    /// Cards played, and how many were Skills.
+    cards: f32,
+    skills: f32,
+    /// Debuffs put on enemies (each power applied counts once).
+    debuffs: f32,
     block: f32,
     unspent: f32,
     stranded: f32,
@@ -562,7 +596,11 @@ impl<'a> Fight<'a> {
                     self.fire(|w| *w == When::OnGainBlock);
                 }
             }
-            Effect::Damage(n) | Effect::DamageAll(n) => self.log.damage += *n as f32,
+            Effect::Damage(n) => self.log.damage += *n as f32,
+            Effect::DamageAll(n) => {
+                self.log.damage += *n as f32;
+                self.log.area += *n as f32;
+            }
             Effect::Energy(n) => self.energy += n,
             Effect::Draw(n) if self.hand.is_empty() && self.played_this_turn == 0 => self.pending_draw += n,
             Effect::Draw(n) => self.draw_cards(*n),
@@ -603,7 +641,11 @@ impl<'a> Fight<'a> {
 
     fn orb_effect(&mut self, effect: OrbEffect, amount: i32, now: bool) {
         match effect {
-            OrbEffect::Damage | OrbEffect::DamageAll => self.log.damage += amount as f32,
+            OrbEffect::Damage => self.log.damage += amount as f32,
+            OrbEffect::DamageAll => {
+                self.log.damage += amount as f32;
+                self.log.area += amount as f32;
+            }
             OrbEffect::Block => self.log.block += amount as f32,
             OrbEffect::Energy if now => self.energy += amount,
             OrbEffect::Energy => self.next_energy += amount,
@@ -657,7 +699,13 @@ impl<'a> Fight<'a> {
                 self.attacked_this_turn = true;
             }
             let hit = |bonus: i32| ((e.damage + self.strength + extra + bonus).max(0) as f32 * mult).floor();
-            self.log.damage += hit(bonus) * hits as f32;
+            let dealt = hit(bonus) * hits as f32;
+            self.log.damage += dealt;
+            self.log.hits += hits as f32;
+            self.log.attack_damage += dealt;
+            if p.all {
+                self.log.area += dealt;
+            }
         }
         if e.osty > 0 {
             self.log.damage += ((e.osty + self.mods.extra_osty) * times) as f32;
@@ -670,6 +718,8 @@ impl<'a> Fight<'a> {
             self.fire(|w| *w == When::OnGainBlock);
         }
         self.vulnerable += e.vulnerable * times;
+        let debuffs = [e.vulnerable, e.weak, e.poison, e.doom].iter().filter(|n| **n > 0).count();
+        self.log.debuffs += (debuffs as i32 * times) as f32;
         self.energy += e.energy;
         self.stars += e.stars * times;
         self.strength += e.strength;
@@ -797,6 +847,10 @@ impl<'a> Fight<'a> {
         let times = if p.x { self.energy } else { 1 };
         self.energy -= if p.x { self.energy } else { self.cost_of(p).unwrap_or(0) };
         self.stars -= p.star_cost;
+        self.log.cards += 1.0;
+        if p.card_type == CardType::Skill {
+            self.log.skills += 1.0;
+        }
         let echo = (self.mods.echo_each_turn && self.played_this_turn == 0)
             || (self.mods.echo_first_of_combat && !self.played_any);
         for _ in 0..if echo { 2 } else { 1 } {
@@ -1014,6 +1068,9 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
     let mut turnover = 0usize;
     let mut drawn_by = vec![[0u32; ODDS_TURNS]; groups.len()];
     let (mut drawn, mut dead, mut unspent, mut stranded) = (0u32, 0u32, 0.0f32, 0.0f32);
+    // Totals for PlayStats, playing for damage.
+    let (mut hits, mut hit_damage, mut area, mut all_damage) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
+    let (mut cards, mut skills, mut debuffs) = (0.0f32, 0.0f32, 0.0f32);
     let mut resources = [0.0f32; 6];
     for trial in 0..rules.trials {
         let seed = 0x5EED_0000 ^ u64::from(trial);
@@ -1022,6 +1079,13 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
         for (t, (a, d)) in attack.turns.iter().zip(&defend.turns).enumerate() {
             damage[t].push(a.damage);
             block[t].push(d.block);
+            hits += a.hits;
+            hit_damage += a.attack_damage;
+            area += a.area;
+            all_damage += a.damage;
+            cards += a.cards;
+            skills += a.skills;
+            debuffs += a.debuffs;
             drawn += a.drawn;
             dead += a.dead;
             unspent += a.unspent;
@@ -1068,6 +1132,14 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
             .map(|r| (r, resources[r as usize] / turn_count))
             .filter(|(_, v)| *v >= 0.05)
             .collect(),
+        play: PlayStats {
+            hits: hits / turn_count,
+            per_hit: if hits > 0.0 { hit_damage / hits } else { 0.0 },
+            area_share: if all_damage > 0.0 { area / all_damage } else { 0.0 },
+            cards: cards / turn_count,
+            skills: skills / turn_count,
+            debuffs: debuffs / turn_count,
+        },
         relics_simulated: simulated.into_iter().map(|(n, _)| n).collect(),
         relics_not_simulated: not.into_iter().map(|(n, _)| n).collect(),
     }
