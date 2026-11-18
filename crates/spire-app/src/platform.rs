@@ -4,8 +4,8 @@
 //! dark mode come from eframe instead (`Context::system_theme`), which
 //! updates live.
 //!
-//! - Windows: Settings > Accessibility > Text size (`TextScaleFactor`,
-//!   100–225%), and "Animation effects" (`SPI_GETCLIENTAREAANIMATION`).
+//! - Windows: Settings > Accessibility > Text size and "Animation effects",
+//!   from WinRT `UISettings` (`TextScaleFactor`, `AnimationsEnabled`).
 //! - macOS: Reduce Motion (`NSWorkspace.accessibilityDisplayShouldReduceMotion`).
 //!   macOS has no system text size for apps.
 //! - Linux: defaults (no portable setting to read).
@@ -32,35 +32,15 @@ pub fn prefs() -> SystemPrefs {
 
 #[cfg(windows)]
 mod imp {
-    use windows_sys::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
-    use windows_sys::Win32::UI::WindowsAndMessaging::{SPI_GETCLIENTAREAANIMATION, SystemParametersInfoW};
+    use windows::UI::ViewManagement::UISettings;
 
-    fn wide(s: &str) -> Vec<u16> {
-        s.encode_utf16().chain(std::iter::once(0)).collect()
-    }
-
+    /// Through WinRT's `UISettings`, which is safe to call (no `unsafe`,
+    /// which this workspace forbids). Any failure falls back to defaults.
     pub fn prefs() -> super::SystemPrefs {
-        let mut scale: u32 = 100;
-        let mut size = std::mem::size_of::<u32>() as u32;
-        let key = wide("Software\\Microsoft\\Accessibility");
-        let value = wide("TextScaleFactor");
-        // SAFETY: valid null-terminated wide strings and an out-buffer of the declared size.
-        let read = unsafe {
-            RegGetValueW(
-                HKEY_CURRENT_USER,
-                key.as_ptr(),
-                value.as_ptr(),
-                RRF_RT_REG_DWORD,
-                std::ptr::null_mut(),
-                (&mut scale as *mut u32).cast(),
-                &mut size,
-            )
-        };
-        let text_scale = if read == 0 { (scale.clamp(100, 225) as f32) / 100.0 } else { 1.0 };
-        let mut animate: i32 = 1;
-        // SAFETY: SPI_GETCLIENTAREAANIMATION writes a BOOL to the pointer.
-        let ok = unsafe { SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, (&mut animate as *mut i32).cast(), 0) };
-        super::SystemPrefs { text_scale, reduce_motion: ok != 0 && animate == 0 }
+        let Ok(ui) = UISettings::new() else { return super::SystemPrefs::default() };
+        let text_scale = ui.TextScaleFactor().map_or(1.0, |f| f.clamp(1.0, 2.25) as f32);
+        let reduce_motion = ui.AnimationsEnabled().is_ok_and(|on| !on);
+        super::SystemPrefs { text_scale, reduce_motion }
     }
 }
 
