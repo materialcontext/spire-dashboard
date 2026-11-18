@@ -11,6 +11,7 @@
 //!
 //! Updates only happen when the user presses the button: see [`fetch`].
 
+pub mod benchmarks;
 pub mod codex;
 pub mod codex_runs;
 pub mod curated;

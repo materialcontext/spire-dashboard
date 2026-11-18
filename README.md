@@ -21,6 +21,10 @@ the card you took, HP and gold after. Then it re-analyses the run.
   enemy, hits a turn. Cards that draw or gain energy are tagged (D and E in
   the deck), and the deck's output on a bad draw is noted. Starter
   Strikes/Defends are shown separately: targets count what you've *added*.
+  Under that, the deck **next to community decks that cleared this act**
+  (same character, or every character's when there are too few): each
+  job, each tag's share and the share of starter cards, with the shortfalls
+  first and the tags to look for.
 - **Act and boss**: the boss's HP, what it does turn by turn, and what it
   demands, each marked covered, thin or missing for your deck.
 - **Enemy turns**: every monster's move order from the game data (fixed

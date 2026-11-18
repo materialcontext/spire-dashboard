@@ -157,6 +157,11 @@ pub fn add_community_data(pack: &mut DataPack, pages: &[String], notes: &mut Vec
         "Community runs: {} fights read, {} encounters with exact lineups, weak fights per act {:?}.",
         s.fights, s.encounters, s.weak_fights
     ));
+    let decks = crate::benchmarks::add(pack, pages, &crate::bundled_playbook());
+    notes.push(format!(
+        "Community runs: {decks} decks rebuilt at the acts they cleared, {} benchmarks.",
+        pack.benchmarks.len()
+    ));
 }
 
 /// Fetches and converts a full data pack from a source. Blocking: run it off

@@ -69,6 +69,18 @@ pub fn measure(sim: &DeckSim) -> Jobs {
 }
 
 impl Jobs {
+    /// The role's job as one number (what the plain words describe).
+    pub fn value(&self, role: Role) -> f32 {
+        match role {
+            Role::Mitigation => self.mitigation,
+            Role::Survival => self.survival,
+            Role::FastDamage => self.fast_damage,
+            Role::ScalingDamage => self.scaling,
+            Role::Aoe => self.aoe,
+            Role::Chip => self.chip,
+        }
+    }
+
     /// The role's job in plain words, e.g. "9 Block on an ordinary turn".
     pub fn describe(&self, role: Role) -> String {
         match role {

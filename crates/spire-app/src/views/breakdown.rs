@@ -1,6 +1,7 @@
 //! Deck composition: by card type (one stacked bar) and by macro role.
 
 use eframe::egui::{RichText, Sense, Ui, vec2};
+use spire_core::analysis::benchmark::Measure;
 use spire_core::analysis::tags::Tag;
 use spire_core::catalog::CardType;
 use spire_core::playbook::Role;
@@ -78,5 +79,74 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
 
         ui.add_space(crate::style::space::xs());
         ui.label(caption(format!("{} upgraded · {} with no role · {} unknown", d.upgraded, d.no_role, d.unknown)));
+        if let Some(b) = v.combat.and_then(|c| c.bench.as_ref()) {
+            benchmark(ui, v, b);
+        }
     });
+}
+
+/// "Mitigation  5 · cleared decks 6–10", shortfalls first, then the rest
+/// in one line.
+fn benchmark(ui: &mut Ui, v: &ViewCtx, b: &crate::app::Bench) {
+    ui.add_space(crate::style::space::s());
+    let who = if b.all_characters {
+        format!("{} decks of every character (too few of this one's)", b.decks)
+    } else {
+        format!("{} decks", b.decks)
+    };
+    ui.label(RichText::new(format!("Next to decks that cleared Act {}", v.state.act_index + 1)).strong());
+    ui.label(caption(format!("{who} from community runs, at the act's end · the middle half of them shown")));
+    let short: Vec<_> = b.rows.iter().filter(|r| r.short).collect();
+    if short.is_empty() {
+        ui.label(
+            RichText::new("No shortfalls: the deck is in or above the middle half everywhere.")
+                .small()
+                .color(style::color::good()),
+        );
+    }
+    for r in short {
+        ui.horizontal(|ui| {
+            let label = ui.add_sized(
+                [crate::widgets::BAR_LABEL_WIDTH, 16.0],
+                eframe::egui::Label::new(RichText::new(r.measure.label()).small().color(style::color::warn()))
+                    .truncate(),
+            );
+            // Built only while hovered.
+            label.on_hover_ui(|ui| {
+                ui.label(match r.measure {
+                    Measure::Job(role) => {
+                        let tags: Vec<&str> = v.playbook.tags_for(role).iter().map(|t| t.label()).collect();
+                        format!("Look for: {}", tags.join(", "))
+                    }
+                    Measure::Tag(t) => t.describe().to_string(),
+                    Measure::Starter => "Removing Strikes and Defends helps here".to_string(),
+                });
+            });
+            ui.label(
+                RichText::new(format!(
+                    "{} · cleared decks {}–{}",
+                    value(r.measure, r.yours),
+                    value(r.measure, r.range.p25),
+                    value(r.measure, r.range.p75)
+                ))
+                .small(),
+            );
+        });
+    }
+    let fine: Vec<&str> = b.rows.iter().filter(|r| !r.short).map(|r| r.measure.label()).collect();
+    if !fine.is_empty() {
+        ui.label(caption(format!("In range or better: {}", fine.join(", "))));
+    }
+}
+
+/// A measure's value in its unit: shares as percentages, jobs as the job
+/// lines word them.
+fn value(m: Measure, x: f32) -> String {
+    match m {
+        Measure::Job(Role::ScalingDamage) => format!("×{x:.1}"),
+        Measure::Job(Role::Aoe) => format!("{:.0}%", x * 100.0),
+        Measure::Job(Role::Chip) => format!("{x:.1} hits"),
+        Measure::Job(_) => format!("{x:.0}"),
+        _ => format!("{:.0}%", x * 100.0),
+    }
 }
