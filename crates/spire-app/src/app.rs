@@ -111,6 +111,10 @@ pub struct SpireApp {
     combat: Option<Combat>,
     /// When the dashboard generation last changed (`ctx.input().time`).
     changed: (u64, f64),
+    /// The window had focus last frame (to notice it coming back).
+    focused: bool,
+    /// The native menu bar (macOS), when installed.
+    menu: Option<crate::platform::menu::MenuBar>,
     draft: NodeDraft,
     ui: UiState,
     update_rx: Option<Receiver<Result<fetch::Fetched, String>>>,
@@ -150,6 +154,8 @@ impl SpireApp {
             analytics: None,
             combat: None,
             changed: (0, 0.0),
+            focused: true,
+            menu: None,
             ui: UiState {
                 threat_tab: spire_core::run::NodeKind::Monster,
                 show_data: false,
@@ -195,6 +201,22 @@ impl SpireApp {
     /// With "Match system" on, shows the light or dark look the system calls
     /// for. A string compare per frame; reconfigures only on a change.
     fn follow_system_theme(&mut self, ctx: &egui::Context) {
+        // The OS's colours can change while the app is in the background
+        // (accent, contrast theme): read them again when it comes back.
+        let focused = ctx.input(|i| i.viewport().focused.unwrap_or(true));
+        if focused && !self.focused {
+            crate::style::set_appearance(ctx, crate::platform::appearance());
+        }
+        self.focused = focused;
+        // The System look follows light and dark on its own.
+        if crate::style::is_system() {
+            let pinned = std::env::var_os("SPIRE_THEME").is_some();
+            let light = ctx.system_theme().filter(|_| !pinned).map(|t| t == egui::Theme::Light);
+            if light.is_some_and(|l| l != crate::style::current().light) {
+                crate::style::set_look(ctx, crate::style::SYSTEM_LOOK);
+            }
+            return;
+        }
         if !self.settings.match_system {
             return;
         }
@@ -315,6 +337,60 @@ impl SpireApp {
             }
             _ => {}
         }
+    }
+
+    /// Hands over the native menu bar, whose commands the app then applies.
+    pub fn set_menu(&mut self, menu: Option<crate::platform::menu::MenuBar>) {
+        self.menu = menu;
+    }
+
+    /// Commands picked from the native menu bar, as actions; also greys out
+    /// the items that can't run now.
+    fn menu_actions(&mut self, ctx: &egui::Context) -> Vec<Action> {
+        use crate::platform::menu::{Command, Enabled};
+        let Some(menu) = self.menu.as_mut() else { return Vec::new() };
+        let started = self.state.started();
+        let open = started && self.state.outcome.is_none();
+        menu.sync(Enabled {
+            undo: self.run.events.len() > 1,
+            new_run: started,
+            end_run: open,
+            commit: open && !crate::views::log_locked_state(&self.state),
+        });
+        let mut out = Vec::new();
+        for c in menu.poll() {
+            match c {
+                Command::Settings => out.push(Action::ToggleDataWindow),
+                Command::Tab(n) => {
+                    if let Some(t) = crate::views::Tab::ALL.get(n) {
+                        self.ui.tab = *t;
+                    }
+                }
+                // In a text field, the menu's Undo is the field's own:
+                // hand egui the keystroke the menu took.
+                Command::Undo if ctx.text_edit_focused() => ctx.input_mut(|i| {
+                    i.events.push(egui::Event::Key {
+                        key: egui::Key::Z,
+                        physical_key: None,
+                        pressed: true,
+                        repeat: false,
+                        modifiers: egui::Modifiers::COMMAND,
+                    })
+                }),
+                Command::Undo => out.push(Action::Undo),
+                Command::NewRun if self.state.outcome.is_none() => self.ui.confirm_abandon = true,
+                Command::NewRun => out.push(Action::AbandonRun),
+                Command::EndRun => {
+                    self.ui.end_run_open = true;
+                    self.ui.end_encounter = self.state.encounters_seen.last().cloned();
+                }
+                Command::CommitFloor => {
+                    self.ui.tab = crate::views::Tab::Run;
+                    out.push(Action::Record(self.draft.to_node(&self.state)));
+                }
+            }
+        }
+        out
     }
 
     pub fn ui_state(&mut self) -> &mut UiState {
@@ -442,8 +518,9 @@ impl SpireApp {
             }
             Action::SetLook(name) => {
                 crate::style::set_look(ctx, name);
-                // While following the system, a pick fills the light or dark slot.
-                if self.settings.match_system {
+                // While following the system, a pick fills the light or dark
+                // slot; System follows both by itself.
+                if self.settings.match_system && name != crate::style::SYSTEM_LOOK {
                     let light = crate::style::find_look(name).is_some_and(|l| l.light);
                     let slot = if light { &mut self.settings.light_look } else { &mut self.settings.dark_look };
                     *slot = Some(name.to_string());
@@ -499,6 +576,13 @@ impl SpireApp {
                 }
                 Err(e) => self.note(format!("Could not save the edited run: {e}")),
             },
+            Action::ContextMenu(entries) => {
+                let (menu, actions) = crate::actions::MenuEntry::split(&entries);
+                let picked = self.menu.as_mut().and_then(|m| m.context_menu(&menu));
+                if let Some(action) = picked.and_then(|i| actions.get(i).cloned()) {
+                    self.apply(action, ctx);
+                }
+            }
             Action::DeleteHistory(id) => match self.store.delete_archived(&id) {
                 Ok(()) => {
                     self.ui.history.invalidate();
@@ -520,7 +604,8 @@ impl SpireApp {
             self.note(format!("Could not save the run: {e}"));
         }
         let ctx = ui.ctx().clone();
-        let mut actions = self.keys(&ctx);
+        let mut actions = self.menu_actions(&ctx);
+        actions.extend(self.keys(&ctx));
         if self.ui.toast.as_ref().is_some_and(|t| ctx.input(|i| i.time) > t.until) {
             self.ui.toast = None;
         }
@@ -536,7 +621,11 @@ impl SpireApp {
                 analytics: self.analytics.as_ref().filter(|(g, _)| *g == self.generation).map(|(_, a)| a),
                 combat: self.combat.as_ref(),
             };
-            views::root(ui, &view, &mut self.draft, &mut self.ui, &mut actions);
+            let (store, settings) = (&self.store, &self.settings);
+            let mut page = |ui: &mut egui::Ui, st: &mut UiState, out: &mut Vec<Action>| {
+                views::data::contents(ui, &view, store, settings, st, out);
+            };
+            views::root(ui, &view, &mut self.draft, &mut self.ui, &mut actions, &mut page);
             if self.ui.show_data {
                 views::data::window(&ctx, &view, &self.store, &self.settings, &mut self.ui, &mut actions);
             }
@@ -640,7 +729,12 @@ impl SpireApp {
 }
 
 impl eframe::App for SpireApp {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        // Keep Mica's light or dark in step with the look (no-op unless it
+        // changed, and off Windows).
+        if crate::style::material() {
+            crate::chrome::material(crate::chrome::Window::Frame(frame), !crate::style::current().light);
+        }
         self.frame(ui);
     }
 

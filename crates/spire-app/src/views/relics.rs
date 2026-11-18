@@ -190,10 +190,8 @@ pub fn list(ui: &mut Ui, v: &ViewCtx, b: &mut RelicBrowser) {
             let selected = b.selected.as_ref() == Some(id);
             let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), row_h), Sense::click());
             if ui.is_rect_visible(rect) {
+                crate::widgets::row_backplate(ui, &resp, &relic.name, selected);
                 let painter = ui.painter();
-                if selected || resp.hovered() {
-                    painter.rect_filled(rect, 0.0, if selected { surface_hi() } else { surface() });
-                }
                 let stripe_r = egui::Rect::from_min_size(rect.min + vec2(0.0, 3.0), vec2(3.0, row_h - 6.0));
                 painter.rect_filled(stripe_r, 0.0, pool_color(&relic.pool));
                 let font = egui::TextStyle::Body.resolve(ui.style());

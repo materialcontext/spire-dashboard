@@ -399,7 +399,7 @@ fn floor_strip(ui: &mut Ui, v: &ViewCtx, t: &Timeline, floor: &mut usize) {
 fn edit_dialog(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser, out: &mut Vec<Action>) {
     let Some(e) = h.editing.as_mut() else { return };
     let mut close = false;
-    let modal = egui::Modal::new(egui::Id::unique("edit-run")).show(ui.ctx(), |ui| {
+    let modal = crate::widgets::modal("edit-run").show(ui.ctx(), |ui| {
         ui.set_width(460.0);
         ui.label(crate::widgets::title("Edit run"));
         let s = e.draft.summary();
@@ -583,7 +583,7 @@ fn edit_dialog(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser, out: &mut Vec<A
 
 fn primary_save(ui: &mut Ui, enabled: bool) -> egui::Response {
     let label = RichText::new("Save changes").family(style::strong_family());
-    let b = egui::Button::new(label.color(if enabled { bg() } else { text_faint() }))
+    let b = egui::Button::new(label.color(if enabled { on_accent() } else { text_faint() }))
         .fill(if enabled { accent() } else { egui::Color32::TRANSPARENT })
         .min_size(egui::vec2(0.0, 32.0));
     ui.add_enabled(enabled, b)

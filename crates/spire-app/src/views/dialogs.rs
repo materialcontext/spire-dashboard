@@ -11,7 +11,7 @@ use crate::widgets::{eyebrow, hairline, primary_button};
 pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
     let ctx = ui.ctx().clone();
     if st.end_run_open {
-        let modal = egui::Modal::new(egui::Id::unique("end-run")).show(&ctx, |ui| {
+        let modal = crate::widgets::modal("end-run").show(&ctx, |ui| {
             ui.set_width(380.0);
             ui.label(crate::widgets::title("End run"));
             // At 0 HP the run was lost: Died leads and is the default.
@@ -79,7 +79,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
     }
 
     if st.confirm_abandon {
-        let modal = egui::Modal::new(egui::Id::unique("abandon")).show(&ctx, |ui| {
+        let modal = crate::widgets::modal("abandon").show(&ctx, |ui| {
             ui.set_width(360.0);
             ui.label(crate::widgets::title("Start a new run?"));
             ui.label(

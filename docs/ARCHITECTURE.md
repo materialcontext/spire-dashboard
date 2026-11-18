@@ -100,17 +100,59 @@ reads archived runs from disk when its tab opens.
 
 ## App
 
-`platform.rs` reads the person's system preferences once at startup: Windows
-text size and animation settings (`windows-sys`), and macOS Reduce Motion
-(`objc2-app-kit`). Light and dark mode come live from eframe. The style layer
-(`style.rs`) has these parts:
+The `spire-platform` crate is what the OS says and the native pieces the
+app asks of it. It depends on no UI crate, so it can be checked on its
+own for each target. It is the one crate allowed `unsafe`, and only in
+`window::mac`, `window::win` and the context-menu call in `menu`, the
+native plumbing with no safe API. The rest of the workspace forbids it.
+The crate provides:
 
+- **Preferences:** text size, reduced motion.
+- **Appearance:** dark mode, the accent and its shades, contrast-theme
+  colours, transparency, and macOS's semantic colours. It is read at
+  startup and again when the window regains focus.
+- **The system font file.**
+- **The macOS menu bar** and native context menus (`menu.rs`, through
+  `muda`).
+- **Window pieces** (`window.rs`):
+  - Mica on Windows.
+  - The macOS sidebar material (an `NSVisualEffectView` placed in the
+    window's frame view below egui's view).
+  - Snap layouts for the app-drawn Windows title bar: a window subclass
+    reports the app's maximise button as `HTMAXBUTTON`.
+
+Light and dark mode also come live from eframe.
+
+The style layer (`style/`) has these parts:
+
+- **Looks as tokens:** a `LookDef` per look holds the palette and typeface,
+  and also:
+  - corner radii and control metrics
+  - the panel style (outlined, Fluent card, macOS grouped)
+  - the content layer and control fills
+  - shadows, and whether a window material may show
+- **The System look** (`style/system.rs`): built at runtime for the
+  platform (`Native::Windows` or `Native::Mac`) from its design tokens and
+  the OS's appearance. `SPIRE_SYSTEM=windows|macos` previews either look on
+  any OS, and `SPIRE_THEME=light|dark` pins its mode. The look in use is a
+  thread-local cell. Built System looks are cached and reused.
 - **Palette accessors.** `accent` is for interactive or selected items only;
   `identity` is the character colour.
 - **Spacing tokens:** `style::space`.
 - **Motion constants:** `FADE` 83 ms and `MOVE` 167 ms.
 - **Per-look flags:** `caps_headings`, `motion`.
 
+`chrome.rs` sets up the window frame. There are three kinds:
+
+- the app-drawn title bar
+- the system frame
+- macOS's unified title bar with the System look
+
+It also puts Mica behind a transparent window on Windows. The System look
+also decides where navigation and Settings go:
+
+- **Windows:** a top navigation bar, and Settings as a page.
+- **macOS:** a sidebar and toolbar, and a Settings window.
 
 Views are functions: `fn show(ui, &ViewCtx, …, &mut Vec<Action>)`. They read
 immutable data and push `Action`s. `SpireApp::apply` is the only place state

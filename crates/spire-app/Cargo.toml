@@ -12,15 +12,14 @@ path = "src/main.rs"
 [dependencies]
 spire-core.workspace = true
 spire-data.workspace = true
+spire-platform.workspace = true
 eframe.workspace = true
 egui_plot.workspace = true
 
-# System preferences (text size, reduced motion); see src/platform.rs.
-[target.'cfg(windows)'.dependencies]
-windows = { version = "0.62", default-features = false, features = ["std", "UI_ViewManagement"] }
-
-[target.'cfg(target_os = "macos")'.dependencies]
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWorkspace", "NSAccessibility"] }
+# Screen-reader support (AccessKit) on Windows and macOS. Everything that
+# talks to the OS is in spire-platform.
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
+eframe = { workspace = true, features = ["accesskit"] }
 
 [dev-dependencies]
 serde_json.workspace = true

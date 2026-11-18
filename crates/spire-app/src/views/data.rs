@@ -10,6 +10,10 @@ use crate::app::{UiState, ViewCtx};
 use crate::style::color::*;
 use crate::widgets::{eyebrow, hairline, primary_button, segmented};
 
+/// Settings where the platform keeps it: a window of its own on macOS
+/// (opened from the app menu, ⌘,), a page of the main window on Windows'
+/// System look (drawn by `views::root` through [`contents`]), and an
+/// in-app window elsewhere.
 pub fn window(
     ctx: &egui::Context,
     v: &ViewCtx,
@@ -18,35 +22,88 @@ pub fn window(
     st: &mut UiState,
     out: &mut Vec<Action>,
 ) {
-    let mut open = true;
-    egui::Window::new(RichText::new("Settings").family(crate::style::strong_family()))
-        .open(&mut open)
-        .default_width(520.0)
-        .resizable(false)
-        .collapsible(false)
-        .show(ctx, |ui| {
+    match crate::style::current().native {
+        Some(crate::style::Native::Windows) => {}
+        Some(crate::style::Native::Mac) => viewport(ctx, v, store, settings, st, out),
+        None => {
+            let mut open = true;
+            egui::Window::new(RichText::new("Settings").family(crate::style::strong_family()))
+                .open(&mut open)
+                .default_width(520.0)
+                .resizable(false)
+                .collapsible(false)
+                .show(ctx, |ui| contents(ui, v, store, settings, st, out));
+            if !open {
+                out.push(Action::ToggleDataWindow);
+            }
+        }
+    }
+}
+
+/// macOS: a separate Settings window titled for the app, without zoom or
+/// minimise (Apple's Settings window conventions). Closing it, or Esc,
+/// puts it away.
+fn viewport(
+    ctx: &egui::Context,
+    v: &ViewCtx,
+    store: &Store,
+    settings: &Settings,
+    st: &mut UiState,
+    out: &mut Vec<Action>,
+) {
+    let builder = egui::ViewportBuilder::default()
+        .with_title("Spire Dashboard Settings")
+        .with_inner_size([560.0, 640.0])
+        .with_resizable(false)
+        .with_minimize_button(false)
+        .with_maximize_button(false);
+    ctx.show_viewport_immediate(egui::ViewportId::from_hash_of("settings"), builder, |ui, _class| {
+        let frame = egui::Frame::new().fill(bg()).inner_margin(egui::Margin::symmetric(20, 16));
+        egui::CentralPanel::default().frame(frame).show(ui, |ui| {
+            egui::ScrollArea::vertical().show(ui, |ui| contents(ui, v, store, settings, st, out));
+        });
+        let closing = ui.ctx().input(|i| i.viewport().close_requested() || i.key_pressed(egui::Key::Escape));
+        if closing {
+            out.push(Action::ToggleDataWindow);
+        }
+    });
+}
+
+/// The Settings contents, wherever they're shown.
+pub fn contents(
+    ui: &mut egui::Ui,
+    v: &ViewCtx,
+    store: &Store,
+    settings: &Settings,
+    st: &mut UiState,
+    out: &mut Vec<Action>,
+) {
+    {
+        {
             ui.label(eyebrow("Appearance"));
             hairline(ui);
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
                 let current = crate::style::current().name;
-                for look in crate::style::LOOKS {
-                    let selected = look.name == current;
-                    let label = RichText::new(look.label).color(if selected { bg() } else { text() });
+                for (name, label, blurb) in crate::style::looks() {
+                    let selected = name == current;
+                    let label = RichText::new(label).color(if selected { on_accent() } else { text() });
                     let button = egui::Button::new(label)
                         .fill(if selected { accent() } else { egui::Color32::TRANSPARENT })
                         .stroke(egui::Stroke::new(1.0, if selected { accent() } else { border() }));
-                    if ui.add(button).on_hover_text(look.blurb).clicked() && !selected {
-                        out.push(Action::SetLook(look.name));
+                    if ui.add(button).on_hover_text(blurb).clicked() && !selected {
+                        out.push(Action::SetLook(name));
                     }
                 }
             });
             ui.label(RichText::new(crate::style::current().blurb).small().color(text_dim()));
+            // The System look follows light and dark itself.
+            let system = crate::style::is_system();
             let mut follow = settings.match_system;
-            if ui.checkbox(&mut follow, "Match system light/dark").changed() {
+            if !system && ui.checkbox(&mut follow, "Match system light/dark").changed() {
                 out.push(Action::SetMatchSystem(follow));
             }
-            if settings.match_system {
+            if settings.match_system && !system {
                 let name = |n: Option<&str>, d: &str| {
                     let n = n.unwrap_or(d);
                     crate::style::find_look(n).map_or(n.to_string(), |l| l.label.to_string())
@@ -73,15 +130,27 @@ pub fn window(
                 .small()
                 .color(text_faint()),
             );
-            let mut system = !crate::chrome::custom();
-            if ui.checkbox(&mut system, "Use the system title bar").changed() {
-                out.push(Action::SetSystemTitleBar(system));
-            }
-            ui.label(
-                RichText::new("Off: the header doubles as the title bar, so desktop themes can't restyle or hide it.")
+            // macOS keeps its own title bar with the System look.
+            if !crate::chrome::unified() {
+                let mut system = !crate::chrome::custom();
+                if ui.checkbox(&mut system, "Use the system title bar").changed() {
+                    out.push(Action::SetSystemTitleBar(system));
+                }
+                ui.label(
+                    RichText::new(
+                        "Off: the header doubles as the title bar, so desktop themes can't restyle or hide it.",
+                    )
                     .small()
                     .color(text_faint()),
-            );
+                );
+            }
+            if crate::style::is_system() && cfg!(windows) {
+                ui.label(
+                    RichText::new("Mica shows behind the window with the system title bar, from the next start.")
+                        .small()
+                        .color(text_faint()),
+                );
+            }
             ui.add_space(crate::style::space::s());
 
             ui.label(eyebrow("Game data"));
@@ -170,8 +239,6 @@ pub fn window(
                     ui.label(RichText::new(m).small().color(text_dim()));
                 }
             }
-        });
-    if !open {
-        out.push(Action::ToggleDataWindow);
+        }
     }
 }

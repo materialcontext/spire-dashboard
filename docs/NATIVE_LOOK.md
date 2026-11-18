@@ -1,25 +1,56 @@
 # Plan: native looks for Windows 11 and macOS
 
-Status: research and plan only. Nothing here is built yet.
+Status: built, except where noted under "What's built" below. None of it
+has been tried on a real Windows or Mac yet (P0); the checks so far are CI
+builds for both and screenshots of the System looks previewed on Linux.
 
-The goal is a look on each platform that a regular Windows or Mac user can't
-tell apart from a first-party app: the same fonts, colors, materials, shapes,
-sizes, motion, window behavior, menus, dialogs, shortcuts and accessibility
-behavior. The current looks (Spirebound, Forge, Neon Spire, Grimoire,
-Terminal) stay as themes. On each OS, a new **System** look becomes the
-default.
+## What's built
 
-The plan covers:
+| Area | Windows 11 | macOS |
+|---|---|---|
+| Default look | **System** (D1) | **System** (D1) |
+| Colours | Fluent tokens (§4.3) over the OS accent and its shades; contrast themes take every colour from the theme | `NSColor` semantic colours for the current appearance, and the OS accent |
+| Light/dark | Follows the OS live; accent, contrast and transparency are read again when the window regains focus | Same |
+| Font | Segoe UI Variable from `C:\Windows\Fonts` (Text optical size, 400/600), Segoe UI on Windows 10, Inter if neither | SF Pro from `/System/Library/Fonts/SFNS.ttf` (400/590), Inter if missing |
+| Type ramp | Subtitle 20, Body 14, Caption 12 | Title 3 15, Body 13, Subheadline 11 |
+| Shapes | 4px controls, 8px overlays and cards; 32px controls | 6px controls, 10px overlays; 24px controls |
+| Panels | Fluent cards (translucent fill, hairline) on the content layer | Grouped content: soft fill, no outline (outlined with Increase Contrast) |
+| Window | Snap layouts on the maximise button. The app-drawn title bar stays the default (Mica For Everyone made the native one transparent here), with Fluent caption buttons and Mica's solid fallback colour. With **Use the system title bar** on, Mica shows behind a transparent window (`window-vibrancy`) when transparency effects are on and no contrast theme is | Real title bar, transparent over full-size content; traffic lights in place; the sidebar material behind the sidebar |
+| Navigation | NavigationView top mode: text items, 16×3 accent pill | Sidebar with the six tabs; the toolbar row holds the vitals and run buttons |
+| Settings | A page of the window (top-right navigation item) | A separate Settings window, opened with ⌘, from the app menu |
+| Menus | — | Native menu bar (`muda`): app menu, Edit, View (⌘1–6), Run, Window; native context menus |
+| Dialogs | Smoke behind (#4D000000), 8px corners, shadow | Lighter dim, 10px corners; Cancel leads, the action trails |
+| Lists | Rounded hover backplate, accent pill on the selected row | Rounded selection, no hover |
+| Screen readers | AccessKit on; custom rows, tabs and nav items report name and selection | Same |
 
-- what egui can and can't match
-- the platform specifications, with sources
-- how each part of this app maps onto each platform
-- the architecture and the phases
-- decisions to make before starting
-- facts that still need checking on real machines
+Built with `unsafe`, in the `spire-platform` crate only (`window.rs`,
+`menu.rs`), each block with its safety argument:
 
-Sources are listed at the end. Facts marked **(verify)** are secondhand or
-unconfirmed. Each needs a measurement on a real machine before it's coded.
+- **macOS sidebar material.** An `NSVisualEffectView` (Sidebar material,
+  following the window's active state) is placed in the window's frame
+  view, *below* egui's content view; a subview of the content view would be
+  drawn over egui's layer. The window is transparent, the sidebar is left
+  clear, and the content and toolbar are painted with the window
+  background. Off with Reduce Transparency.
+- **Windows snap layouts** on the app-drawn title bar. A window subclass
+  answers `WM_NCHITTEST` with `HTMAXBUTTON` over the app's maximise button,
+  so Windows 11 shows the snap layout flyout there. It also maximises or
+  restores on click and reports hover and press back for drawing, since
+  Windows routes the pointer there instead of to the app.
+- **Native context menus** on macOS (the deck card menu), through `muda`.
+
+Not built, and why:
+
+- **Content in the native Windows title bar.** The app-drawn title bar
+  already holds the tabs and vitals. With snap layouts it has what the
+  native frame offered, without the transparent-title-bar problem that
+  Mica For Everyone caused here.
+- **Mica behind the app-drawn title bar.** Mica behind an undecorated
+  window isn't documented, and if it failed the window would show the
+  desktop through it. Mica comes with the system title bar.
+- **Liquid Glass**, per §1.
+- **Per-size tracking and SF's optical size.** Segoe UI Variable gets its
+  Text optical size; SF Pro uses its default.
 
 ---
 

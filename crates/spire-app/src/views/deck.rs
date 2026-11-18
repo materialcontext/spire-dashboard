@@ -109,7 +109,14 @@ fn card_row(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
             out.push(Action::Open(crate::actions::Link::Card(row.card.card.clone())));
         }
         // Right-click: everything you can do to this card.
-        r.context_menu(|ui| card_menu(ui, v, row, out));
+        // macOS's System look: a native menu; elsewhere egui's.
+        if crate::platform::menu::native_context_menus() && style::current().native == Some(style::Native::Mac) {
+            if r.secondary_clicked() {
+                out.push(Action::ContextMenu(card_menu_entries(v, row)));
+            }
+        } else {
+            r.context_menu(|ui| card_menu(ui, v, row, out));
+        }
         if let Some(e) = &row.card.enchantment {
             ui.label(RichText::new(v.catalog.enchantment_name(e)).small().color(info()));
         }
@@ -161,6 +168,44 @@ fn role_marks(ui: &mut Ui, roles: &[Role]) {
         ui.painter().rect_filled(rect, 0.0, style::role_color(*r));
         resp.on_hover_text(r.label());
     }
+}
+
+/// The card menu as native entries (title case, as macOS menus are).
+fn card_menu_entries(v: &ViewCtx, row: &DeckRow) -> Vec<crate::actions::MenuEntry> {
+    use crate::actions::MenuEntry;
+    let mut out = Vec::new();
+    if !row.card.upgraded {
+        out.push(MenuEntry::Item("Upgrade".into(), Action::Draft(Change::UpgradeCard(row.card.clone()))));
+    }
+    match (&row.card.enchantment, v.catalog.cards.get(&row.card.card)) {
+        (Some(e), _) => out.push(MenuEntry::Note(format!("Enchanted: {}", v.catalog.enchantment_name(e)))),
+        (None, Some(card)) => {
+            let fits: Vec<MenuEntry> = v
+                .catalog
+                .enchantments
+                .values()
+                .filter(|e| e.fits(card))
+                .map(|e| {
+                    let change = Change::Enchant { card: row.card.clone(), enchantment: e.id.clone() };
+                    MenuEntry::Item(e.name.clone(), Action::Draft(change))
+                })
+                .collect();
+            if fits.is_empty() {
+                out.push(MenuEntry::Note("No Enchantment Fits".into()));
+            } else {
+                out.push(MenuEntry::Submenu("Enchant".into(), fits));
+            }
+        }
+        (None, None) => {}
+    }
+    if row.eternal {
+        out.push(MenuEntry::Note("Eternal: Can't Be Removed".into()));
+    } else {
+        out.push(MenuEntry::Item("Remove from Deck".into(), Action::Draft(Change::RemoveCard(row.card.clone()))));
+    }
+    out.push(MenuEntry::Separator);
+    out.push(MenuEntry::Item("Open in Cards".into(), Action::Open(crate::actions::Link::Card(row.card.card.clone()))));
+    out
 }
 
 fn card_menu(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
