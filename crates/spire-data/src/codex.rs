@@ -209,6 +209,8 @@ struct WDamage {
 #[derive(Deserialize)]
 struct WMove {
     #[serde(default, deserialize_with = "null_as_default")]
+    id: String,
+    #[serde(default, deserialize_with = "null_as_default")]
     name: String,
     #[serde(default, deserialize_with = "null_as_default")]
     intent: String,
@@ -216,6 +218,54 @@ struct WMove {
     damage: Option<WDamage>,
     #[serde(default)]
     block: Option<u32>,
+    #[serde(default)]
+    powers: Option<Vec<WMovePower>>,
+}
+
+#[derive(Deserialize)]
+struct WMovePower {
+    power_id: String,
+    #[serde(default)]
+    target: Option<String>,
+    #[serde(default)]
+    amount: Option<i32>,
+}
+
+/// `attack_pattern`: the monster's move state machine.
+#[derive(Deserialize)]
+struct WPattern {
+    #[serde(default)]
+    initial_move: Option<String>,
+    #[serde(default)]
+    states: Option<Vec<WState>>,
+    #[serde(default)]
+    description: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct WState {
+    id: String,
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(default)]
+    move_id: Option<String>,
+    #[serde(default)]
+    next: Option<String>,
+    #[serde(default)]
+    branches: Option<Vec<WBranch>>,
+}
+
+#[derive(Deserialize)]
+struct WBranch {
+    move_id: String,
+    #[serde(default)]
+    weight: Option<f32>,
+    #[serde(default)]
+    repeat: Option<String>,
+    #[serde(default)]
+    max_times: Option<u32>,
+    #[serde(default)]
+    condition: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -241,6 +291,8 @@ struct WMonster {
     moves: Option<Vec<WMove>>,
     #[serde(default)]
     innate_powers: Option<Vec<WInnate>>,
+    #[serde(default)]
+    attack_pattern: Option<WPattern>,
 }
 
 #[derive(Deserialize)]
@@ -529,12 +581,27 @@ fn map_monster(m: WMonster) -> Monster {
             .unwrap_or_default()
             .into_iter()
             .map(|mv| MonsterMove {
+                id: mv.id,
                 name: mv.name,
                 intent: mv.intent,
                 damage: mv.damage.as_ref().and_then(|d| d.normal),
                 hits: mv.damage.as_ref().and_then(|d| d.hit_count),
                 block: mv.block,
                 damage_asc: mv.damage.as_ref().and_then(|d| d.ascension),
+                powers: mv
+                    .powers
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|p| MovePower {
+                        power: p.power_id,
+                        target: match p.target.as_deref() {
+                            Some("self") => PowerTarget::Monster,
+                            Some("player") => PowerTarget::Player,
+                            _ => PowerTarget::Other,
+                        },
+                        amount: p.amount.unwrap_or(0),
+                    })
+                    .collect(),
             })
             .collect(),
         innate_powers: m
@@ -545,7 +612,75 @@ fn map_monster(m: WMonster) -> Monster {
             .collect(),
         hp_min_asc: m.min_hp_ascension,
         hp_max_asc: m.max_hp_ascension,
+        pattern: m.attack_pattern.map(map_pattern),
     }
+}
+
+/// The move state machine. Duplicate state ids keep their last entry with
+/// branches (the source repeats a random state, once empty).
+fn map_pattern(p: WPattern) -> AttackPattern {
+    let mut states: Vec<PatternState> = Vec::new();
+    for s in p.states.unwrap_or_default() {
+        let kind = match s.kind.as_str() {
+            "move" => StateKind::Move,
+            "random" => StateKind::Random,
+            _ => StateKind::Conditional,
+        };
+        let branches: Vec<PatternBranch> = s
+            .branches
+            .unwrap_or_default()
+            .into_iter()
+            .map(|b| PatternBranch {
+                move_id: b.move_id,
+                weight: b.weight,
+                no_repeat: b.repeat.as_deref() == Some("CannotRepeat"),
+                max_times: b.max_times,
+                condition: b.condition.as_deref().map(condition_words),
+            })
+            .collect();
+        let state = PatternState { id: s.id, kind, move_id: s.move_id, next: s.next, branches };
+        match states.iter_mut().find(|x| x.id == state.id) {
+            Some(old) if old.branches.is_empty() => *old = state,
+            Some(_) => {}
+            None => states.push(state),
+        }
+    }
+    AttackPattern { initial: p.initial_move, states, description: p.description.unwrap_or_default() }
+}
+
+/// A game condition in plain words: `_curseOfKnowledgeCounter < 3` reads
+/// "curse of knowledge counter < 3", `!HasAmalgamDied` "not has amalgam died".
+pub fn condition_words(c: &str) -> String {
+    let c = c.trim().trim_start_matches("base.").trim_start_matches("Creature.");
+    let (neg, c) = match c.strip_prefix('!') {
+        Some(rest) => (true, rest),
+        None => (false, c),
+    };
+    let mut out = String::new();
+    let mut prev_lower = false;
+    for ch in c.chars() {
+        match ch {
+            '_' | '.' => {
+                if !out.ends_with(' ') && !out.is_empty() {
+                    out.push(' ');
+                }
+                prev_lower = false;
+            }
+            c if c.is_ascii_uppercase() => {
+                if prev_lower {
+                    out.push(' ');
+                }
+                out.push(c.to_ascii_lowercase());
+                prev_lower = false;
+            }
+            c => {
+                out.push(c);
+                prev_lower = c.is_ascii_lowercase() || c.is_ascii_digit();
+            }
+        }
+    }
+    let out = out.split_whitespace().collect::<Vec<_>>().join(" ");
+    if neg { format!("not {out}") } else { out }
 }
 
 #[derive(Deserialize)]
@@ -900,5 +1035,25 @@ mod tests {
         assert!(!card.vars.contains_key("odd"), "non-numeric vars are dropped");
         assert_eq!(card.star_cost, Some(2));
         assert_eq!((card.value("damage", false), card.value("damage", true)), (8, 12));
+    }
+
+    #[test]
+    fn reads_conditions_as_words() {
+        assert_eq!(condition_words("_curseOfKnowledgeCounter < 3"), "curse of knowledge counter < 3");
+        assert_eq!(condition_words("!HasAmalgamDied"), "not has amalgam died");
+        assert_eq!(condition_words("base.Creature.SlotName == \"wriggler1\""), "slot name == \"wriggler1\"");
+    }
+
+    #[test]
+    fn maps_patterns_keeping_the_random_state_with_branches() {
+        let json = r#"{"initial_move":"A","description":"A then random","states":[
+            {"id":"A_MOVE","type":"move","move_id":"A","next":"RAND"},
+            {"id":"RAND","type":"random","branches":[]},
+            {"id":"RAND","type":"random","branches":[{"move_id":"A","weight":1.0,"repeat":"CannotRepeat"}]}]}"#;
+        let p = map_pattern(serde_json::from_str(json).unwrap());
+        assert_eq!(p.initial.as_deref(), Some("A"));
+        assert_eq!(p.states.len(), 2);
+        assert_eq!(p.states[1].kind, StateKind::Random);
+        assert!(p.states[1].branches[0].no_repeat);
     }
 }

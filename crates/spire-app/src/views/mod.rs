@@ -20,6 +20,7 @@ pub mod relics;
 pub mod start;
 pub mod threats;
 pub mod top;
+pub mod turns;
 
 use eframe::egui::{self, Ui};
 
@@ -153,7 +154,7 @@ pub fn root(ui: &mut Ui, v: &ViewCtx, draft: &mut NodeDraft, st: &mut UiState, o
             let g = v.generation;
             if ui.available_width() > 680.0 {
                 ui.columns(2, |cols| {
-                    culled(&mut cols[0], ("act", g), |ui| act::show(ui, v, out));
+                    culled(&mut cols[0], ("act", g, v.combat.is_some()), |ui| act::show(ui, v, out));
                     cols[0].add_space(GAP);
                     culled(&mut cols[0], ("breakdown", g), |ui| breakdown::show(ui, v));
                     culled(&mut cols[1], ("threats", g, st.threat_tab), |ui| threats::show(ui, v, st, out));

@@ -49,10 +49,12 @@ fn monster(id: &str, hp: u32, hit: u32, intent: &str) -> Monster {
             hits: None,
             block: None,
             damage_asc: Some(hit + 5),
+            ..Default::default()
         }],
         innate_powers: vec![],
         hp_min_asc: Some(hp + 10),
         hp_max_asc: None,
+        pattern: None,
     }
 }
 
@@ -304,7 +306,7 @@ fn elite_and_boss_threats_read_damage_and_hp() {
     let deck = deck_profile(&s.deck, &cat, &pb);
 
     let elite = &next_threats(&s, NodeKind::Elite, &cat, &pb, &deck)[0];
-    assert_eq!(elite.profile.worst_turn, 30);
+    assert_eq!(elite.profile.peak_turn, 30);
     assert!(elite.checks.iter().any(|c| c.demand.capability == Capability::Role(Role::FrontloadDefense)));
 
     let boss = &next_threats(&s, NodeKind::Boss, &cat, &pb, &deck)[0];
@@ -383,7 +385,7 @@ fn known_lineups_count_every_monster() {
     let t = threat_profile(&enc, &cat, &pb, Default::default());
     assert_eq!(t.enemies, 3);
     assert_eq!((t.hp_min, t.hp_max), (60, 70), "3 slimes = 60, slime + cultist = 70");
-    assert_eq!(t.worst_turn, 15);
+    assert_eq!(t.peak_turn, 15);
     assert!(t.summons);
     assert_eq!(cat.lineup_label(&enc.lineups[0]), "3× SLIME");
 }
@@ -438,9 +440,9 @@ fn high_ascension_uses_ascension_stats() {
     let base = threat_profile(enc, &cat, &pb, Scaling::default());
     let tough = threat_profile(enc, &cat, &pb, Scaling { tough: true, deadly: false });
     let deadly = threat_profile(enc, &cat, &pb, Scaling { tough: true, deadly: true });
-    assert_eq!((base.hp_min, base.worst_turn), (120, 30));
-    assert_eq!((tough.hp_min, tough.worst_turn), (130, 30), "A8: tougher enemies");
-    assert_eq!(deadly.worst_turn, 35, "A9: deadlier enemies");
+    assert_eq!((base.hp_min, base.peak_turn), (120, 30));
+    assert_eq!((tough.hp_min, tough.peak_turn), (130, 30), "A8: tougher enemies");
+    assert_eq!(deadly.peak_turn, 35, "A9: deadlier enemies");
 }
 
 #[test]

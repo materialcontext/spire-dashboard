@@ -1,7 +1,9 @@
 //! Enemy catalog: every encounter, its lineups, and each monster's moves.
 
 use eframe::egui::{self, RichText, Sense, Ui, vec2};
-use spire_core::analysis::threats::{Scaling, preview};
+use spire_core::analysis::pattern;
+use spire_core::analysis::survival;
+use spire_core::analysis::threats::{MonsterPlan, Scaling, preview};
 use spire_core::catalog::{Encounter, RoomType};
 use spire_core::ids::{ActId, EncounterId, MonsterId};
 use spire_core::playbook::contains_ci;
@@ -171,8 +173,13 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &EnemyBrowser) {
     ui.add_space(crate::style::space::s());
     let p = preview(enc, v.catalog, v.playbook, act.map_or(0, |a| a.index), scaling, &v.dash.deck, false);
     let title = if v.state.started() { "Against your deck" } else { "Threat" };
+    // The survival check plays out this run, so only at its ascension.
+    let outlook = v
+        .combat
+        .filter(|_| v.state.started() && asc == v.state.ascension && enc.room != RoomType::Monster)
+        .and_then(|c| survival::for_encounter(&c.sim, enc, v.catalog, v.state));
     panel(ui, title, Some(&format!("A{asc}")), |ui| {
-        crate::views::threats::preview_body(ui, &p);
+        crate::views::threats::preview_body(ui, &p, outlook.as_ref());
     });
 
     // Every monster that can take part: lineup members, then spawns.
@@ -182,6 +189,8 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &EnemyBrowser) {
             monsters.push(m);
         }
     }
+    // Deaths map onto one monster's turns only when it fights alone.
+    let single = monsters.len() == 1;
     ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Monsters"));
     hairline(ui);
@@ -228,5 +237,18 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &EnemyBrowser) {
                 ui.end_row();
             }
         });
+        if m.pattern.is_some() {
+            ui.add_space(crate::style::space::xs());
+            ui.label(RichText::new("Turn by turn").small().strong().color(text_dim()));
+            let vulnerable = v.catalog.rules.vulnerable_pct.unwrap_or(50);
+            let mp = MonsterPlan {
+                monster: id.clone(),
+                name: m.name.clone(),
+                count: 1,
+                plan: pattern::plan(m, scaling.deadly, vulnerable, pattern::HORIZON),
+            };
+            let stats = enc.stats.as_ref().filter(|_| enc.room != RoomType::Monster);
+            crate::views::turns::table(ui, &mp, stats, single);
+        }
     }
 }
