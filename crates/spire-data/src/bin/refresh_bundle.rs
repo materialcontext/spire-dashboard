@@ -109,6 +109,9 @@ fn run() -> Result<(), String> {
     for n in notes {
         eprintln!("{n}");
     }
+    for n in spire_data::curated::report(&pack) {
+        eprintln!("data/patterns.json: {n}");
+    }
     eprintln!("wrote {}: {}", args.out.display(), pack.summary());
     Ok(())
 }

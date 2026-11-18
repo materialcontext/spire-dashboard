@@ -5,12 +5,15 @@
 //!
 //! 1. **bundled**: `data/catalog.json`, compiled into the binary.
 //! 2. **downloaded**: the last successful update, saved in the data dir.
-//! 3. **user**: optional `user.json` in the data dir for hand-made fixes.
+//! 3. **curated**: `data/patterns.json`, sourced fixes for gaps in the
+//!    monster data, applied only while the gap remains (see [`curated`]).
+//! 4. **user**: optional `user.json` in the data dir for hand-made fixes.
 //!
 //! Updates only happen when the user presses the button: see [`fetch`].
 
 pub mod codex;
 pub mod codex_runs;
+pub mod curated;
 pub mod fetch;
 pub mod game_link;
 pub mod game_run;
@@ -69,6 +72,14 @@ pub fn parse_playbook(json: &str) -> Result<Playbook, DataError> {
 /// The data pack compiled into the app.
 pub fn bundled_pack() -> DataPack {
     parse_pack(BUNDLED_CATALOG).expect("bundled catalog.json is valid (checked by tests)")
+}
+
+/// The bundled data with the curated fixes over it: the catalog the app
+/// starts from before any download (for tools and tests).
+pub fn bundled_catalog() -> spire_core::Catalog {
+    let mut layers = vec![bundled_pack()];
+    layers.extend(curated::pack(&layers));
+    spire_core::Catalog::from_layers(layers)
 }
 
 /// The default playbook compiled into the app.

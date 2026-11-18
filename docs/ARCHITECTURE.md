@@ -22,7 +22,10 @@ Dependencies point one way. `spire-core` depends only on `serde`.
 `catalog.rs`. Cards, characters, relics, potions, enchantments, monsters,
 encounters, events and acts, in a source-agnostic shape. A `DataPack` is the
 serialized form. A `Catalog` is built by layering packs: **bundled →
-downloaded → user**, where later layers override earlier ones by id.
+downloaded → curated → user**, where later layers override earlier ones by
+id. The curated layer (`data/patterns.json`, `spire-data::curated`) holds
+sourced fixes for gaps in the monster data, applied only while the gap is
+still there.
 
 ### Playbook: strategy knowledge, as data
 

@@ -679,6 +679,35 @@ pub struct Monster {
     /// what fight rules are read from.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub powers: Vec<MonsterPower>,
+    /// Further phases it revives into (Test Subject): each fought as one
+    /// more stage, with its own HP and opening move.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub phases: Vec<Phase>,
+}
+
+/// A phase a monster revives into.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Phase {
+    pub hp_min: u32,
+    #[serde(default)]
+    pub hp_max: Option<u32>,
+    #[serde(default)]
+    pub hp_min_asc: Option<u32>,
+    #[serde(default)]
+    pub hp_max_asc: Option<u32>,
+    /// The move its pattern starts from in this phase.
+    pub start: String,
+}
+
+impl Phase {
+    /// HP range, using the Ascension values when `tough` and known.
+    pub fn hp_at(&self, tough: bool) -> (u32, u32) {
+        let base = (self.hp_min, self.hp_max.unwrap_or(self.hp_min));
+        match (tough, self.hp_min_asc) {
+            (true, Some(lo)) => (lo, self.hp_max_asc.unwrap_or(lo)),
+            _ => base,
+        }
+    }
 }
 
 /// A power a monster has, as the data names and words it.

@@ -166,6 +166,11 @@ pub fn plan_spawned(monster: &Monster, deadly: bool, vulnerable_pct: u32, horizo
     walk(monster, start, deadly, vulnerable_pct, horizon)
 }
 
+/// Like `plan`, starting from a given move (a phase's opening move).
+pub fn plan_from(monster: &Monster, start: &str, deadly: bool, vulnerable_pct: u32, horizon: usize) -> Plan {
+    walk(monster, Some(start), deadly, vulnerable_pct, horizon)
+}
+
 fn walk(monster: &Monster, start: Option<&str>, deadly: bool, vulnerable_pct: u32, horizon: usize) -> Plan {
     let mut w = Walker { monster, deadly, vulnerable_pct, strength: 0, vulnerable_left: 0 };
     let Some(pattern) = monster.pattern.as_ref().filter(|p| !p.states.is_empty()) else {
@@ -398,6 +403,7 @@ mod tests {
             death_blow: None,
             death_summons: None,
             powers: Vec::new(),
+            phases: Vec::new(),
         }
     }
 

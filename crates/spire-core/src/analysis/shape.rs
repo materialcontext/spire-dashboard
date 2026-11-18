@@ -182,7 +182,7 @@ pub fn of(enc: &Encounter, catalog: &Catalog, scaling: Scaling, t: &FightThresho
         }
     }
     let mut clocks = Vec::new();
-    if waves.len() > 1 || !enc.spawns.is_empty() {
+    if waves.iter().any(|w| w.summoned_by.is_some()) || !enc.spawns.is_empty() {
         clocks.push(Clock::Summons);
     }
     if monsters.iter().any(|m| m.death_blow.is_some()) {

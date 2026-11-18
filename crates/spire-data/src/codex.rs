@@ -681,6 +681,7 @@ fn map_monster(m: WMonster) -> Monster {
         death_blow: None,
         death_summons: None,
         powers: Vec::new(),
+        phases: Vec::new(),
     }
 }
 
@@ -1148,6 +1149,7 @@ mod tests {
             death_blow: None,
             death_summons: None,
             powers: Vec::new(),
+            phases: Vec::new(),
         };
         let blow = death_power(&giant, &blows).unwrap();
         assert_eq!((blow.power.as_str(), blow.amount), ("STEAM_ERUPTION", Some(15)));

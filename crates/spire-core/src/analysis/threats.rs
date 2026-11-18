@@ -23,6 +23,8 @@ pub struct ThreatProfile {
     pub peak_turn: u32,
     pub buffs: bool,
     pub summons: bool,
+    /// Phases a monster revives into, counting the first (0 or 1: none).
+    pub phases: u32,
     pub debuffs: bool,
     pub statuses: bool,
 }
@@ -56,10 +58,18 @@ pub fn typical_turns(enc: &Encounter) -> usize {
 
 fn lineup_profile(monsters: &[&Monster], scaling: Scaling, vulnerable_pct: u32, turns: usize) -> ThreatProfile {
     let mut t = monsters.iter().fold(ThreatProfile::default(), |mut t, m| {
-        let (hp_min, hp_max) = m.hp_at(scaling.tough);
+        // A monster that revives into phases has to be beaten once per phase.
+        let (hp_min, hp_max) = m
+            .phases
+            .iter()
+            .map(|p| p.hp_at(scaling.tough))
+            .fold(m.hp_at(scaling.tough), |acc, p| (acc.0 + p.0, acc.1 + p.1));
         t.enemies += 1;
         t.hp_min += hp_min;
         t.hp_max += hp_max;
+        if !m.phases.is_empty() {
+            t.phases = t.phases.max(m.phases.len() as u32 + 1);
+        }
         let biggest = m.moves.iter().map(|mv| mv.total_damage_at(scaling.deadly)).max().unwrap_or(0);
         t.max_hit = t.max_hit.max(biggest);
         t.buffs |= m.moves.iter().any(|mv| mv.intent_has("buff"));
@@ -99,6 +109,7 @@ pub fn threat_profile(enc: &Encounter, catalog: &Catalog, playbook: &Playbook, s
             peak_turn: acc.peak_turn.max(p.peak_turn),
             buffs: acc.buffs || p.buffs,
             summons: acc.summons || p.summons,
+            phases: acc.phases.max(p.phases),
             debuffs: acc.debuffs || p.debuffs,
             statuses: acc.statuses || p.statuses,
         })
@@ -145,8 +156,8 @@ pub fn lineup_plans(enc: &Encounter, catalog: &Catalog, scaling: Scaling, turns:
     (plans, hp)
 }
 
-/// Monsters that fight together: the starting lineup, or the ones a power
-/// summons when the wave before dies.
+/// Monsters that fight together: the starting lineup, a phase a monster
+/// revives into, or the ones a power summons when the wave before dies.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Wave {
     pub plans: Vec<MonsterPlan>,
@@ -156,7 +167,8 @@ pub struct Wave {
     pub summoned_by: Option<String>,
 }
 
-/// The most common lineup, then the monsters its on-death powers summon.
+/// The most common lineup, then the phases its monsters revive into, then
+/// the monsters its on-death powers summon.
 ///
 /// The data says a power summons and gives its amount; it doesn't say how
 /// many monsters that is, so the amount is read as the count:
@@ -189,7 +201,22 @@ pub fn lineup_waves(enc: &Encounter, catalog: &Catalog, scaling: Scaling, turns:
             MonsterPlan { monster: id.clone(), name: m.name.clone(), count, plan, death_blow: m.death_blow.is_some() };
         Some(Wave { plans: vec![mp], hp: (lo + hi) / 2 * count, summoned_by: Some(power.to_string()) })
     };
+    // Phases a monster revives into: one more stage each, from the phase's
+    // opening move. (A revive that skips a turn isn't counted.)
+    let phases: Vec<Wave> = plans
+        .iter()
+        .filter_map(|mp| catalog.monsters.get(&mp.monster))
+        .flat_map(|m| {
+            m.phases.iter().map(move |ph| {
+                let (lo, hi) = ph.hp_at(scaling.tough);
+                let plan = pattern::plan_from(m, &ph.start, scaling.deadly, vulnerable, turns);
+                let mp = MonsterPlan { monster: m.id.clone(), name: m.name.clone(), count: 1, plan, death_blow: false };
+                Wave { plans: vec![mp], hp: (lo + hi) / 2, summoned_by: None }
+            })
+        })
+        .collect();
     let mut waves = vec![Wave { plans, hp, summoned_by: None }];
+    waves.extend(phases);
     for (id, n, power, in_place) in &summoned {
         let (repeats, count) = if *in_place { (*n, 1) } else { (1, *n) };
         waves.extend((0..repeats).filter_map(|_| wave_of(id, count, power)));

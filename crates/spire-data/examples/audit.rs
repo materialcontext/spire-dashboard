@@ -19,7 +19,7 @@ use spire_core::playbook::Role;
 
 fn main() {
     let show_cards = std::env::args().any(|a| a == "--cards");
-    let cat = Catalog::from_layers([spire_data::bundled_pack()]);
+    let cat = spire_data::bundled_catalog();
     let pb = spire_data::bundled_playbook();
     if std::env::args().any(|a| a == "--sim") {
         starter_sims(&cat, &pb);

@@ -1,6 +1,6 @@
 # Fight shapes, winning lines and card tags: plan
 
-Status: **decided**. F1 (shapes and rules) is built; F1b (research) is next. Nothing here
+Status: **decided**. F1 (shapes and rules) and F1b (curated gaps) are built; F2 (roles and jobs) is next. Nothing here
 is built yet.
 
 ## The idea
@@ -120,18 +120,20 @@ Then each gap is researched, and the findings ship as a curated data layer.
 - **Sources.** Every entry names its source: a wiki or Codex page, a
   developer note, or a video timestamp. Nothing is taken from memory, and an
   entry without a source isn't added.
-- **What's researched today** (the scan in `audit --patterns`):
+- **What was researched** (F1b; the scan in `audit --patterns`):
 
-| Monster | Fight | Missing |
-|---|---|---|
-| Decimillipede segments (front, middle, back) | The Decimillipede | No pattern at all |
-| Entomancer | Entomancer | Order of Bees, Spear and Pheromone Spit |
-| Lagavulin Matriarch | Lagavulin Matriarch | When it wakes |
-| Test Subject | Test Subject | HP, and its phases |
-| Rocket | Kaiser Crab | What follows Precise Smash |
+| Monster | Fight | Missing | Filled from |
+|---|---|---|---|
+| Entomancer | Entomancer | Order of its moves | Its Codex page's cycle (read), opened where Codex's data starts it: Beeeees! → Spear! → Pheromone Spit. The wiki agrees (search summary). |
+| Lagavulin Matriarch | Lagavulin Matriarch | When it wakes | Asleep 3 and its awake cycle in Codex's data (read): 3 sleeping turns, then Slash. The guides agree (search summary). Asleep's text says 2 turns. |
+| Test Subject | Test Subject | HP, and its phases | Its revive rules and per-phase moves in Codex's data (read); HP 100/200/300 (A8+: 111/212/313) from guides (search summary only). |
+| Decimillipede segments | The Decimillipede | No pattern | Its Codex page (read): Writhe, Bulk, Constrict, in no fixed order; no repeats (search summary). Reattach isn't modelled. |
+| Rocket | Kaiser Crab | *(not a gap)* | The dead-end move is never reached; its cycle is complete. |
 
-  24 normal-fight monsters have gaps too. They come after the elites and
-  bosses.
+  Each entry in `data/patterns.json` lists its sources and marks whether
+  each page was read directly. The wiki and other guide sites couldn't be
+  read from this environment, so their claims are only "reported", from
+  search summaries. 24 normal-fight monsters still have gaps.
 - **Re-checked at data refresh.** `refresh-bundle` reports when Codex
   starts covering one of them, and the curated entry gives way to Codex.
 

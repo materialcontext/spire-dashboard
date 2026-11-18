@@ -53,6 +53,9 @@ pub fn preview_body(
         (min, _) => format!("{min} HP"),
     };
     let mut facts = vec![hp];
+    if p.phases > 1 {
+        facts.push(format!("{} phases", p.phases));
+    }
     for (on, word) in [(p.buffs, "buffs"), (p.debuffs, "debuffs"), (p.statuses, "statuses")] {
         if on {
             facts.push(word.into());

@@ -102,10 +102,11 @@ impl Store {
     /// Builds the catalog from all layers and loads the playbook.
     pub fn load(&self) -> Loaded {
         let mut warnings = Vec::new();
-        let layers: Vec<DataPack> = std::iter::once(bundled_pack())
-            .chain(self.optional_pack(DOWNLOADED, &mut warnings))
-            .chain(self.optional_pack(USER_PACK, &mut warnings))
-            .collect();
+        let mut layers: Vec<DataPack> =
+            std::iter::once(bundled_pack()).chain(self.optional_pack(DOWNLOADED, &mut warnings)).collect();
+        // Sourced fixes for gaps the data above still has.
+        layers.extend(crate::curated::pack(&layers));
+        layers.extend(self.optional_pack(USER_PACK, &mut warnings));
         let playbook = match self.read(PLAYBOOK).map(|r| r.and_then(|s| parse_playbook(&s))) {
             Some(Ok(p)) => p,
             Some(Err(e)) => {
@@ -337,7 +338,9 @@ mod tests {
         let loaded = store.load();
         assert!(loaded.warnings.is_empty());
         assert_eq!(loaded.catalog.cards[&card.id].name, "Renamed");
-        assert_eq!(loaded.catalog.layers.len(), 2);
+        // Bundled, the curated fixes, then the user's.
+        let sources: Vec<&str> = loaded.catalog.layers.iter().map(|l| l.source.as_str()).collect();
+        assert_eq!(sources, ["spire-codex", "curated", "user"]);
     }
 
     #[test]

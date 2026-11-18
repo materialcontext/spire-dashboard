@@ -58,6 +58,7 @@ fn monster(id: &str, hp: u32, hit: u32, intent: &str) -> Monster {
         death_blow: None,
         death_summons: None,
         powers: Vec::new(),
+        phases: Vec::new(),
     }
 }
 
