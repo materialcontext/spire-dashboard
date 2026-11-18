@@ -56,7 +56,8 @@ pub struct UiState {
     pub threat_tab: spire_core::run::NodeKind,
     pub show_data: bool,
     pub new_character: Option<spire_core::CharacterId>,
-    pub new_ascension: u32,
+    /// Unset until picked: every run asks for its ascension.
+    pub new_ascension: Option<u32>,
     pub source_url: String,
     pub messages: Vec<String>,
     pub updating: bool,
@@ -143,7 +144,7 @@ impl SpireApp {
                 threat_tab: spire_core::run::NodeKind::Monster,
                 show_data: false,
                 new_character: None,
-                new_ascension: 0,
+                new_ascension: None,
                 source_url,
                 messages,
                 updating: false,
@@ -326,6 +327,8 @@ impl SpireApp {
         match action {
             Action::NewRun { character, ascension } => match RunEvent::start(&self.catalog, &character, ascension) {
                 Some(start) => {
+                    // The next run asks again.
+                    self.ui.new_ascension = None;
                     self.run = Run { started_at: Some(spire_data::now_rfc3339()), ..Run::default() };
                     self.run.push(start);
                     self.run_changed();
@@ -353,6 +356,12 @@ impl SpireApp {
                 self.run_changed();
                 if boss {
                     self.ancient_heal();
+                }
+                // A floor that leaves the player at 0 HP ends the run: offer
+                // the End run dialog with the fight already filled in.
+                if node && self.state.hp <= 0 && self.state.outcome.is_none() {
+                    self.ui.end_run_open = true;
+                    self.ui.end_encounter = self.state.encounters_seen.last().cloned();
                 }
                 if node {
                     let now = ctx.input(|i| i.time);
