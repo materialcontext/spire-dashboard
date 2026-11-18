@@ -37,6 +37,7 @@ impl Watcher {
     /// system (no data directory).
     pub fn start(ctx: egui::Context) -> Option<Watcher> {
         let path = game_link::link_path()?;
+        let game = game_link::game_dir();
         let stop = Arc::new(AtomicBool::new(false));
         let (tx, rx) = channel();
         let flag = stop.clone();
@@ -53,7 +54,10 @@ impl Watcher {
                         seen = now;
                         let update = match game_link::read_link(&path) {
                             None => Update::NoLink,
-                            Some(link) => {
+                            Some(mut link) => {
+                                if let Some(game) = &game {
+                                    link.locate(game);
+                                }
                                 run_save = link.run_save.clone();
                                 let json =
                                     if link.in_progress { link.read_run_save() } else { link.read_finished(None) };
@@ -95,4 +99,9 @@ pub struct Status {
     pub conflict: Option<spire_data::game_run::GameRun>,
     /// Runs already filed from the game, so they're not adopted again.
     pub filed: Vec<String>,
+    /// Why the game's run isn't being followed, when something stops it.
+    pub problem: Option<String>,
+    /// Waiting for the next run: the game's latest run ended before we
+    /// followed it.
+    pub waiting: bool,
 }

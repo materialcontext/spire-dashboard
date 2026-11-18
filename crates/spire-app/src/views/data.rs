@@ -153,7 +153,7 @@ pub fn contents(
             }
             ui.add_space(crate::style::space::s());
 
-            monitored(ui, settings, st, out);
+            monitored(ui, settings, st, v.following, out);
             ui.add_space(crate::style::space::s());
 
             ui.label(eyebrow("Game data"));
@@ -247,7 +247,7 @@ pub fn contents(
 }
 
 /// Monitored runs: follow the game through the companion mod.
-fn monitored(ui: &mut egui::Ui, settings: &Settings, st: &UiState, out: &mut Vec<Action>) {
+fn monitored(ui: &mut egui::Ui, settings: &Settings, st: &UiState, following: bool, out: &mut Vec<Action>) {
     ui.label(eyebrow("Monitored runs"));
     hairline(ui);
     let mut on = settings.follow_game;
@@ -277,8 +277,20 @@ fn monitored(ui: &mut egui::Ui, settings: &Settings, st: &UiState, out: &mut Vec
             let game = link.game_version.as_deref().unwrap_or("unknown version");
             let line = format!("Connected: Link {} · game {game}", link.mod_version);
             ui.label(RichText::new(line).small().color(good()));
-            let run = if link.in_progress { "A run is in progress." } else { "No run in progress." };
+            let run = match (link.in_progress, following, f.waiting) {
+                (true, true, _) => "Following the game's run.",
+                (true, false, _) if f.conflict.is_some() => "The game is on another run: see the banner above.",
+                (true, false, _) => "A run is in progress.",
+                (false, _, true) => "No run in progress. The next run you start will be followed.",
+                (false, ..) => "No run in progress.",
+            };
             ui.label(RichText::new(run).small().color(text_dim()));
+            if let Some(p) = &f.problem {
+                ui.label(RichText::new(p).small().color(warn()));
+                if let Some(path) = link.run_save.as_ref().or(link.save_dir.as_ref()) {
+                    ui.label(RichText::new(path.display().to_string()).small().color(text_faint()));
+                }
+            }
             if link.modded_profile() {
                 ui.label(
                     RichText::new(

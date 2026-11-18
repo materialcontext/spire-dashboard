@@ -6,6 +6,13 @@
 //! are (the game keeps a separate `modded/` profile while mods are on),
 //! when the run was last saved, and the act and its boss.
 //!
+//! The mod may not manage to name the saves folder (the game's own lookup
+//! can change), so the app also finds it: the game keeps its data in the
+//! system's app data folder, one folder per account and profile
+//! (`SlayTheSpire2/steam/<Steam id>/profile<N>/saves`, or
+//! `.../modded/profile<N>/saves` with mods on). [`Link::locate`] fills in
+//! whatever the link left out from there.
+//!
 //! Only read while the player has turned on monitoring. Nothing here writes
 //! anywhere.
 
@@ -83,6 +90,77 @@ pub fn link_path() -> Option<PathBuf> {
     Some(base.data_local_dir().join("SpireDashboard").join("game-link.json"))
 }
 
+/// The game's data folder: Godot keeps it in the system's app data
+/// (Windows `%APPDATA%\SlayTheSpire2`, macOS
+/// `~/Library/Application Support/SlayTheSpire2`, Linux
+/// `~/.local/share/SlayTheSpire2`).
+pub fn game_dir() -> Option<PathBuf> {
+    Some(directories::BaseDirs::new()?.data_dir().join("SlayTheSpire2"))
+}
+
+/// Every profile's saves folder under the game's data folder:
+/// `<store>/<account>/profile<N>/saves` and `.../modded/profile<N>/saves`.
+pub fn save_dirs(game: &Path) -> Vec<PathBuf> {
+    let subdirs = |dir: &Path| -> Vec<PathBuf> {
+        std::fs::read_dir(dir)
+            .map(|rd| rd.filter_map(Result::ok).map(|e| e.path()).filter(|p| p.is_dir()).collect())
+            .unwrap_or_default()
+    };
+    let profiles = |dir: &Path| -> Vec<PathBuf> {
+        subdirs(dir)
+            .into_iter()
+            .filter(|p| profile_number(p).is_some())
+            .map(|p| p.join("saves"))
+            .filter(|p| p.is_dir())
+            .collect()
+    };
+    let mut out = Vec::new();
+    for store in subdirs(game) {
+        for account in subdirs(&store) {
+            out.extend(profiles(&account));
+            out.extend(profiles(&account.join("modded")));
+        }
+    }
+    out
+}
+
+/// `profile2` is 2.
+fn profile_number(dir: &Path) -> Option<i32> {
+    dir.file_name()?.to_str()?.strip_prefix("profile")?.parse().ok()
+}
+
+/// The saves folder being played: the one whose run save changed last. With
+/// no run save anywhere, the profile the game names, or else the folder
+/// that changed last.
+pub fn pick_save_dir(dirs: &[PathBuf], profile: Option<i32>) -> Option<PathBuf> {
+    let newest = |dirs: &mut dyn Iterator<Item = &PathBuf>, when: &dyn Fn(&Path) -> Option<SystemTime>| {
+        dirs.filter_map(|d| Some((when(d)?, d))).max_by_key(|(t, _)| *t).map(|(_, d)| d.clone())
+    };
+    let run_save = |d: &Path| modified(&d.join(RUN_SAVE));
+    let named = |d: &&PathBuf| profile.is_some() && d.parent().and_then(profile_number) == profile;
+    newest(&mut dirs.iter(), &run_save)
+        .or_else(|| newest(&mut dirs.iter().filter(named), &|d| modified(d)))
+        .or_else(|| newest(&mut dirs.iter(), &|d| modified(d)))
+}
+
+/// The run in progress, in a profile's saves folder.
+pub const RUN_SAVE: &str = "current_run.save";
+
+impl Link {
+    /// Fills in the saves folder, run save and history from the game's data
+    /// folder when the mod didn't give them (or gave one that's gone).
+    pub fn locate(&mut self, game: &Path) {
+        if self.save_dir.as_deref().is_some_and(Path::is_dir) {
+            return;
+        }
+        let Some(dir) = pick_save_dir(&save_dirs(game), self.profile_id) else { return };
+        let run_save = dir.join(RUN_SAVE);
+        self.run_save = run_save.is_file().then_some(run_save);
+        self.history_dir = Some(dir.join("history"));
+        self.save_dir = Some(dir);
+    }
+}
+
 /// The link file, if the mod has written one.
 pub fn read_link(path: &Path) -> Option<Link> {
     let text = std::fs::read_to_string(path).ok()?;
@@ -123,5 +201,35 @@ mod tests {
         let idle = Link { in_progress: false, ..link };
         assert_eq!(idle.hint(), ActHint::default());
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn finds_the_saves_the_mod_left_out() {
+        let game = std::env::temp_dir().join(format!("spire-game-{}", std::process::id()));
+        let account = game.join("steam").join("76561197960287930");
+        let plain = account.join("profile1").join("saves");
+        let modded = account.join("modded").join("profile1").join("saves");
+        let other = account.join("profile2").join("saves");
+        for d in [&plain, &modded, &other] {
+            std::fs::create_dir_all(d.join("history")).unwrap();
+        }
+        std::fs::create_dir_all(account.join("not-a-profile").join("saves")).unwrap();
+        assert_eq!(save_dirs(&game).len(), 3);
+        // No run save anywhere: the profile the game names.
+        assert_eq!(pick_save_dir(&save_dirs(&game), Some(2)), Some(other.clone()));
+        // A run save: that folder, whatever the profile says.
+        std::fs::write(plain.join(RUN_SAVE), "{}").unwrap();
+        assert_eq!(pick_save_dir(&save_dirs(&game), Some(2)), Some(plain.clone()));
+
+        let mut link = Link { in_progress: true, profile_id: Some(1), ..Link::default() };
+        link.locate(&game);
+        assert_eq!(link.save_dir, Some(plain.clone()));
+        assert_eq!(link.run_save, Some(plain.join(RUN_SAVE)));
+        assert_eq!(link.history_dir, Some(plain.join("history")));
+        // A folder the mod named and that exists is kept.
+        let mut named = Link { save_dir: Some(modded.clone()), ..Link::default() };
+        named.locate(&game);
+        assert_eq!(named.save_dir, Some(modded));
+        let _ = std::fs::remove_dir_all(game);
     }
 }

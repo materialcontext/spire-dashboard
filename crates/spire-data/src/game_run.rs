@@ -187,13 +187,40 @@ pub struct GameRun {
     pub unknown: Vec<String>,
 }
 
-/// Reads a run save or `.run` file. `None` if it isn't one, or names a
-/// character the catalog doesn't know.
-pub fn read(json: &str, catalog: &Catalog, hint: &ActHint) -> Option<GameRun> {
-    let run: WRun = serde_json::from_str(json).ok()?;
-    let player = run.players.first()?;
-    let character = CharacterId::new(entry(player.character.as_deref()?));
-    let start = RunEvent::start(catalog, &character, run.ascension)?;
+/// Why a run save couldn't be read.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Unreadable {
+    /// Not JSON at all (the game may compress or encode it).
+    NotJson,
+    /// JSON, but not shaped like a run (the parser's message).
+    Shape(String),
+    NoPlayer,
+    NoCharacter,
+    /// A character the catalog doesn't know.
+    UnknownCharacter(String),
+}
+
+impl std::fmt::Display for Unreadable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Unreadable::NotJson => write!(f, "it isn't plain JSON (the game may compress or encode it)"),
+            Unreadable::Shape(e) => write!(f, "it isn't shaped like a run record ({e})"),
+            Unreadable::NoPlayer => write!(f, "it has no players"),
+            Unreadable::NoCharacter => write!(f, "its player has no character"),
+            Unreadable::UnknownCharacter(c) => write!(f, "the game data doesn't know its character, {c}"),
+        }
+    }
+}
+
+/// Reads a run save or `.run` file, or says why it can't.
+pub fn read(json: &str, catalog: &Catalog, hint: &ActHint) -> Result<GameRun, Unreadable> {
+    let run: WRun = serde_json::from_str(json).map_err(|e| {
+        if json.trim_start().starts_with('{') { Unreadable::Shape(e.to_string()) } else { Unreadable::NotJson }
+    })?;
+    let player = run.players.first().ok_or(Unreadable::NoPlayer)?;
+    let character = CharacterId::new(entry(player.character.as_deref().ok_or(Unreadable::NoCharacter)?));
+    let start = RunEvent::start(catalog, &character, run.ascension)
+        .ok_or_else(|| Unreadable::UnknownCharacter(character.to_string()))?;
     let key = format!("{}:{}", run.start_time.unwrap_or(0), run.seed.clone().unwrap_or_default());
     let mut events = vec![start];
     let mut state = apply(RunState::default(), &events[0]);
@@ -271,7 +298,7 @@ pub fn read(json: &str, catalog: &Catalog, hint: &ActHint) -> Option<GameRun> {
     if let Some(outcome) = outcome {
         push(&mut events, &mut state, RunEvent::End { outcome, at: None });
     }
-    Some(GameRun { key, start_time: run.start_time, events, floors, ended, unknown })
+    Ok(GameRun { key, start_time: run.start_time, events, floors, ended, unknown })
 }
 
 /// One floor's changes, naming cards as they sit in the deck now.

@@ -85,6 +85,13 @@ In-progress runs are in `saves/current_run.save`. Both sit under:
 | macOS | `~/Library/Application Support/SlayTheSpire2/steam/<steam id>/profile1/saves` |
 | Linux | `~/.local/share/SlayTheSpire2/steam/<steam id>/profile1/saves` |
 
+Confirmed on Windows: `C:\Users\<user>\AppData\Roaming\SlayTheSpire2\steam\<steam id>\profile1\saves`,
+with mods on. The mod's own lookup of this folder (the game's
+`GetProgressPathForProfile`) came back empty there, so the app finds it
+itself: every `<store>/<account>/[modded/]profile<N>/saves` under the game's
+data folder, choosing the one whose `current_run.save` changed last
+(`game_link::Link::locate`).
+
 Our Spire Codex adapter (`codex_runs.rs`) already parses the `.run` format
 for community statistics. Its per-floor record, `map_point_history`, maps
 almost one-to-one onto our `NodeReport`. Field counts below come from 800
