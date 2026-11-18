@@ -10,7 +10,9 @@ the card you took, HP and gold after. Then it re-analyses the run.
 ## What it shows
 
 - **Run vitals**: character, act, floor, HP, gold, potions, deck size.
-- **Deck, relics and potions**, with each card's role on hover.
+- **Deck, relics and potions**, with each card's role on hover. Relics are
+  marked with a role too when what they do is plain from their text (Vajra:
+  scaling damage), and relics that add potion slots add them when logged.
 - **Deck breakdown** by card type (attack, skill, power, curse…) and by role:
   frontloaded damage, scaling damage, frontloaded defense, scaling defense,
   and consistency/acceleration, against per-act targets. Area damage is
@@ -28,8 +30,10 @@ the card you took, HP and gold after. Then it re-analyses the run.
   from the deck simulator's damage and block against the enemies' turns.
   See [docs/DEATHS.md](docs/DEATHS.md).
 - **Next threats** for Monster, Elite and Boss nodes in the current act. The
-  list uses the early (weak) pool, then the normal pool. Unseen encounters
-  come first, and each is checked against your deck.
+  list uses the early (weak) pool, then the normal pool. Hallway fights
+  you've already had this act are left out, and so is the elite you just
+  fought: community runs show neither comes straight back. Each is checked
+  against your deck.
 - **`?` event watchlist**: events possible in this act, ranked by how well
   they answer what the run needs (removal for curses, healing when low…).
 - **Macro advice** about your run only: role gaps for this act, boss gaps,

@@ -32,6 +32,7 @@ fn describe(v: &ViewCtx, c: &Change) -> (String, egui::Color32) {
         Change::SetGold(n) => (format!("Set gold to {n}"), text_dim()),
         Change::SetFloor(n) => (format!("Set floor to {n}"), text_dim()),
         Change::SetPotionSlots(n) => (format!("Set potion slots to {n}"), text_dim()),
+        Change::AddPotionSlots(n) => (format!("Gain {n} potion slot{}", if *n == 1 { "" } else { "s" }), info()),
     }
 }
 
@@ -164,7 +165,13 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
     ui.label(RichText::new("Relic").color(text_dim()));
     let relics = v.catalog.relics.values().map(|r| (r.id.as_str(), r.name.as_str(), r.text.as_str()));
     if let Some(id) = search_pick(ui, &mut d.relic_query, "Search relics", relics) {
-        d.changes.push(Change::AddRelic(id.into()));
+        let id: spire_core::ids::RelicId = id.into();
+        // Relics that add potion slots on pickup add them with the relic.
+        let slots = v.catalog.relics.get(&id).map_or(0, |r| r.potion_slots());
+        d.changes.push(Change::AddRelic(id));
+        if slots > 0 {
+            d.changes.push(Change::AddPotionSlots(slots));
+        }
     }
     ui.label(RichText::new("Potion").color(text_dim()));
     let potions = v.catalog.potions.values().map(|p| (p.id.as_str(), p.name.as_str(), p.text.as_str()));

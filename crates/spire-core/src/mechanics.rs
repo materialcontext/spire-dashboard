@@ -219,7 +219,94 @@ pub struct Mechanics {
     pub unread: Vec<String>,
 }
 
+impl Effect {
+    /// The effect's name in the playbook's relic role rules.
+    pub fn key(&self) -> &'static str {
+        match self {
+            Effect::Block(_) => "block",
+            Effect::Damage(_) => "damage",
+            Effect::DamageAll(_) => "damage_all",
+            Effect::Energy(_) => "energy",
+            Effect::Draw(_) => "draw",
+            Effect::Strength(_) => "strength",
+            Effect::Dexterity(_) => "dexterity",
+            Effect::Focus(_) => "focus",
+            Effect::Vigor(_) => "vigor",
+            Effect::Aim(_) => "aim",
+            Effect::Stretch(_) => "stretch",
+            Effect::Plating(_) => "plating",
+            Effect::Poison(_) => "poison",
+            Effect::Doom(_) => "doom",
+            Effect::Vulnerable(_) => "vulnerable",
+            Effect::Forge(_) => "forge",
+            Effect::Stars(_) => "stars",
+            Effect::Summon(_) => "summon",
+            Effect::Channel(..) => "channel",
+            Effect::OrbSlots(_) => "orb_slots",
+            Effect::Arrows(_) => "arrows",
+        }
+    }
+
+    /// Gains and applications, as opposed to losses ("lose 1 Strength").
+    fn positive(&self) -> bool {
+        match self {
+            Effect::Block(n)
+            | Effect::Energy(n)
+            | Effect::Draw(n)
+            | Effect::Strength(n)
+            | Effect::Dexterity(n)
+            | Effect::Focus(n)
+            | Effect::Vigor(n)
+            | Effect::Aim(n)
+            | Effect::Stretch(n)
+            | Effect::Plating(n)
+            | Effect::Stars(n)
+            | Effect::OrbSlots(n)
+            | Effect::Arrows(n) => *n > 0,
+            _ => true,
+        }
+    }
+}
+
+impl Passive {
+    /// The passive's name in the playbook's relic role rules.
+    pub fn key(&self) -> &'static str {
+        match self {
+            Passive::ExtraDamage(..) | Passive::ExtraOstyDamage(_) => "extra_damage",
+            Passive::ExtraBlock(..) => "extra_block",
+            Passive::VulnerableBonus(_) | Passive::VulnerableIs(_) => "vulnerable_bonus",
+            Passive::PoisonExtraTicks(_) => "poison_ticks",
+            Passive::RetainHand => "retain_hand",
+            Passive::ConserveEnergy => "conserve_energy",
+            Passive::FreeSkills => "free_skills",
+            Passive::ExtraHit => "extra_hit",
+            Passive::EchoEachTurn | Passive::EchoFirstOfCombat => "echo",
+            Passive::FirstAttackBonus(_) => "first_attack_bonus",
+        }
+    }
+}
+
+impl When {
+    /// Happens once a combat (or once when played), rather than again
+    /// and again.
+    pub fn once(&self) -> bool {
+        matches!(self, When::Played | When::CombatStart | When::TurnNumber(_))
+    }
+}
+
 impl Mechanics {
+    /// What was understood, as `(name, recurring)`: each gained or applied
+    /// effect with whether it repeats, then each passive (always on).
+    pub fn facts(&self) -> Vec<(&'static str, bool)> {
+        let mut out: Vec<(&'static str, bool)> = self
+            .triggers
+            .iter()
+            .flat_map(|(w, es)| es.iter().filter(|e| e.positive()).map(move |e| (e.key(), !w.once())))
+            .collect();
+        out.extend(self.passives.iter().map(|p| (p.key(), true)));
+        out
+    }
+
     pub fn is_empty(&self) -> bool {
         self.triggers.is_empty() && self.passives.is_empty()
     }

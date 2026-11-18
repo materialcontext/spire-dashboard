@@ -994,3 +994,51 @@ fn history_edits_rewrite_the_log() {
     let changed = run.with_floor_encounter(first, Some(EncounterId::new("C")));
     assert_eq!(changed.floors()[0].2.encounter, Some(EncounterId::new("C")));
 }
+
+#[test]
+fn next_fights_leave_out_what_cannot_come_next() {
+    let mut cat = catalog();
+    for (id, room) in [("CULTIST_TRIO", RoomType::Monster), ("BRUTE_TWO", RoomType::Elite)] {
+        cat.encounters.insert(EncounterId::new(id), encounter(id, room, false, &["CULTIST"]));
+    }
+    cat.acts.get_mut(&ActId::new("ACT1")).unwrap().weak_fights = Some(0);
+    let pb = playbook();
+    let mut run = started(&cat);
+    let fight = |kind, e: &str| {
+        RunEvent::Node(NodeReport { kind, encounter: Some(EncounterId::new(e)), event: None, changes: vec![] })
+    };
+    run.push(fight(NodeKind::Monster, "CULTIST_PAIR"));
+    run.push(fight(NodeKind::Elite, "BRUTE_ELITE"));
+    let s = run.state();
+    let deck = deck_profile(&s.deck, &cat, &pb);
+    let names = |kind, cat: &Catalog| -> Vec<String> {
+        next_threats(&s, kind, cat, &pb, &deck).into_iter().map(|t| t.name).collect()
+    };
+
+    // Unmeasured rules: everything stays.
+    assert_eq!(names(NodeKind::Monster, &cat).len(), 2);
+    assert_eq!(names(NodeKind::Elite, &cat).len(), 2);
+
+    cat.rules.unique_hallway_fights = true;
+    cat.rules.no_elite_twice_in_a_row = true;
+    assert_eq!(names(NodeKind::Monster, &cat), ["CULTIST_TRIO"]);
+    assert_eq!(names(NodeKind::Elite, &cat), ["BRUTE_TWO"]);
+}
+
+#[test]
+fn relics_that_add_potion_slots_say_so() {
+    let relic = |text: &str| spire_core::catalog::Relic {
+        id: RelicId::new("R"),
+        name: "R".into(),
+        rarity: Rarity::Common,
+        pool: "shared".into(),
+        text: text.into(),
+    };
+    assert_eq!(relic("Upon pickup, gain 2 potion slots.").potion_slots(), 2);
+    assert_eq!(relic("Upon pickup, gain 1 potion slot and procure 2 random Potions.").potion_slots(), 1);
+    assert_eq!(relic("At the start of each combat, fill all empty potion slots.").potion_slots(), 0);
+    let mut run = started(&catalog());
+    let before = run.state().potion_slots;
+    run.push(RunEvent::Adjust(vec![spire_core::run::Change::AddPotionSlots(2)]));
+    assert_eq!(run.state().potion_slots, before + 2);
+}

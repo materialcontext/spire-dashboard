@@ -271,8 +271,11 @@ pub fn preview(
 /// Encounters a node of `kind` could hold in the current act, unseen first.
 ///
 /// Hallway fights come from the weak pool for the act's first
-/// `weak_fights` fights (per the playbook), then from the normal pool.
-/// A boss node shows the known boss, or every boss of the act if unset.
+/// `weak_fights` fights (per the playbook), then from the normal pool,
+/// leaving out those already fought when the rules say hallway fights
+/// don't repeat. Elites leave out the one just fought when the rules say
+/// an elite can't come twice in a row. A boss node shows the known boss,
+/// or every boss of the act if unset.
 pub fn next_threats(
     state: &RunState,
     kind: NodeKind,
@@ -297,11 +300,29 @@ pub fn next_threats(
             let known: Vec<&Encounter> = state.bosses().filter_map(|b| catalog.encounters.get(b)).collect();
             if known.is_empty() { catalog.encounters_in(act, RoomType::Boss).collect() } else { known }
         }
-        RoomType::Elite => catalog.encounters_in(act, RoomType::Elite).collect(),
+        RoomType::Elite => {
+            let all: Vec<&Encounter> = catalog.encounters_in(act, RoomType::Elite).collect();
+            // The elite just fought this act can't come straight back.
+            let last = state.encounters_seen.iter().rev().find(|e| all.iter().any(|x| x.id == **e));
+            let fresh: Vec<&Encounter> = match last {
+                Some(last) if catalog.rules.no_elite_twice_in_a_row => {
+                    all.iter().copied().filter(|e| e.id != *last).collect()
+                }
+                _ => all.clone(),
+            };
+            if fresh.is_empty() { all } else { fresh }
+        }
         RoomType::Monster => {
             let all: Vec<&Encounter> = catalog.encounters_in(act, RoomType::Monster).collect();
             let phase: Vec<&Encounter> = all.iter().copied().filter(|e| e.weak == weak_phase).collect();
-            if phase.is_empty() { all } else { phase }
+            let phase = if phase.is_empty() { all } else { phase };
+            // Hallway fights don't repeat within an act: drop those fought.
+            let fresh: Vec<&Encounter> = if catalog.rules.unique_hallway_fights {
+                phase.iter().copied().filter(|e| !state.encounters_seen.contains(&e.id)).collect()
+            } else {
+                phase.clone()
+            };
+            if fresh.is_empty() { phase } else { fresh }
         }
     };
 

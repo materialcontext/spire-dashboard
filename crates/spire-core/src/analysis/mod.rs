@@ -34,6 +34,9 @@ pub struct Dashboard {
     pub advice: Vec<Advice>,
     /// Threat previews for each fight node kind.
     pub threats: Vec<(NodeKind, Vec<ThreatPreview>)>,
+    /// Roles of the run's relics, in the order held (empty for relics the
+    /// simulator can't read).
+    pub relic_roles: Vec<Vec<crate::playbook::Role>>,
 }
 
 impl Dashboard {
@@ -49,6 +52,16 @@ impl Dashboard {
             .into_iter()
             .map(|k| (k, threats::next_threats(state, k, catalog, playbook, &deck)))
             .collect();
-        Dashboard { deck, rows, needs, events, bosses, advice, threats }
+        let orbs: Vec<crate::catalog::Orb> = catalog.orbs.values().cloned().collect();
+        let relic_roles = state
+            .relics
+            .iter()
+            .map(|r| {
+                catalog.relics.get(r).map_or_else(Vec::new, |relic| {
+                    playbook.relic_roles(&crate::mechanics::read(&relic.text, &orbs, false))
+                })
+            })
+            .collect();
+        Dashboard { deck, rows, needs, events, bosses, advice, threats, relic_roles }
     }
 }

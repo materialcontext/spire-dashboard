@@ -37,8 +37,14 @@ pub enum Change {
     AddCard(DeckCard),
     RemoveCard(DeckCard),
     UpgradeCard(DeckCard),
-    Enchant { card: DeckCard, enchantment: EnchantmentId },
-    Transform { from: DeckCard, to: DeckCard },
+    Enchant {
+        card: DeckCard,
+        enchantment: EnchantmentId,
+    },
+    Transform {
+        from: DeckCard,
+        to: DeckCard,
+    },
     AddRelic(RelicId),
     RemoveRelic(RelicId),
     AddPotion(PotionId),
@@ -48,6 +54,8 @@ pub enum Change {
     SetGold(i32),
     SetFloor(u32),
     SetPotionSlots(u32),
+    /// Extra potion slots, e.g. from a relic's pickup effect.
+    AddPotionSlots(u32),
 }
 
 /// What the player reports after finishing a node.
@@ -276,6 +284,7 @@ pub fn apply_change(mut s: RunState, change: &Change) -> RunState {
         Change::SetGold(g) => s.gold = (*g).max(0),
         Change::SetFloor(f) => s.floor = *f,
         Change::SetPotionSlots(n) => s.potion_slots = *n,
+        Change::AddPotionSlots(n) => s.potion_slots += *n,
     }
     s
 }

@@ -267,6 +267,22 @@ pub struct Playbook {
     pub needs: NeedThresholds,
     #[serde(default)]
     pub simulation: SimAssumptions,
+    /// Which roles a relic plays, from what the deck simulator reads in its
+    /// text: an effect (or passive) name, when it happens, and the role.
+    #[serde(default)]
+    pub relic_roles: Vec<RelicRoleRule>,
+}
+
+/// "A relic that gains Block once a combat is frontloaded defense."
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RelicRoleRule {
+    /// An effect or passive name (`Effect::key`, `Passive::key`).
+    pub effect: String,
+    /// `Some(false)`: only once a combat; `Some(true)`: only repeating;
+    /// `None`: either.
+    #[serde(default)]
+    pub recurring: Option<bool>,
+    pub role: Role,
 }
 
 /// What the deck simulator assumes where the game data is silent.
@@ -325,6 +341,22 @@ impl Playbook {
             self.role_rules.iter().filter(|r| r.when.matches(card)).map(|r| (r.role, r.when.describe())).collect();
         matched.sort_by_key(|(r, _)| *r);
         RoleSource::Rules(matched)
+    }
+
+    /// The roles a relic plays, from what the simulator understands in its
+    /// text (`crate::mechanics::read`). Relics with nothing understood
+    /// play none, so only obvious fits are flagged.
+    pub fn relic_roles(&self, m: &crate::mechanics::Mechanics) -> Vec<Role> {
+        let facts = m.facts();
+        let mut roles: Vec<Role> = self
+            .relic_roles
+            .iter()
+            .filter(|r| facts.iter().any(|(k, rec)| *k == r.effect && r.recurring.is_none_or(|want| want == *rec)))
+            .map(|r| r.role)
+            .collect();
+        roles.sort();
+        roles.dedup();
+        roles
     }
 
     pub fn is_aoe(&self, card: &Card) -> bool {

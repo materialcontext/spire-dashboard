@@ -1,12 +1,14 @@
 //! Relic catalog: filter, browse, and see what the deck simulator makes of each relic.
 
+use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 use eframe::egui::{self, RichText, Sense, Ui, vec2};
 use spire_core::catalog::{Catalog, Rarity, Relic};
 use spire_core::ids::RelicId;
 use spire_core::mechanics::{self, Mechanics};
-use spire_core::playbook::contains_ci;
+use spire_core::playbook::{Role, contains_ci};
 
 use crate::app::ViewCtx;
 use crate::style::{self, color::*};
@@ -20,6 +22,9 @@ pub enum SimFilter {
     NotSimulated,
 }
 
+/// Each relic's roles, for relics that play any.
+type RoleMap = Arc<BTreeMap<RelicId, Vec<Role>>>;
+
 /// UI-only state of the relic catalog.
 #[derive(Default)]
 pub struct RelicBrowser {
@@ -28,11 +33,15 @@ pub struct RelicBrowser {
     pub rarity: Option<Rarity>,
     pub sim: SimFilter,
     pub in_run: bool,
+    /// Only relics that play this role.
+    pub role: Option<Role>,
     pub selected: Option<RelicId>,
     /// Filter key and matching relics, rebuilt only when the key changes.
     cache: Option<(u64, Vec<RelicId>)>,
     /// What the simulator reads from the selected relic.
     reading: Option<(RelicId, Mechanics)>,
+    /// Every relic's roles, read once per data generation.
+    roles: Option<(u64, RoleMap)>,
 }
 
 /// What the simulator reads from a relic's text.
@@ -44,13 +53,30 @@ pub fn reading(catalog: &Catalog, relic: &Relic) -> Mechanics {
 impl RelicBrowser {
     fn key(&self, v: &ViewCtx) -> u64 {
         let mut h = std::collections::hash_map::DefaultHasher::new();
-        (&self.query, &self.pool, self.rarity, self.sim, self.in_run, v.generation).hash(&mut h);
+        (&self.query, &self.pool, self.rarity, self.sim, self.in_run, self.role, v.generation).hash(&mut h);
         h.finish()
+    }
+
+    /// Roles of every relic, from what the simulator reads in its text.
+    fn roles(&mut self, v: &ViewCtx) -> RoleMap {
+        if self.roles.as_ref().is_none_or(|(g, _)| *g != v.generation) {
+            let map = v
+                .catalog
+                .relics
+                .values()
+                .map(|r| (r.id.clone(), v.playbook.relic_roles(&reading(v.catalog, r))))
+                .filter(|(_, roles)| !roles.is_empty())
+                .collect();
+            self.roles = Some((v.generation, Arc::new(map)));
+        }
+        self.roles.as_ref().map(|(_, m)| m.clone()).unwrap_or_default()
     }
 
     fn matches(&mut self, v: &ViewCtx) -> &[RelicId] {
         let key = self.key(v);
         if self.cache.as_ref().is_none_or(|(k, _)| *k != key) {
+            let role = self.role;
+            let roles = self.roles(v);
             let q = self.query.trim();
             let mut list: Vec<&Relic> = v
                 .catalog
@@ -60,6 +86,7 @@ impl RelicBrowser {
                 .filter(|r| self.pool.as_ref().is_none_or(|p| &r.pool == p))
                 .filter(|r| self.rarity.is_none_or(|x| r.rarity == x))
                 .filter(|r| !self.in_run || v.state.relics.contains(&r.id))
+                .filter(|r| role.is_none_or(|x| roles.get(&r.id).is_some_and(|rs| rs.contains(&x))))
                 .filter(|r| match self.sim {
                     SimFilter::Any => true,
                     SimFilter::Simulated => !reading(v.catalog, r).is_empty(),
@@ -129,6 +156,12 @@ pub fn filters(ui: &mut Ui, v: &ViewCtx, b: &mut RelicBrowser) {
     );
 
     ui.add_space(crate::style::space::s());
+    ui.label(eyebrow("Role"));
+    let mut roles: Vec<(Option<Role>, &str)> = vec![(None, "Any")];
+    roles.extend(Role::ALL.iter().map(|r| (Some(*r), r.label())));
+    segmented(ui, &mut b.role, &roles);
+
+    ui.add_space(crate::style::space::s());
     ui.checkbox(&mut b.in_run, "Only relics in this run");
 
     ui.add_space(crate::style::space::s());
@@ -140,6 +173,7 @@ pub fn filters(ui: &mut Ui, v: &ViewCtx, b: &mut RelicBrowser) {
 
 pub fn list(ui: &mut Ui, v: &ViewCtx, b: &mut RelicBrowser) {
     let ids = b.matches(v).to_vec();
+    let roles = b.roles(v);
     ui.horizontal(|ui| {
         ui.label(eyebrow("Relics"));
         ui.label(RichText::new(format!("{} of {}", ids.len(), v.catalog.relics.len())).small().color(text_faint()));
@@ -170,7 +204,20 @@ pub fn list(ui: &mut Ui, v: &ViewCtx, b: &mut RelicBrowser) {
                 let font = if owned { egui::FontId::new(font.size, style::strong_family()) } else { font };
                 painter.text(egui::pos2(rect.min.x + 12.0, mid), egui::Align2::LEFT_CENTER, &relic.name, font, text());
                 let right = format!("{} · {:?}", label(&relic.pool), relic.rarity);
-                painter.text(egui::pos2(rect.max.x - 6.0, mid), egui::Align2::RIGHT_CENTER, right, small, text_faint());
+                let at = painter.text(
+                    egui::pos2(rect.max.x - 6.0, mid),
+                    egui::Align2::RIGHT_CENTER,
+                    right,
+                    small,
+                    text_faint(),
+                );
+                // One square per role, left of the pool and rarity.
+                let mut x = at.min.x - 10.0;
+                for r in roles.get(id).into_iter().flatten().rev() {
+                    let sq = egui::Rect::from_center_size(egui::pos2(x, mid), vec2(7.0, 7.0));
+                    painter.rect_filled(sq, 0.0, style::role_color(*r));
+                    x -= 10.0;
+                }
             }
             if resp.clicked() {
                 b.selected = Some(id.clone());
@@ -203,6 +250,16 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut RelicBrowser) {
     hairline(ui);
     ui.label(&relic.text);
     if let Some((_, m)) = &b.reading {
+        let roles = v.playbook.relic_roles(m);
+        if !roles.is_empty() {
+            ui.add_space(crate::style::space::s());
+            ui.label(eyebrow("Role"));
+            ui.horizontal_wrapped(|ui| {
+                for r in &roles {
+                    crate::widgets::chip(ui, r.label(), style::role_color(*r));
+                }
+            });
+        }
         ui.add_space(crate::style::space::s());
         simulator_reading(ui, m);
     }

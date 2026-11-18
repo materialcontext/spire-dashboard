@@ -38,17 +38,20 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
     }
 
     section(ui, "Relics", s.relics.len());
-    for r in &s.relics {
+    for (i, r) in s.relics.iter().enumerate() {
+        let roles = v.dash.relic_roles.get(i).map(Vec::as_slice).unwrap_or_default();
         ui.horizontal(|ui| {
             let text = v.catalog.relics.get(r).map_or("", |x| x.text.as_str());
             let name = RichText::new(v.catalog.relic_name(r));
-            if crate::widgets::link(ui, name).on_hover_text(text).clicked() {
+            if crate::widgets::link(ui, name).on_hover_ui(|ui| relic_tip(ui, text, roles)).clicked() {
                 out.push(Action::Open(crate::actions::Link::Relic(r.clone())));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.add(row_button("x")).on_hover_text("Lose relic").clicked() {
                     out.push(Action::Draft(Change::RemoveRelic(r.clone())));
                 }
+                ui.add_space(crate::style::space::xs());
+                role_marks(ui, roles);
             });
         });
     }
@@ -139,7 +142,19 @@ fn tag_marks(ui: &mut Ui, tags: &[spire_core::analysis::deck::CardTag]) {
     }
 }
 
-/// One small square per role the card fills, in that role's colour.
+/// A relic's text, and the roles it plays when it plays any.
+fn relic_tip(ui: &mut Ui, text: &str, roles: &[Role]) {
+    ui.label(text);
+    if !roles.is_empty() {
+        ui.horizontal_wrapped(|ui| {
+            for r in roles {
+                ui.label(RichText::new(r.label()).small().color(style::role_color(*r)));
+            }
+        });
+    }
+}
+
+/// One small square per role the card or relic fills, in that role's colour.
 fn role_marks(ui: &mut Ui, roles: &[Role]) {
     for r in roles.iter().rev() {
         let (rect, resp) = ui.allocate_exact_size(vec2(7.0, 7.0), Sense::hover());

@@ -393,6 +393,22 @@ pub struct Relic {
     pub text: String,
 }
 
+impl Relic {
+    /// Potion slots gained on pickup, read from the text ("Upon pickup,
+    /// gain 2 potion slots"). 0 when the text says nothing of the kind.
+    pub fn potion_slots(&self) -> u32 {
+        let text = self.text.to_lowercase();
+        text.split("gain ")
+            .skip(1)
+            .filter_map(|rest| {
+                let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+                let after = &rest[digits.len()..];
+                after.starts_with(" potion slot").then(|| digits.parse::<u32>().ok()).flatten()
+            })
+            .sum()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Potion {
     pub id: PotionId,
@@ -891,6 +907,14 @@ pub struct GameRules {
     /// matches community runs).
     #[serde(default = "rest_heal")]
     pub rest_heal_pct: u32,
+    /// A hallway encounter never comes up twice in one act (measured from
+    /// community runs; off when unmeasured).
+    #[serde(default)]
+    pub unique_hallway_fights: bool,
+    /// The same elite never comes up twice in a row within an act
+    /// (measured from community runs; off when unmeasured).
+    #[serde(default)]
+    pub no_elite_twice_in_a_row: bool,
 }
 
 fn full_heal() -> u32 {
@@ -917,6 +941,8 @@ impl Default for GameRules {
             weary_from: Some(2),
             weary_heal_pct: 80,
             rest_heal_pct: 30,
+            unique_hallway_fights: false,
+            no_elite_twice_in_a_row: false,
         }
     }
 }
