@@ -99,47 +99,99 @@ fn same_options(a: &Turn, b: &Turn) -> bool {
     a.options.len() == b.options.len() && a.options.iter().zip(&b.options).all(|(x, y)| x.name == y.name)
 }
 
-/// One line of turn chips per monster type. Turns where many runs end
-/// are drawn in the danger colour.
-pub fn strip(ui: &mut Ui, plans: &[MonsterPlan], stats: Option<&EncounterStats>) {
+/// One chip of a strip: label, whether runs often end on that turn, and
+/// which turn of the plan it shows (for the tooltip).
+#[derive(Clone)]
+struct Chip {
+    label: String,
+    marked: bool,
+    turn: usize,
+}
+
+/// One monster's line of chips, laid out once per dashboard generation.
+#[derive(Clone)]
+struct Line {
+    plan: usize,
+    name: Option<String>,
+    /// "Any of: …" for a monster with no known order.
+    any: Option<String>,
+    chips: Vec<Chip>,
+    tail: Option<String>,
+}
+
+fn lines(plans: &[MonsterPlan], stats: Option<&EncounterStats>) -> Vec<Line> {
     let deadly = deadly(stats);
     let named = plans.len() > 1;
-    for mp in plans {
+    let mut out = Vec::new();
+    for (pi, mp) in plans.iter().enumerate() {
         if mp.plan.turns.is_empty() {
             continue;
         }
+        let name = named.then(|| if mp.count > 1 { format!("{}×{}", mp.name, mp.count) } else { mp.name.clone() });
+        if mp.plan.unknown {
+            let names: Vec<&str> = mp.plan.turns[0].options.iter().map(|o| o.name.as_str()).collect();
+            let any = Some(format!("Any of: {}", names.join(", ")));
+            out.push(Line { plan: pi, name, any, chips: Vec::new(), tail: None });
+            continue;
+        }
+        let shown = mp.plan.shown();
+        // Only a single-monster plan maps deaths to its own turns.
+        let marked: Vec<usize> = if named {
+            Vec::new()
+        } else {
+            deadly.iter().filter_map(|(d, _)| shown_index(&mp.plan, *d as usize)).collect()
+        };
+        let mut chips = Vec::new();
+        let mut collapsed = false;
+        for (i, t) in shown.iter().take(STRIP_TURNS).enumerate() {
+            let n = i + 1;
+            // The same pick every turn from here on: show it once.
+            let rest_same = i + 1 < shown.len() && shown[i..].iter().all(|x| same_options(x, t));
+            let plus = if rest_same && !t.known() { "+" } else { "" };
+            chips.push(Chip { label: format!("{n}{plus} {}", turn_text(t)), marked: marked.contains(&i), turn: i });
+            if !plus.is_empty() {
+                collapsed = true;
+                break;
+            }
+        }
+        let tail = tail(&mp.plan).filter(|_| !collapsed);
+        out.push(Line { plan: pi, name, any: None, chips, tail });
+    }
+    out
+}
+
+/// One line of turn chips per monster type. Turns where many runs end
+/// are drawn in the danger colour. The labels are built once per `key`
+/// (pass the dashboard generation and the encounter).
+pub fn strip(
+    ui: &mut Ui,
+    key: impl std::hash::Hash + std::fmt::Debug,
+    plans: &[MonsterPlan],
+    stats: Option<&EncounterStats>,
+) {
+    let id = egui::Id::unique(("turn-strip", key));
+    let built: std::sync::Arc<Vec<Line>> =
+        ui.ctx().data_mut(|d| d.get_temp_mut_or_insert_with(id, || std::sync::Arc::new(lines(plans, stats))).clone());
+    for line in built.iter() {
+        let Some(mp) = plans.get(line.plan) else { continue };
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
-            if named {
-                let name = if mp.count > 1 { format!("{}×{}", mp.name, mp.count) } else { mp.name.clone() };
+            if let Some(name) = &line.name {
                 ui.label(RichText::new(name).small().color(text_dim()));
             }
-            if mp.plan.unknown {
-                let names: Vec<&str> = mp.plan.turns[0].options.iter().map(|o| o.name.as_str()).collect();
-                ui.label(RichText::new(format!("Any of: {}", names.join(", "))).small().color(text_dim()));
-                return;
+            if let Some(any) = &line.any {
+                ui.label(RichText::new(any).small().color(text_dim()));
             }
-            let shown = mp.plan.shown();
-            // Only a single-monster plan maps deaths to its own turns.
-            let marked: Vec<usize> = if named {
-                Vec::new()
-            } else {
-                deadly.iter().filter_map(|(d, _)| shown_index(&mp.plan, *d as usize)).collect()
-            };
-            let mut collapsed = false;
-            for (i, t) in shown.iter().take(STRIP_TURNS).enumerate() {
-                let n = i + 1;
-                let color = if marked.contains(&i) { bad() } else { text_dim() };
-                // The same pick every turn from here on: show it once.
-                let rest_same = i + 1 < shown.len() && shown[i..].iter().all(|x| same_options(x, t));
-                if rest_same && !t.known() {
-                    chip(ui, format!("{n}+ {}", turn_text(t)), color).on_hover_text(turn_detail(n, t));
-                    collapsed = true;
-                    break;
+            for c in &line.chips {
+                let color = if c.marked { bad() } else { text_dim() };
+                let r = chip(ui, c.label.as_str(), color);
+                if let Some(t) = mp.plan.turns.get(c.turn) {
+                    r.on_hover_ui(|ui| {
+                        ui.label(turn_detail(c.turn + 1, t));
+                    });
                 }
-                chip(ui, format!("{n} {}", turn_text(t)), color).on_hover_text(turn_detail(n, t));
             }
-            if let Some(tail) = tail(&mp.plan).filter(|_| !collapsed) {
+            if let Some(tail) = &line.tail {
                 ui.label(RichText::new(tail).small().color(text_faint()));
             }
         });
@@ -155,8 +207,32 @@ fn move_on(plans: &[MonsterPlan], n: u32) -> Option<String> {
 }
 
 /// "1 in 5 runs that reach this fight end here, most on turn 7 (Dismember)."
-pub fn deaths(ui: &mut Ui, plans: &[MonsterPlan], stats: Option<&EncounterStats>) {
+pub fn deaths(
+    ui: &mut Ui,
+    key: impl std::hash::Hash + std::fmt::Debug,
+    plans: &[MonsterPlan],
+    stats: Option<&EncounterStats>,
+) {
     let Some(s) = stats.filter(|s| s.deaths > 0 && s.fights > 0) else { return };
+    let rate = s.death_rate();
+    let id = egui::Id::unique(("deaths-line", key));
+    let text: std::sync::Arc<str> = ui.ctx().data_mut(|d| {
+        d.get_temp_mut_or_insert_with::<std::sync::Arc<str>>(id, || deaths_text(plans, s).into()).clone()
+    });
+    ui.label(RichText::new(&*text).small().color(if rate >= 0.1 { bad() } else { text_dim() })).on_hover_ui(|ui| {
+        ui.label(format!(
+            "{} of {} community fights (Spire Codex) ended the run. A turn is listed when it has at least {:.0}% of those deaths.",
+            s.deaths,
+            s.fights,
+            DEADLY_SHARE * 100.0
+        ));
+        if let Some((won, died)) = s.hp_in {
+            ui.label(format!("Players who won came in with {won} HP (median); those who died, {died}."));
+        }
+    });
+}
+
+fn deaths_text(plans: &[MonsterPlan], s: &EncounterStats) -> String {
     let rate = s.death_rate();
     let turns: Vec<String> = deadly(Some(s))
         .iter()
@@ -171,17 +247,7 @@ pub fn deaths(ui: &mut Ui, plans: &[MonsterPlan], stats: Option<&EncounterStats>
         text.push_str(&format!(", most on {}", turns.join(", ")));
     }
     text.push('.');
-    ui.label(RichText::new(text).small().color(if rate >= 0.1 { bad() } else { text_dim() })).on_hover_ui(|ui| {
-        ui.label(format!(
-            "{} of {} community fights (Spire Codex) ended the run. A turn is listed when it has at least {:.0}% of those deaths.",
-            s.deaths,
-            s.fights,
-            DEADLY_SHARE * 100.0
-        ));
-        if let Some((won, died)) = s.hp_in {
-            ui.label(format!("Players who won came in with {won} HP (median); those who died, {died}."));
-        }
-    });
+    text
 }
 
 fn verdict_color(v: Verdict) -> egui::Color32 {

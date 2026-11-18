@@ -15,7 +15,14 @@ use crate::widgets::{chip, coverage_color, culled, link, panel, segmented};
 const LINEUPS_SHOWN: usize = 3;
 
 /// Lineup, stats and demand chips for one encounter.
-pub fn preview_body(ui: &mut Ui, t: &ThreatPreview, outlook: Option<&Outlook>) {
+/// `key` identifies this preview's content for caching its labels: pass the
+/// dashboard generation (and anything else it depends on).
+pub fn preview_body(
+    ui: &mut Ui,
+    key: impl std::hash::Hash + std::fmt::Debug + Copy,
+    t: &ThreatPreview,
+    outlook: Option<&Outlook>,
+) {
     match t.lineups.as_slice() {
         [] => {}
         // A single monster's lineup would just repeat the encounter name.
@@ -55,10 +62,10 @@ pub fn preview_body(ui: &mut Ui, t: &ThreatPreview, outlook: Option<&Outlook>) {
     ui.label(RichText::new(facts.join("  ·  ")).small().color(text_dim()));
     // Turns where runs end are marked for elites and bosses only.
     let boss_or_elite = t.room != RoomType::Monster;
-    crate::views::turns::strip(ui, &t.plans, t.stats.as_ref().filter(|_| boss_or_elite));
+    crate::views::turns::strip(ui, (key, &t.encounter), &t.plans, t.stats.as_ref().filter(|_| boss_or_elite));
     // Elites and bosses: when runs end here, and whether this deck is on track.
     if boss_or_elite {
-        crate::views::turns::deaths(ui, &t.plans, t.stats.as_ref());
+        crate::views::turns::deaths(ui, (key, &t.encounter), &t.plans, t.stats.as_ref());
         if let Some(o) = outlook {
             crate::views::turns::outlook(ui, o, t.stats.as_ref());
         }
@@ -113,7 +120,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
             ui.label(RichText::new("Nothing known for this act.").color(text_dim()));
         }
         for t in list {
-            culled(ui, ("threat", v.generation, v.combat.is_some(), st.threat_tab, &t.encounter), |ui| {
+            culled(ui, ("threat", v.generation, v.combat.map(|c| c.generation), st.threat_tab, &t.encounter), |ui| {
                 ui.add_space(crate::style::space::s());
                 ui.horizontal(|ui| {
                     let name = RichText::new(&t.name).family(crate::style::strong_family()).color(if t.seen {
@@ -132,7 +139,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
                         ui.label(RichText::new(word).small().strong().color(color));
                     });
                 });
-                preview_body(ui, t, v.combat.and_then(|c| c.outlook(&t.encounter)));
+                preview_body(ui, v.generation, t, v.combat.and_then(|c| c.outlook(&t.encounter)));
             });
         }
     });

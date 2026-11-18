@@ -17,8 +17,16 @@ the card you took, HP and gold after. Then it re-analyses the run.
   tracked too, and so are cards that draw or gain energy (tagged D and E in
   the deck). Starter Strikes/Defends are shown separately: targets count
   what you've *added*.
-- **Act and boss**: the boss's HP, worst turn, and what it demands, each
-  marked covered, thin or missing for your deck.
+- **Act and boss**: the boss's HP, what it does turn by turn, and what it
+  demands, each marked covered, thin or missing for your deck.
+- **Enemy turns**: every monster's move order from the game data (fixed
+  cycles, random picks with their odds, conditional picks), with the
+  Strength it builds and the Vulnerable it puts on you.
+- **When runs end** at elites and bosses: how often community runs die
+  there and on which turns, named by the move made that turn.
+- **Survival check** for elites and bosses: on track, tight or at risk,
+  from the deck simulator's damage and block against the enemies' turns.
+  See [docs/DEATHS.md](docs/DEATHS.md).
 - **Next threats** for Monster, Elite and Boss nodes in the current act. The
   list uses the early (weak) pool, then the normal pool. Unseen encounters
   come first, and each is checked against your deck.
@@ -47,7 +55,8 @@ the card you took, HP and gold after. Then it re-analyses the run.
   simulator reads from it and what it leaves out.
 - **History**: every run you end or abandon here, filtered by character and
   outcome, with the same charts, plus a floor-by-floor replay of the deck and
-  relics.
+  relics. **Edit run…** fixes a filed run: its ascension, result, notes, each
+  floor's fight, or a floor logged by mistake; or deletes it.
 
 ## Run it
 

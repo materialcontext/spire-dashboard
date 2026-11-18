@@ -34,6 +34,9 @@ pub struct ViewCtx<'a> {
 /// The live deck's simulation and how it fares against this act's elites
 /// and bosses. Built lazily (a few milliseconds) for the tabs that show it.
 pub struct Combat {
+    /// The dashboard generation it was built for. It can lag the run by a
+    /// moment (see `prepare_tab`); keys layout caches.
+    pub generation: u64,
     pub sim: DeckSim,
     pub outlooks: Vec<(spire_core::EncounterId, Outlook)>,
 }
@@ -86,6 +89,10 @@ pub struct Toast {
     pub until: f64,
 }
 
+/// Seconds the run must stay unchanged before the deck simulation behind
+/// the fight outlooks is rebuilt.
+const COMBAT_SETTLE: f64 = 0.15;
+
 /// Seconds a commit notice stays up.
 const TOAST_SECONDS: f64 = 6.0;
 
@@ -101,7 +108,9 @@ pub struct SpireApp {
     generation: u64,
     /// Analytics and the generation they were built for.
     analytics: Option<(u64, Analytics)>,
-    combat: Option<(u64, Combat)>,
+    combat: Option<Combat>,
+    /// When the dashboard generation last changed (`ctx.input().time`).
+    changed: (u64, f64),
     draft: NodeDraft,
     ui: UiState,
     update_rx: Option<Receiver<Result<fetch::Fetched, String>>>,
@@ -140,6 +149,7 @@ impl SpireApp {
             generation: 0,
             analytics: None,
             combat: None,
+            changed: (0, 0.0),
             ui: UiState {
                 threat_tab: spire_core::run::NodeKind::Monster,
                 show_data: false,
@@ -514,7 +524,7 @@ impl SpireApp {
         if self.ui.toast.as_ref().is_some_and(|t| ctx.input(|i| i.time) > t.until) {
             self.ui.toast = None;
         }
-        self.prepare_tab();
+        self.prepare_tab(&ctx);
         {
             let view = ViewCtx {
                 catalog: &self.catalog,
@@ -524,7 +534,7 @@ impl SpireApp {
                 can_undo: self.run.events.len() > 1,
                 generation: self.generation,
                 analytics: self.analytics.as_ref().filter(|(g, _)| *g == self.generation).map(|(_, a)| a),
-                combat: self.combat.as_ref().filter(|(g, _)| *g == self.generation).map(|(_, c)| c),
+                combat: self.combat.as_ref(),
             };
             views::root(ui, &view, &mut self.draft, &mut self.ui, &mut actions);
             if self.ui.show_data {
@@ -542,10 +552,22 @@ impl SpireApp {
 impl SpireApp {
     /// Builds what the open tab needs and nothing else: analytics for the
     /// live run, or the archived runs read from disk.
-    fn prepare_tab(&mut self) {
+    fn prepare_tab(&mut self, ctx: &egui::Context) {
         use crate::views::Tab;
         let fights = matches!(self.ui.tab, Tab::Run | Tab::Enemies | Tab::Analytics);
-        if fights && self.state.started() && self.combat.as_ref().is_none_or(|(g, _)| *g != self.generation) {
+        let now = ctx.input(|i| i.time);
+        if self.changed.0 != self.generation {
+            self.changed = (self.generation, now);
+        }
+        // The deck simulation takes a few milliseconds: rebuild it once the
+        // run has settled for a moment, not on the frame of every commit or
+        // undo. The previous outlook stays up meanwhile.
+        let stale = self.combat.as_ref().is_none_or(|c| c.generation != self.generation);
+        let settled = self.combat.is_none() || now - self.changed.1 >= COMBAT_SETTLE;
+        if fights && self.state.started() && stale && !settled {
+            ctx.request_repaint_after(std::time::Duration::from_secs_f64(COMBAT_SETTLE));
+        }
+        if fights && self.state.started() && stale && settled {
             let sim = simulate(&self.state, &self.catalog, &self.playbook.simulation);
             let mut outlooks = Vec::new();
             for t in self.dash.threats.iter().flat_map(|(_, l)| l.iter()).chain(self.dash.bosses.iter()) {
@@ -557,12 +579,12 @@ impl SpireApp {
                     outlooks.push((t.encounter.clone(), o));
                 }
             }
-            self.combat = Some((self.generation, Combat { sim, outlooks }));
+            self.combat = Some(Combat { generation: self.generation, sim, outlooks });
         }
         match self.ui.tab {
             Tab::Analytics if self.analytics.as_ref().is_none_or(|(g, _)| *g != self.generation) => {
                 let sim = match &self.combat {
-                    Some((g, c)) if *g == self.generation => c.sim.clone(),
+                    Some(c) if c.generation == self.generation => c.sim.clone(),
                     _ => simulate(&self.state, &self.catalog, &self.playbook.simulation),
                 };
                 let a = Analytics { timeline: timeline(&self.run, &self.catalog, &self.playbook), sim };

@@ -115,7 +115,7 @@ pub fn root(ui: &mut Ui, v: &ViewCtx, draft: &mut NodeDraft, st: &mut UiState, o
                 egui::ScrollArea::vertical().show(ui, |ui| enemies::filters(ui, v, &mut st.enemies));
             });
             egui::Panel::right("enemy-detail").frame(side).resizable(true).default_size(460.0).show(ui, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| enemies::detail(ui, v, &st.enemies));
+                egui::ScrollArea::vertical().show(ui, |ui| enemies::detail(ui, v, &mut st.enemies));
             });
             egui::CentralPanel::default()
                 .frame(egui::Frame::new().inner_margin(egui::Margin::same(GAP as i8)))
@@ -154,7 +154,7 @@ pub fn root(ui: &mut Ui, v: &ViewCtx, draft: &mut NodeDraft, st: &mut UiState, o
             let g = v.generation;
             if ui.available_width() > 680.0 {
                 ui.columns(2, |cols| {
-                    culled(&mut cols[0], ("act", g, v.combat.is_some()), |ui| act::show(ui, v, out));
+                    culled(&mut cols[0], ("act", g, v.combat.map(|c| c.generation)), |ui| act::show(ui, v, out));
                     cols[0].add_space(GAP);
                     culled(&mut cols[0], ("breakdown", g), |ui| breakdown::show(ui, v));
                     culled(&mut cols[1], ("threats", g, st.threat_tab), |ui| threats::show(ui, v, st, out));

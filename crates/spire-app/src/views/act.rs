@@ -56,7 +56,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
             {
                 out.push(Action::Open(crate::actions::Link::Encounter(boss.encounter.clone())));
             }
-            threats::preview_body(ui, boss, v.combat.and_then(|c| c.outlook(&boss.encounter)));
+            threats::preview_body(ui, v.generation, boss, v.combat.and_then(|c| c.outlook(&boss.encounter)));
             ui.add_space(crate::style::space::s());
         }
     });
