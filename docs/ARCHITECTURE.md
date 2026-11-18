@@ -31,10 +31,15 @@ still there.
 
 `playbook.rs` plus `data/playbook.json`. It holds:
 
-- Role rules: composable `Condition`s over card fields (`has_damage`,
-  `{"applies_power": "Strength"}`, `{"all": [...]}`…).
-- Per-card role overrides.
-- The area-damage rule.
+- Tag rules (`tag_rules`): composable `Condition`s over card fields
+  (`{"text_contains": "forge"}`, `{"all": [...]}`…) for effects the tag
+  reader can't map by itself, and the chip line (`tag_lines`).
+- Tag roles (`tag_roles`): which roles each tag gives, from a number up
+  ("Block 10+ is Survival").
+- Direct role rules (`role_rules`) for what no tag says (Intangible,
+  Buffer, summons).
+- Per-card tag and role overrides; the player's own overrides of both are
+  saved apart (`my_tags.json`, `my_roles.json`).
 - Event opportunity tags.
 - Per-act targets and thresholds.
 
@@ -95,7 +100,12 @@ kit, so old runs replay even after a data update.
   act events ranked by how well they meet those needs.
 - `advice`: act targets, boss gaps, area damage and removable curses (run-specific only).
 - `healing`: the rest heal (rules percent plus "heal an additional N" relics); the Ancient heal and starting HP are `GameRules` methods.
-- `deck::tags`: Draw and Energy tags, from card numbers and text.
+- `tags`: what each card does, in 14 tags (Damage, Chip Damage,
+  Multi-Hit, Area, Block, Weak, Vulnerable, Draw, Energy, Scaling and Setup
+  on the damage or block side, Clean-Up), each with its number. Read from
+  the card's numbers, the mechanics reader and the playbook's `tag_rules`;
+  hand-set and personal tags replace the reading. Roles come from tags
+  (`Playbook::roles_from`).
 - `timeline`: a run floor by floor (HP, gold, roles, dead cards, damage per
   fight against the community average, elites per act), folded from the event
   log, so archived runs work the same as the live one.
@@ -289,7 +299,7 @@ the update still applies.
 | Want to… | Do this |
 |---|---|
 | Add a data source | Add a `fetch::Source` variant and an adapter module that returns a `DataPack`. |
-| Change how cards are read | Edit `role_rules` / `card_roles` in the playbook; add a `Condition` variant if a new predicate is needed. |
+| Change how cards are read | Edit `tag_rules` / `tag_roles` / `card_tags` in the playbook (`role_rules` / `card_roles` for roles no tag gives); add a `Condition` variant if a new predicate is needed. `audit --tags` lists the class cards left untagged. |
 | Add a deck metric | Extend `DeckProfile` and `profile()`; show it in `views/breakdown.rs`. |
 | Simulate a new card mechanic | Read its `vars` key in `sim::play_of`, carry it in `Fight`, and add a `Resource` if it should be reported. |
 | Add a run chart | Add a field to `FloorPoint` in `timeline`, then a panel in `views/analytics.rs::run_section` (History gets it too). |

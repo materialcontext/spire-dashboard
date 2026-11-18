@@ -1,6 +1,6 @@
 # Fight shapes, winning lines and card tags: plan
 
-Status: **decided**. F1 (shapes and rules), F1b (curated gaps), F2 (roles and jobs) and F3 (ways to win) are built; F4 (tags) is next. Nothing here
+Status: **decided**. F1 (shapes and rules), F1b (curated gaps), F2 (roles and jobs), F3 (ways to win) and F4 (tags) are built; F5 (benchmarks) is next. Nothing here
 is built yet.
 
 ## The idea
@@ -285,6 +285,25 @@ Each line is played out against the shape, phase by phase:
   > of draws. Look for **Block** or **Weak**.
 
 ### 4. Tags (card vocabulary)
+
+As built (F4): `analysis::tags`. Scaling and Setup are split by side
+(Scaling · damage, Scaling · block, Setup · attack, Setup · block), so the
+roles can follow them; that makes 14 tags. A tag carries the card's number
+(per hit for Multi-Hit, with its hits). The playbook holds the judgement
+calls: `tag_rules` (channelling Lightning is Damage, Forge is Damage,
+exhausting your hand is Clean-Up…), `tag_lines` (Chip Damage: at most 4 a
+hit on a card costing 0–1, as the old Chip rule had it) and `tag_roles`.
+The player's own tags (`my_tags.json`) replace the reading, and roles
+follow them. Limits and fight rules name the tags that answer them
+("Look for: Multi-Hit, Chip Damage"); junk piling past 30% of the deck is a
+Clean-Up limit. `audit --tags` lists the 62 class cards no tag describes
+(copies, card plays, Stars, random cards).
+
+One change from the table below: **Energy gives no role.** Draw and Energy
+keep every role working on bad draws, the note that isn't a role (D2), so
+Energy counts toward neither Fast Damage nor any other role. The fight
+thresholds the limits use (`slower_by`, `chip_hits`, `junk_share`) moved
+into the playbook's `fights` section.
 
 Tags say what a card does. They're read from card numbers and the mechanics
 reader, with playbook rules as a fallback, and overrides are kept. A tag

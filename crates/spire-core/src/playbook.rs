@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::analysis::tags::{self, Tag, Tagged};
 use crate::catalog::{Card, CardType, Target};
 use crate::ids::CardId;
 
@@ -117,7 +118,8 @@ pub fn contains_ci(haystack: &str, needle: &str) -> bool {
 pub enum RoleSource {
     Personal(Vec<Role>),
     Playbook(Vec<Role>),
-    /// Each matching rule's role and description.
+    /// Each role with why: the tag that gives it ("Block 8") or the
+    /// direct rule that matched.
     Rules(Vec<(Role, String)>),
 }
 
@@ -168,10 +170,46 @@ impl Condition {
     }
 }
 
+/// A role straight from the card, for what the tags can't say (Intangible,
+/// Buffer, summons).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RoleRule {
     pub role: Role,
     pub when: Condition,
+}
+
+/// A tag for cards whose effect maps to it by judgement ("channelling
+/// Lightning is Damage").
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TagRule {
+    pub tag: Tag,
+    pub when: Condition,
+}
+
+/// A role a tag gives, from its number up ("Block 10+ is Survival").
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TagRole {
+    pub role: Role,
+    pub tag: Tag,
+    /// The tag's number must be at least this (0: any).
+    #[serde(default)]
+    pub min: u32,
+}
+
+/// Lines the tag reader draws.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TagLines {
+    /// Damage per hit at or under this is Chip Damage, on a cheap card.
+    pub chip_damage: u32,
+    /// Costs at or under this count as cheap.
+    pub chip_cost: u8,
+}
+
+impl Default for TagLines {
+    fn default() -> Self {
+        TagLines { chip_damage: 4, chip_cost: 1 }
+    }
 }
 
 /// What an event option can give (or cost) the player.
@@ -273,7 +311,23 @@ pub struct NeedThresholds {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Playbook {
     pub version: u32,
+    /// Roles straight from a card, beside those its tags give.
+    #[serde(default)]
     pub role_rules: Vec<RoleRule>,
+    /// Tags for effects the reader can't map by itself.
+    #[serde(default)]
+    pub tag_rules: Vec<TagRule>,
+    /// The roles each tag gives.
+    #[serde(default)]
+    pub tag_roles: Vec<TagRole>,
+    #[serde(default)]
+    pub tag_lines: TagLines,
+    /// Hand-set tags for specific cards; these replace the reading.
+    #[serde(default)]
+    pub card_tags: BTreeMap<CardId, Vec<Tag>>,
+    /// The player's own tag overrides (stored in their data folder).
+    #[serde(skip)]
+    pub personal_tags: BTreeMap<CardId, Vec<Tag>>,
     /// Hand-set roles for specific cards; these replace the rules' verdict.
     #[serde(default)]
     pub card_roles: BTreeMap<CardId, Vec<Role>>,
@@ -310,11 +364,19 @@ pub struct FightThresholds {
     pub quiet: f32,
     /// Later turns at or over this multiple of the early ones: it ramps.
     pub ramp: f32,
+    /// Turns over the players' usual pace that count as clearly slower: in
+    /// a fight with a clock, speed then leads, and Fast Damage is a limit.
+    pub slower_by: f32,
+    /// Hits a turn under which a hit rule (Slippery, Skittish…) holds the
+    /// deck back.
+    pub chip_hits: f32,
+    /// Junk at or over this share of the deck is worth cleaning up.
+    pub junk_share: f32,
 }
 
 impl Default for FightThresholds {
     fn default() -> Self {
-        FightThresholds { spike: 1.5, quiet: 0.35, ramp: 1.3 }
+        FightThresholds { spike: 1.5, quiet: 0.35, ramp: 1.3, slower_by: 1.5, chip_hits: 3.0, junk_share: 0.3 }
     }
 }
 
@@ -386,7 +448,7 @@ impl Playbook {
     }
 
     /// Why a card has its roles: your override, the playbook's override, or
-    /// the rules that matched (with a readable description of each).
+    /// its tags and the direct rules (with a readable reason for each).
     pub fn role_source(&self, card: &Card) -> RoleSource {
         if let Some(roles) = self.personal_roles.get(&card.id) {
             return RoleSource::Personal(roles.clone());
@@ -394,10 +456,29 @@ impl Playbook {
         if let Some(roles) = self.card_roles.get(&card.id) {
             return RoleSource::Playbook(roles.clone());
         }
-        let mut matched: Vec<(Role, String)> =
-            self.role_rules.iter().filter(|r| r.when.matches(card)).map(|r| (r.role, r.when.describe())).collect();
+        RoleSource::Rules(self.roles_from(card, &tags::tags(card, false, self)))
+    }
+
+    /// The roles `tags` give a card, with the tag (or direct rule) behind
+    /// each, in role order.
+    pub fn roles_from(&self, card: &Card, tags: &[Tagged]) -> Vec<(Role, String)> {
+        let mut matched: Vec<(Role, String)> = Vec::new();
+        for tr in &self.tag_roles {
+            if let Some(t) = tags.iter().find(|t| t.tag == tr.tag && t.value >= tr.min) {
+                matched.push((tr.role, t.label()));
+            }
+        }
+        matched.extend(self.role_rules.iter().filter(|r| r.when.matches(card)).map(|r| (r.role, r.when.describe())));
         matched.sort_by_key(|(r, _)| *r);
-        RoleSource::Rules(matched)
+        matched.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1);
+        matched
+    }
+
+    /// The tags that give a role, for "what to look for".
+    pub fn tags_for(&self, role: Role) -> Vec<Tag> {
+        let mut out: Vec<Tag> = self.tag_roles.iter().filter(|t| t.role == role).map(|t| t.tag).collect();
+        out.dedup();
+        out
     }
 
     /// The roles a relic plays, from what the simulator understands in its

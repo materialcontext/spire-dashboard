@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use spire_core::analysis::tags::Tag;
 use spire_core::playbook::Role;
 use spire_core::{Catalog, DataPack, Playbook, Run};
 
@@ -17,6 +18,8 @@ const SETTINGS: &str = "settings.json";
 const RUN: &str = "run.json";
 const RUNS_DIR: &str = "runs";
 const MY_ROLES: &str = "my_roles.json";
+/// The player's own tag overrides, by tag name.
+const MY_TAGS: &str = "my_tags.json";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -137,6 +140,19 @@ impl Store {
             Some(Err(e)) => warnings.push(format!("Ignored {MY_ROLES}: {e}")),
             None => {}
         }
+        // Tags are saved by name too, so a renamed or dropped tag is skipped
+        // rather than failing the whole file. An empty list is kept: it
+        // means "this card has no tags".
+        match self.read(MY_TAGS).map(|r| r.and_then(parse)) {
+            Some(Ok(saved)) => {
+                playbook.personal_tags = saved
+                    .into_iter()
+                    .map(|(card, names)| (card, names.iter().filter_map(|n| Tag::from_name(n)).collect()))
+                    .collect();
+            }
+            Some(Err(e)) => warnings.push(format!("Ignored {MY_TAGS}: {e}")),
+            None => {}
+        }
         Loaded { catalog: Catalog::from_layers(layers), playbook, warnings }
     }
 
@@ -147,6 +163,14 @@ impl Store {
         roles: &std::collections::BTreeMap<spire_core::CardId, Vec<spire_core::playbook::Role>>,
     ) -> Result<(), DataError> {
         self.write_json(MY_ROLES, roles)
+    }
+
+    /// Saves the player's personal tag overrides, beside their roles.
+    pub fn save_personal_tags(
+        &self,
+        tags: &std::collections::BTreeMap<spire_core::CardId, Vec<Tag>>,
+    ) -> Result<(), DataError> {
+        self.write_json(MY_TAGS, tags)
     }
 
     pub fn save_downloaded(&self, pack: &DataPack) -> Result<(), DataError> {
@@ -431,6 +455,25 @@ mod tests {
         assert_eq!(roles[&spire_core::CardId::new("STRIKE_IRONCLAD")], vec![Role::FastDamage]);
         assert_eq!(roles[&spire_core::CardId::new("BASH")], vec![Role::Mitigation]);
         assert!(!roles.contains_key(&spire_core::CardId::new("DEFEND_IRONCLAD")), "consistency alone: no override");
+    }
+
+    #[test]
+    fn personal_tags_layer_over_the_reading_and_skip_unknown_names() {
+        use spire_core::analysis::tags::{self, TagSource};
+        let store = temp_store("tags");
+        let cat = Catalog::from_layers([bundled_pack()]);
+        let strike = cat.cards.values().find(|c| c.name == "Strike").unwrap().clone();
+        store.write(MY_TAGS, &format!(r#"{{"{}": ["multi_hit", "no_such_tag"]}}"#, strike.id)).unwrap();
+        let loaded = store.load();
+        assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
+        let (t, source) = tags::of(&strike, false, &loaded.playbook);
+        assert_eq!(source, TagSource::Personal);
+        assert_eq!(t.iter().map(|t| t.tag).collect::<Vec<_>>(), vec![Tag::MultiHit]);
+        assert_eq!(loaded.playbook.roles_of(&strike), vec![Role::Chip], "roles follow your tags");
+        let mut saved = loaded.playbook.personal_tags.clone();
+        saved.insert(strike.id.clone(), vec![]);
+        store.save_personal_tags(&saved).unwrap();
+        assert!(tags::tags(&strike, false, &store.load().playbook).is_empty(), "an empty override clears the tags");
     }
 
     #[test]

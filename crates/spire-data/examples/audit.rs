@@ -10,6 +10,8 @@
 //! check), next to the community's outcomes.
 //! `--patterns` prints every elite's and boss's expected damage per enemy
 //! turn (12 turns), its HP, and the community's turns and damage taken.
+//! `--tags` counts each tag per character and lists every class card the
+//! reader leaves untagged.
 
 use std::collections::BTreeMap;
 
@@ -23,6 +25,10 @@ fn main() {
     let pb = spire_data::bundled_playbook();
     if std::env::args().any(|a| a == "--sim") {
         starter_sims(&cat, &pb);
+        return;
+    }
+    if std::env::args().any(|a| a == "--tags") {
+        tags(&cat, &pb);
         return;
     }
     if std::env::args().any(|a| a == "--patterns") {
@@ -146,7 +152,7 @@ fn starter_outlooks(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
                 )
             });
             let joins: Vec<String> = o.joins.iter().map(|j| format!("+{}x {}", j.count, j.name)).collect();
-            let limits: Vec<&str> = o.limits.iter().map(|l| l.role.label()).collect();
+            let limits: Vec<&str> = o.limits.iter().map(|l| l.label()).collect();
             println!(
                 "  {:<22} {:<8} {:<7} kill {:>2?} lose {:>3}  junk {:>4.1} {:<16} limits [{}] | {community}",
                 e.name,
@@ -238,4 +244,31 @@ fn mechanics(cat: &Catalog) {
         r_ok += usize::from(report("R", &r.name, &r.text, false));
     }
     println!("powers read: {p_ok}/{p_all}  relics read: {r_ok}/{r_all}");
+}
+
+fn tags(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
+    use spire_core::analysis::tags::{self, Tag};
+    let classes: Vec<String> = cat.characters.keys().map(|c| c.to_string().to_lowercase()).collect();
+    let class_cards: Vec<_> = cat.cards.values().filter(|c| classes.contains(&c.color)).collect();
+    println!("== tags by character ({} class cards)", class_cards.len());
+    let mut untagged = Vec::new();
+    for class in &classes {
+        let mut counts: BTreeMap<Tag, u32> = BTreeMap::new();
+        for c in class_cards.iter().filter(|c| &c.color == class) {
+            let t = tags::tags(c, false, pb);
+            if t.is_empty() {
+                untagged.push(format!("{:<12} {:<24} | {}", c.color, c.name, c.text.replace('\n', " ")));
+            }
+            for x in t {
+                *counts.entry(x.tag).or_default() += 1;
+            }
+        }
+        let row: Vec<String> =
+            Tag::ALL.iter().map(|t| format!("{}={}", t.name(), counts.get(t).unwrap_or(&0))).collect();
+        println!("{class:<12} {}", row.join(" "));
+    }
+    println!("\n== untagged class cards: {}", untagged.len());
+    for u in &untagged {
+        println!("  {u}");
+    }
 }

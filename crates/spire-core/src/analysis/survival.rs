@@ -42,6 +42,7 @@ use crate::analysis::jobs;
 use crate::analysis::rules::{self, Kind as RuleKind};
 use crate::analysis::shape;
 use crate::analysis::sim::{DeckSim, PlayStats};
+use crate::analysis::tags::Tag;
 use crate::analysis::threats::{Scaling, Wave, lineup_incoming, lineup_statuses, lineup_waves};
 use crate::catalog::{Catalog, Encounter};
 use crate::playbook::{Playbook, Role};
@@ -52,9 +53,6 @@ pub const MAX_TURNS: usize = 20;
 
 /// Lost HP below this share of current HP reads as on track.
 const SAFE_SHARE: f32 = 0.6;
-
-/// Turns over the players' usual pace that count as "clearly longer".
-const SLOWER_BY: f32 = 1.5;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Verdict {
@@ -216,6 +214,8 @@ pub struct Foe<'a> {
     pub clocked: bool,
     /// How many turns players usually take (community average).
     pub pace: Option<f32>,
+    /// Turns over the pace that count as clearly slower.
+    pub slower_by: f32,
 }
 
 impl Foe<'_> {
@@ -247,11 +247,27 @@ pub struct Line {
     pub hp_loss: u32,
 }
 
-/// What holds the deck back in a fight, as the role that would fix it.
+/// What holds the deck back in a fight: the role that would fix it (none
+/// for junk, which every role suffers from), why, and the tags to look for.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Limit {
-    pub role: Role,
+    pub role: Option<Role>,
     pub text: String,
+    pub tags: Vec<Tag>,
+}
+
+impl Limit {
+    pub fn label(&self) -> &'static str {
+        self.role.map_or(Tag::CleanUp.label(), Role::label)
+    }
+}
+
+/// A fight rule that changes the play, in words, with the tags that
+/// answer it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RuleNote {
+    pub text: String,
+    pub tags: Vec<Tag>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -267,8 +283,8 @@ pub struct Outlook {
     pub status_cards: u32,
     /// Monsters summoned once others die, in the order they join.
     pub joins: Vec<Join>,
-    /// The fight's rules that change the play, in words.
-    pub rules: Vec<String>,
+    /// The fight's rules that change the play.
+    pub rules: Vec<RuleNote>,
     /// What holds the deck back, most pressing first.
     pub limits: Vec<Limit>,
 }
@@ -391,7 +407,7 @@ pub fn outlook(sim: &DeckSim, foe: Foe, hp: i32) -> Option<Outlook> {
     // A clock makes speed matter: past the players' pace, lead with the
     // fastest way that still survives.
     let lead = match (foe.clocked, foe.pace, least.kill_turn) {
-        (true, Some(pace), Some(k)) if k as f32 > pace + SLOWER_BY => ways
+        (true, Some(pace), Some(k)) if k as f32 > pace + foe.slower_by => ways
             .iter()
             .filter(|l| l.kill_turn.is_some() && (l.hp_loss as i32) < hp)
             .min_by_key(|l| (l.kill_turn, l.hp_loss))
@@ -413,9 +429,9 @@ fn stage_rules(wave: &Wave, catalog: &Catalog) -> Vec<rules::Rule> {
     wave.plans.iter().filter_map(|p| catalog.monsters.get(&p.monster)).flat_map(rules::of).collect()
 }
 
-/// The rules that change the play, in words.
-fn rule_words(rules: &[rules::Rule], play: &PlayStats) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
+/// The rules that change the play, in words, with what answers them.
+fn rule_words(rules: &[rules::Rule], play: &PlayStats) -> Vec<RuleNote> {
+    let mut out: Vec<RuleNote> = Vec::new();
     for r in rules {
         let n = r.power.amount.unwrap_or(1);
         let name = crate::analysis::pattern::power_words(&r.power.power);
@@ -437,14 +453,17 @@ fn rule_words(rules: &[rules::Rule], play: &PlayStats) -> Vec<String> {
             RuleKind::StunAtHp => format!("{name}: stunned once at {n} HP"),
             _ => continue,
         };
-        if !out.contains(&text) {
-            out.push(text);
+        if !out.iter().any(|n| n.text == text) {
+            let mut tags: Vec<Tag> = r.kind.asks().iter().flat_map(|a| a.tags()).copied().collect();
+            tags.dedup();
+            out.push(RuleNote { text, tags });
         }
     }
     out
 }
 
-/// What holds the deck back, as the roles that would fix it.
+/// What holds the deck back, as the roles that would fix it and the tags
+/// that give them.
 fn limits(
     shape: &shape::Shape,
     jobs: &jobs::Jobs,
@@ -452,38 +471,39 @@ fn limits(
     foe: &Foe,
     mods: &Mods,
     play: &PlayStats,
+    playbook: &Playbook,
 ) -> Vec<Limit> {
     let mut out = Vec::new();
+    let mut add = |role: Role, text: String| out.push(Limit { role: Some(role), text, tags: playbook.tags_for(role) });
     let biggest = shape.spikes.iter().filter(|s| s.certain).map(|s| s.load.expected).fold(0.0f32, f32::max);
     if biggest > 0.0 && jobs.survival < biggest {
-        out.push(Limit {
-            role: Role::Survival,
-            text: format!("spikes of {biggest:.0}; a defending turn blocks {:.0}", jobs.survival),
-        });
+        add(Role::Survival, format!("spikes of {biggest:.0}; a defending turn blocks {:.0}", jobs.survival));
     }
     if shape.pressure > 0.0 && jobs.mitigation < shape.pressure {
-        out.push(Limit {
-            role: Role::Mitigation,
-            text: format!("about {:.0} a turn; an ordinary turn blocks {:.0}", shape.pressure, jobs.mitigation),
-        });
+        add(
+            Role::Mitigation,
+            format!("about {:.0} a turn; an ordinary turn blocks {:.0}", shape.pressure, jobs.mitigation),
+        );
     }
     if let (Some(pace), Some(k)) = (foe.pace, lead.kill_turn)
-        && k as f32 > pace + SLOWER_BY
+        && k as f32 > pace + foe.slower_by
     {
-        out.push(Limit {
-            role: Role::FastDamage,
-            text: format!("the kill takes about {k} turns; players usually finish in {pace:.0}"),
-        });
+        add(Role::FastDamage, format!("the kill takes about {k} turns; players usually finish in {pace:.0}"));
     }
     let chip = mods.slippery > 0.0 || mods.intangible > 0.0 || mods.skittish > 0.0;
-    if chip && play.hits < 3.0 {
-        out.push(Limit {
-            role: Role::Chip,
-            text: format!("its rules punish few hits; you land {:.1} a turn", play.hits),
-        });
+    if chip && play.hits < playbook.fights.chip_hits {
+        add(Role::Chip, format!("its rules punish few hits; you land {:.1} a turn", play.hits));
     }
     if shape.stages.len() > 1 && shape.clocks.contains(&shape::Clock::Summons) && jobs.aoe < 0.1 {
-        out.push(Limit { role: Role::Aoe, text: "enemies join the fight; little of your damage hits them all".into() });
+        add(Role::Aoe, "enemies join the fight; little of your damage hits them all".into());
+    }
+    // Junk isn't a role's problem: it thins every draw.
+    if foe.deck > 0.0 && lead.junk >= foe.deck * playbook.fights.junk_share {
+        out.push(Limit {
+            role: None,
+            text: format!("about {:.0} junk cards by the end, against a {:.0}-card deck", lead.junk, foe.deck),
+            tags: vec![Tag::CleanUp, Tag::Draw],
+        });
     }
     out
 }
@@ -538,6 +558,7 @@ pub fn for_encounter(
         spike_line: shape.spikes.iter().any(|s| s.certain).then_some(shape.pressure * playbook.fights.spike),
         clocked: !shape.clocks.is_empty(),
         pace: enc.stats.as_ref().map(|s| s.avg_turns).filter(|p| *p > 0.0),
+        slower_by: playbook.fights.slower_by,
     };
     let any = series.iter().any(|(_, s)| s.iter().any(|n| *n > 0.0));
     let joins = waves
@@ -551,7 +572,7 @@ pub fn for_encounter(
     let mods = Mods::of(&all_rules, fades);
     let jobs = jobs::measure(sim);
     outlook(sim, foe, state.hp).map(|o| {
-        let limits = limits(&shape, &jobs, &o.lead, &foe, &mods, &sim.play);
+        let limits = limits(&shape, &jobs, &o.lead, &foe, &mods, &sim.play, playbook);
         Outlook {
             status_cards: if any { playbook.simulation.status_cards } else { 0 },
             joins,
@@ -577,7 +598,7 @@ mod tests {
     }
 
     fn foe<'a>(stages: &'a [Stage<'a>], blast: Option<f32>) -> Foe<'a> {
-        Foe { stages, blast, deck: 10.0, hand: 5.0, spike_line: None, clocked: false, pace: None }
+        Foe { stages, blast, deck: 10.0, hand: 5.0, spike_line: None, clocked: false, pace: None, slower_by: 1.5 }
     }
 
     fn race(o: &Outlook) -> Line {

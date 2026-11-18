@@ -34,6 +34,11 @@ pub enum Action {
         card: CardId,
         roles: Option<Vec<spire_core::playbook::Role>>,
     },
+    /// Set (Some) or clear (None) your own tag override for a card.
+    SetPersonalTags {
+        card: CardId,
+        tags: Option<Vec<spire_core::analysis::tags::Tag>>,
+    },
     SetLargeText(bool),
     /// Follow the system's light/dark mode.
     SetMatchSystem(bool),

@@ -561,6 +561,16 @@ impl SpireApp {
                 }
                 self.recompute();
             }
+            Action::SetPersonalTags { card, tags } => {
+                match tags {
+                    Some(t) => self.playbook.personal_tags.insert(card, t),
+                    None => self.playbook.personal_tags.remove(&card),
+                };
+                if let Err(e) = self.store.save_personal_tags(&self.playbook.personal_tags) {
+                    self.note(format!("Could not save your tags: {e}"));
+                }
+                self.recompute();
+            }
             Action::SetLargeText(on) => {
                 crate::style::set_large(ctx, on);
                 self.settings.large_text = on;

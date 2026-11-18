@@ -8,6 +8,7 @@
 //! Text the reader doesn't recognise is kept as [`Kind::Other`], so the
 //! power still shows with its words.
 
+use crate::analysis::tags::Tag;
 use crate::catalog::{Monster, MonsterPower};
 use crate::ids::MonsterId;
 
@@ -85,6 +86,22 @@ impl Ask {
             Ask::CrossHpLine => "Damage to cross its HP line",
             Ask::KillFirst => "Kill it first",
             Ask::CleanUp => "Clean-Up for the junk",
+        }
+    }
+}
+
+impl Ask {
+    /// The tags that answer it: what to look for in cards.
+    pub fn tags(self) -> &'static [Tag] {
+        match self {
+            Ask::ManyHits => &[Tag::MultiHit, Tag::ChipDamage],
+            Ask::FewBigHits | Ask::CrossHpLine | Ask::KillFirst => &[Tag::Damage],
+            Ask::SpreadDamage => &[Tag::ScalingDamage, Tag::ChipDamage],
+            Ask::ManyCards => &[Tag::ChipDamage, Tag::Draw, Tag::Energy],
+            Ask::FewSkills => &[],
+            Ask::BlockFully => &[Tag::Block, Tag::Weak],
+            Ask::RepeatDebuffs => &[Tag::Weak, Tag::Vulnerable],
+            Ask::CleanUp => &[Tag::CleanUp],
         }
     }
 }
@@ -215,5 +232,6 @@ mod tests {
         }
         assert_eq!(Kind::HitsLoseOne.asks(), &[Ask::ManyHits]);
         assert_eq!(Kind::JunkPerHit.asks(), &[Ask::FewBigHits, Ask::CleanUp]);
+        assert_eq!(Ask::ManyHits.tags(), &[Tag::MultiHit, Tag::ChipDamage]);
     }
 }

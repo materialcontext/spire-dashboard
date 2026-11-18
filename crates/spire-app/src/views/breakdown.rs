@@ -1,6 +1,7 @@
 //! Deck composition: by card type (one stacked bar) and by macro role.
 
 use eframe::egui::{RichText, Sense, Ui, vec2};
+use spire_core::analysis::tags::Tag;
 use spire_core::catalog::CardType;
 use spire_core::playbook::Role;
 
@@ -62,8 +63,18 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
             )));
         }
         // Draw and energy aren't roles: they help every role on bad draws.
-        bar(ui, "Draw", d.draw, 0, max_role, None, style::tag_color());
-        bar(ui, "Energy gain", d.energy, 0, max_role, None, style::tag_color());
+        bar(ui, "Draw", d.tag(Tag::Draw), 0, max_role, None, style::tag_color());
+        bar(ui, "Energy gain", d.tag(Tag::Energy), 0, max_role, None, style::tag_color());
+        // What the deck is made of, by tag (starter cards included).
+        let shares: Vec<String> = Tag::ALL
+            .iter()
+            .filter(|t| !matches!(t, Tag::Draw | Tag::Energy))
+            .filter(|t| d.tag(**t) > 0)
+            .map(|t| format!("{} {}", t.label(), d.tag(*t)))
+            .collect();
+        if !shares.is_empty() {
+            ui.label(caption(format!("Tags: {}", shares.join(" · "))));
+        }
 
         ui.add_space(crate::style::space::xs());
         ui.label(caption(format!("{} upgraded · {} with no role · {} unknown", d.upgraded, d.no_role, d.unknown)));

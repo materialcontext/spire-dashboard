@@ -1,9 +1,9 @@
-//! Card catalog: filter, browse, inspect, and set your own roles.
+//! Card catalog: filter, browse, inspect, and set your own tags and roles.
 
 use std::hash::{Hash, Hasher};
 
 use eframe::egui::{self, RichText, Sense, Ui, vec2};
-use spire_core::analysis::deck::{CardTag, tags};
+use spire_core::analysis::tags::{self, Tag, TagSource};
 use spire_core::catalog::{Card, CardType, Rarity};
 use spire_core::ids::CardId;
 use spire_core::playbook::{Role, RoleSource, contains_ci};
@@ -14,8 +14,7 @@ use crate::style::{self, color::*};
 use crate::widgets::{caption, eyebrow, hairline, secondary, segmented, stripe};
 
 /// Keywords worth filtering by.
-const KEYWORDS: [&str; 10] =
-    ["Draw", "Energy gain", "Eternal", "Exhaust", "Ethereal", "Retain", "Innate", "Unplayable", "Sly", "X cost"];
+const KEYWORDS: [&str; 8] = ["Eternal", "Exhaust", "Ethereal", "Retain", "Innate", "Unplayable", "Sly", "X cost"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CostFilter {
@@ -44,6 +43,7 @@ pub struct CardBrowser {
     pub cost: CostFilter,
     pub role: RoleFilter,
     pub keyword: Option<&'static str>,
+    pub tag: Option<Tag>,
     pub selected: Option<CardId>,
     /// The detail pane shows the upgraded card.
     pub upgraded: bool,
@@ -61,6 +61,7 @@ impl Default for CardBrowser {
             cost: CostFilter::Any,
             role: RoleFilter::Any,
             keyword: None,
+            tag: None,
             selected: None,
             upgraded: false,
             cache: None,
@@ -71,7 +72,17 @@ impl Default for CardBrowser {
 impl CardBrowser {
     fn key(&self, generation: u64) -> u64 {
         let mut h = std::collections::hash_map::DefaultHasher::new();
-        (&self.query, &self.pool, self.card_type, self.rarity, self.cost, self.role, self.keyword, generation)
+        (
+            &self.query,
+            &self.pool,
+            self.card_type,
+            self.rarity,
+            self.cost,
+            self.role,
+            self.keyword,
+            self.tag,
+            generation,
+        )
             .hash(&mut h);
         h.finish()
     }
@@ -94,10 +105,9 @@ impl CardBrowser {
             && match self.keyword {
                 None => true,
                 Some("X cost") => c.x_cost,
-                Some("Draw") => tags(c, false).contains(&CardTag::Draw),
-                Some("Energy gain") => tags(c, false).contains(&CardTag::Energy),
                 Some(k) => c.keywords.iter().any(|x| x.eq_ignore_ascii_case(k)),
             }
+            && self.tag.is_none_or(|t| tags::tags(c, false, v.playbook).iter().any(|x| x.tag == t))
             && match self.role {
                 RoleFilter::Any => true,
                 RoleFilter::Role(r) => v.playbook.roles_of(c).contains(&r),
@@ -191,6 +201,18 @@ pub fn filters(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser) {
     segmented(ui, &mut b.role, &roles);
 
     ui.add_space(crate::style::space::s());
+    ui.label(eyebrow("Tag"));
+    egui::ComboBox::from_id_salt("tag")
+        .selected_text(b.tag.map_or("Any tag", Tag::label))
+        .width(ui.available_width())
+        .show_ui(ui, |ui| {
+            ui.selectable_value(&mut b.tag, None, "Any tag");
+            for t in Tag::ALL {
+                ui.selectable_value(&mut b.tag, Some(t), t.label()).on_hover_text(t.describe());
+            }
+        });
+
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Keyword"));
     let mut keywords: Vec<(Option<&'static str>, &str)> = vec![(None, "Any")];
     keywords.extend(KEYWORDS.iter().map(|k| (Some(*k), *k)));
@@ -279,16 +301,11 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser, out: &mut Vec<Actio
         .color(text_dim()),
     );
     let keywords = card.keywords_at(up);
-    let card_tags = tags(card, up);
-    if !keywords.is_empty() || !card_tags.is_empty() {
+    if !keywords.is_empty() {
         ui.horizontal_wrapped(|ui| {
             for k in keywords {
                 let eternal = k.eq_ignore_ascii_case("Eternal");
                 crate::widgets::chip(ui, k, if eternal { bad() } else { info() });
-            }
-            for t in card_tags {
-                crate::widgets::chip(ui, t.describe(), style::tag_color())
-                    .on_hover_text("Not a role: draw and energy keep every role working on bad draws.");
             }
         });
     }
@@ -314,6 +331,8 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser, out: &mut Vec<Actio
         crate::views::relics::simulator_reading(ui, &spire_core::mechanics::read(card.text_at(up), &orbs, true));
     }
 
+    tag_editor(ui, v, card, up, out);
+
     ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Roles"));
     hairline(ui);
@@ -330,7 +349,7 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser, out: &mut Vec<Actio
             ui.label(secondary("No rule matches this card"));
         }
         RoleSource::Rules(matched) => {
-            ui.label(secondary("From the role rules:"));
+            ui.label(secondary("From its tags and the role rules:"));
             for (role, why) in matched {
                 ui.label(RichText::new(format!("{}: {why}", role.short())).small().color(style::role_color(*role)));
             }
@@ -374,4 +393,54 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser, out: &mut Vec<Actio
             crate::widgets::chip(ui, e.name.as_str(), info()).on_hover_text(&e.text);
         }
     });
+}
+
+/// The card's tags (with the upgrade's numbers), where they come from, and
+/// checkboxes to set your own.
+fn tag_editor(ui: &mut Ui, v: &ViewCtx, card: &Card, up: bool, out: &mut Vec<Action>) {
+    ui.add_space(crate::style::space::s());
+    ui.label(eyebrow("Tags"));
+    hairline(ui);
+    let (current, source) = tags::of(card, up, v.playbook);
+    if current.is_empty() {
+        ui.label(secondary("No tags"));
+    }
+    ui.horizontal_wrapped(|ui| {
+        for t in &current {
+            crate::widgets::chip(ui, t.label(), style::tag_color()).on_hover_text(t.tag.describe());
+        }
+    });
+    ui.label(caption(match source {
+        TagSource::Personal => "Your override",
+        TagSource::Playbook => "Set in the playbook",
+        TagSource::Read => "Read from the card's numbers and text",
+    }));
+    ui.add_space(crate::style::space::xs());
+    let mut edited: Vec<Tag> = current.iter().map(|t| t.tag).collect();
+    let mut changed = false;
+    egui::Grid::new(("tag-editor", &card.id)).num_columns(2).spacing([12.0, 2.0]).show(ui, |ui| {
+        for (i, t) in Tag::ALL.into_iter().enumerate() {
+            let mut on = edited.contains(&t);
+            if ui.checkbox(&mut on, t.label()).on_hover_text(t.describe()).changed() {
+                changed = true;
+                if on {
+                    edited.push(t);
+                } else {
+                    edited.retain(|x| *x != t);
+                }
+            }
+            if i % 2 == 1 {
+                ui.end_row();
+            }
+        }
+    });
+    if changed {
+        edited.sort();
+        out.push(Action::SetPersonalTags { card: card.id.clone(), tags: Some(edited) });
+    }
+    if source == TagSource::Personal
+        && ui.add(egui::Button::new(RichText::new("Reset to the reading").color(text_dim()))).clicked()
+    {
+        out.push(Action::SetPersonalTags { card: card.id.clone(), tags: None });
+    }
 }
