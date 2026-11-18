@@ -95,4 +95,9 @@ pub struct Status {
     pub conflict: Option<spire_data::game_run::GameRun>,
     /// Runs already filed from the game, so they're not adopted again.
     pub filed: Vec<String>,
+    /// Why the game's run isn't being followed, when something stops it.
+    pub problem: Option<String>,
+    /// Waiting for the next run: the game's latest run ended before we
+    /// followed it.
+    pub waiting: bool,
 }

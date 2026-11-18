@@ -702,8 +702,27 @@ impl SpireApp {
         };
         self.ui.follow.no_link = false;
         let hint = link.hint();
+        // Where following stops, if it does, so Settings and the log can say.
+        let read = match (json, link.in_progress, &link.run_save) {
+            (Some(j), ..) => spire_data::game_run::read(&j, &self.catalog, &hint).map_err(|why| {
+                let what = if link.in_progress { "the game's run save" } else { "the game's last finished run" };
+                format!("Can't follow: couldn't read {what}: {why}.")
+            }),
+            (None, true, None) => {
+                Err("The game hasn't saved this run yet (no current_run.save in its save folder).".to_string())
+            }
+            (None, true, Some(path)) => Err(format!("Can't follow: couldn't open {}.", path.display())),
+            (None, false, _) => Err(String::new()),
+        };
         self.ui.follow.link = Some(link);
-        let Some(game) = json.and_then(|j| spire_data::game_run::read(&j, &self.catalog, &hint)) else { return };
+        let game = match read {
+            Ok(game) => game,
+            Err(problem) => {
+                self.follow_problem((!problem.is_empty()).then_some(problem));
+                return;
+            }
+        };
+        self.follow_problem(None);
         let key = format!("game:{}", game.key);
         if self.ui.follow.filed.contains(&key) {
             return;
@@ -725,6 +744,7 @@ impl SpireApp {
             }
         } else if game.ended {
             // A run that finished before we followed it: leave it be.
+            self.ui.follow.waiting = true;
         } else if !self.state.started() || self.run.ended() {
             self.adopt(game);
         } else {
@@ -732,8 +752,19 @@ impl SpireApp {
         }
     }
 
+    /// Notes why following stopped (once per reason), or clears it.
+    fn follow_problem(&mut self, problem: Option<String>) {
+        if problem != self.ui.follow.problem
+            && let Some(p) = &problem
+        {
+            self.note(p.clone());
+        }
+        self.ui.follow.problem = problem;
+    }
+
     /// Makes the game's run the app's run.
     fn adopt(&mut self, game: spire_data::game_run::GameRun) {
+        self.ui.follow.waiting = false;
         let key = format!("game:{}", game.key);
         let started_at = game.start_time.map_or_else(spire_data::now_rfc3339, spire_data::rfc3339);
         self.run = Run { events: game.events, started_at: Some(started_at), source: Some(key), notes: None };
@@ -926,11 +957,30 @@ mod follow_tests {
     }
 
     #[test]
+    fn says_why_it_cannot_follow() {
+        let (mut app, ctx) = app();
+        // A save the converter can't read: the reason shows, once.
+        app.sync_game(update("\u{1f}\u{8b}binary".into(), true), &ctx);
+        let problem = app.ui.follow.problem.clone().expect("a reason");
+        assert!(problem.contains("isn't plain JSON"), "{problem}");
+        assert!(!app.state.started());
+        // No run save yet.
+        let link = Link { in_progress: true, ..Link::default() };
+        app.sync_game(Update::Run { link: Box::new(link), json: None }, &ctx);
+        assert!(app.ui.follow.problem.as_deref().is_some_and(|p| p.contains("hasn't saved")));
+        // Once it reads, the reason clears.
+        app.sync_game(update(in_progress(3), true), &ctx);
+        assert_eq!(app.ui.follow.problem, None);
+        assert!(app.run.source.is_some());
+    }
+
+    #[test]
     fn a_finished_run_seen_first_is_left_alone() {
         let (mut app, ctx) = app();
         app.sync_game(update(FINISHED.to_string(), false), &ctx);
         assert!(!app.state.started());
         assert!(app.store.archived_runs().is_empty());
+        assert!(app.ui.follow.waiting);
     }
 
     #[test]
