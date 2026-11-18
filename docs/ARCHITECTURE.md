@@ -144,11 +144,19 @@ The style layer (`style/`) has these parts:
 - **Motion constants:** `FADE` 83 ms and `MOVE` 167 ms.
 - **Per-look flags:** `caps_headings`, `motion`.
 
-`monitor.rs` follows the game for monitored runs. A background thread
-watches the companion mod's link file and the run save it names, and sends
-them on when they change. `SpireApp` then reads the save into events
-(`spire-data::game_run`) and adopts, updates or files the run. The mod
-itself is in `mod/SpireDashboardLink` (C#); see `docs/MONITORED_RUN.md`.
+Monitored runs are split three ways:
+
+- `monitor.rs` does the IO. A background thread watches the companion
+  mod's link file and every profile's run save, and sends them on when
+  they change.
+- `follow.rs` decides, as pure functions. `read` turns what arrived into
+  the game's run (`spire-data::game_run`) or the reason following stopped;
+  `step` says what that does to the app's run: advance, adopt, ask
+  (conflict), wait, or nothing.
+- `SpireApp::sync_game` applies the step.
+
+The mod itself is in `mod/SpireDashboardLink` (C#); see
+`docs/MONITORED_RUN.md`.
 
 `chrome.rs` sets up the window frame. There are three kinds:
 
@@ -226,7 +234,9 @@ Notes:
 ## Community runs: exact lineups
 
 `spire-data/src/codex_runs.rs` reads `/api/exports/runs`, which returns
-gzipped JSON lines with one community-submitted run each. Every fight records
+gzipped JSON lines with one community-submitted run each. Those are the
+game's own run files, so it shares `run_file.rs` with `game_run.rs`: one
+description of the format, for finished runs and the live save alike. Every fight records
 its `monster_ids`, duplicates included.
 
 The aggregation:
