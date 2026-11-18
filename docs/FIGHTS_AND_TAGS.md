@@ -1,6 +1,6 @@
 # Fight shapes, winning lines and card tags: plan
 
-Status: **decided**; D10 is proposed. See the decisions at the end. Nothing here
+Status: **decided**. Building starts with F1. Nothing here
 is built yet.
 
 ## The idea
@@ -23,21 +23,33 @@ A deck either can or can't play each line. The dashboard should say:
 - which one players usually take;
 - what your deck is short of for the line that's closest to working.
 
-**Jobs** replace the five roles. A job is something a deck has to be able to
-do in a fight: hold steady pressure, survive a big turn, kill fast, and so
-on. Lines are made of jobs, and a fight's shape says which jobs it asks for.
+**Roles** are what the player sees, on the deck and on each card. They're
+the problems a deck solves:
 
-**Tags** are how a shortfall in a job turns into a card pick. They say what
-each card does: Block, Damage, Weak and so on.
+- Mitigation
+- Survival
+- Fast Damage
+- Scaling Damage
+- AoE
+- Chip
+
+Each role is backed by a **job**, which the deck simulator measures: how
+well the deck actually does that thing. A fight's shape and rules say which
+roles it asks for, and lines are made of roles.
+
+**Tags** say what each card does: Block, Damage, Multi-Hit, Weak and so on.
+A card's roles come from its tags. A shortfall in a role points at the tags
+to look for.
 
 There are three layers:
 
-1. **Fight shape** (enemy side): from move patterns, keeping spikes and
-   quiet turns rather than averaging them away. A shape asks for jobs.
-2. **Jobs** (player side): measured by the deck simulator, not by counting
-   cards. Each says how well the deck does it.
-3. **Lines:** made of jobs, played out against the shape. Each line gives
-   whether it works, how many turns, what it costs in HP, and the job that
+1. **Fight shape and rules** (enemy side): from move patterns and monster
+   powers, keeping spikes and quiet turns rather than averaging them away.
+   A shape asks for roles.
+2. **Roles** (player side): each measured as a job by the deck simulator,
+   not by counting cards.
+3. **Lines:** made of roles, played out against the shape. Each line gives
+   whether it works, how many turns, what it costs in HP, and the role that
    limits it.
 
 ## What the data shows today
@@ -123,48 +135,65 @@ Then each gap is researched, and the findings ship as a curated data layer.
 - **Re-checked at data refresh.** `refresh-bundle` reports when Codex
   starts covering one of them, and the curated entry gives way to Codex.
 
-### 2. Jobs (`analysis::jobs`, core; replace the five roles)
+### 2. Roles and their jobs (`analysis::roles`, core; replace the five roles)
 
-The roles (frontload or scaling damage and defense, "consistency") count
-cards by kind. They don't say whether the deck can *solve* anything. Jobs
-are what fights ask a deck to do.
+The five roles we have (frontload or scaling damage and defense,
+"consistency") count cards by kind. They don't say whether the deck can
+*solve* anything.
 
-- **Measured, not counted.** Each job comes from the deck simulator's
-  per-turn distributions, so it reflects what the deck actually puts out,
-  draws and energy included.
-- **Plain names.** No job shares a name with a card or relic.
+The new roles are named for the problems fights pose. Each is backed by a
+job: what the deck simulator measures, from its per-turn distributions,
+draws and energy included.
 
-| Job | The deck can… | Measured as | Asked for by |
+| Role | Job: the deck can… | Measured as | Asked for by |
 |---|---|---|---|
-| **Block every turn** | absorb steady pressure, turn after turn | Block on a normal turn (low end) | Steady and alternating fights (Gardeners, Terror Eel) |
-| **Survive big hits** | take a spike turn | Block when the turn goes all to defense, plus Weak's cut | Spikes (Knight Gang 58, Mecha Knight 40–50, Vantom 26) |
-| **Kill fast** | do most of the work before the fight turns | Damage over the first 3 turns, and in the best single turn | Clocks (ramps, summons, blasts, status piles), early free turns (Effigy asleep), quiet turns between spikes |
-| **Scale up** | win a long fight | How output rises from turn 1 to turn 5 | High HP, bosses, ramping enemies |
-| **Hit every enemy** | handle a group | Share of damage that hits all enemies | Groups and summons (Phrog's Wrigglers) |
-| **Hold up on bad draws** | keep working through bad hands and junk | How high the low end of the spread is (draw, energy, cleanup, resources) | Status fights; every line, at its limit |
+| **Mitigation** | absorb steady pressure, turn after turn | Block on a normal turn (low end), plus Weak's cut | Steady and alternating fights (Gardeners, Terror Eel) |
+| **Survival** | take a spike turn | Block when the turn goes all to defense, plus Weak's cut | Spikes (Knight Gang 58, Mecha Knight 40–50, Vantom 26) |
+| **Fast Damage** | do most of the work before the fight turns | Damage over the first 3 turns, and in the best single turn | Clocks (ramps, summons, blasts, status piles), early free turns (Effigy asleep), quiet turns between spikes |
+| **Scaling Damage** | win a long fight | How damage rises from turn 1 to turn 5 | High HP, bosses, ramping enemies |
+| **AoE** | handle a group | Share of damage that hits all enemies | Groups and summons (Phrog's Wrigglers) |
+| **Chip** | wear down an enemy that has to be hit many times | Hits landed per turn | Slippery (Vantom), Intangible (Soul Fysh, Test Subject), Skittish (Gardeners), Hardened Shell (Skulking Colony) |
+| *(no role)* | keep working on bad draws and junk | How high the low end of the spread is (draw, energy, clean-up, resources) | Status fights; every line, at its limit |
 
-Lines are made of jobs:
+The last row is measured and shown as a note ("your deck stalls on 1 hand in
+4"), not as a role: it's how well every role holds up, not a problem of its
+own.
 
-| Line | Jobs |
+Lines are made of roles:
+
+| Line | Roles |
 |---|---|
-| Wall | Block every turn |
-| Race | Kill fast |
-| Windows | Survive big hits, then Kill fast in the quiet turns |
-| Scale | Scale up, with enough Block every turn to get there |
+| Wall | Mitigation |
+| Race | Fast Damage (Chip, when a fight rule caps damage per hit) |
+| Windows | Survival on the spike turns, Fast Damage in the quiet ones |
+| Scale | Scaling Damage, with enough Mitigation to get there |
 
-*Hit every enemy* and *Hold up on bad draws* modify any line. Effigy is a
-Race: its two sleeping turns are free damage, so Kill fast decides it.
+AoE modifies any line against a group. Effigy is a Race: its two sleeping
+turns are free damage, so Fast Damage decides it.
 
-Everywhere roles appear today, jobs take their place:
+**Cards get roles from their tags** (section 4), by rules in the playbook.
+Thresholds such as how big a Block counts toward Survival are strategy
+beliefs, so they live there too.
 
-- **The deck panel** shows how well each job is done, next to decks that
-  cleared the act.
-- **The act targets** become benchmarks per job.
-- **Each enemy view** shows the jobs the fight asks for, from its shape,
-  instead of "role" demands.
-- **Each card** shows the jobs it helps (the change to the deck's jobs when
-  added, simulated); its tags show what it does.
-- **Personal role overrides** go away; personal tag overrides replace them.
+| Role | From tags |
+|---|---|
+| Mitigation | Block, Weak, Scaling (block side) |
+| Survival | Block (big for its cost), Weak, Setup (Stretch) |
+| Fast Damage | Damage, Vulnerable, Setup (Vigor, Aim), Energy |
+| Scaling Damage | Scaling (damage side) |
+| AoE | Area |
+| Chip | Multi-Hit, Chip Damage |
+
+- **The deck panel** shows each role as its measured job, next to decks
+  that cleared the act, plus the share of cards holding each role.
+- **The act targets** become benchmarks per role.
+- **Each enemy view** shows the roles the fight asks for.
+- **Each card** shows its roles and its tags.
+- **Personal role overrides stay.** Saved overrides migrate:
+  - frontload damage becomes Fast Damage;
+  - scaling damage becomes Scaling Damage;
+  - frontload and scaling defense become Mitigation;
+  - consistency is dropped, since it's now a note, not a role.
 
 ### 2b. Fight rules: powers that change what works
 
@@ -177,11 +206,11 @@ hit, cards played, Skills played, debuffs applied, and unblocked damage.
 
 | Rule (power) | Fight | Asks for | Measured as |
 |---|---|---|---|
-| Slippery | Vantom | Many hits | Hits per turn |
-| Intangible, Nemesis | Soul Fysh, Test Subject | Many hits, or saving damage for other turns | Hits per turn |
-| Skittish | Phantasmal Gardeners | Many hits (the first one only opens it up) | Hits per turn |
+| Slippery | Vantom | Many hits (Chip) | Hits per turn |
+| Intangible, Nemesis | Soul Fysh, Test Subject | Many hits (Chip), or saving damage for other turns | Hits per turn |
+| Skittish | Phantasmal Gardeners | Many hits (Chip): the first one only opens it up | Hits per turn |
 | Personal Hive | Entomancer | Few, big hits, and Cleanup for the Dazed | Damage per hit; Dazed added |
-| Hardened Shell | Skulking Colony | Damage spread over turns, not one burst | Damage past the cap is wasted |
+| Hardened Shell | Skulking Colony | Damage spread over turns, not one burst (Chip) | Damage past the cap is wasted |
 | Slow | Bygone Effigy | Many cards per turn | Cards played per turn |
 | Enrage | Test Subject | Few Skills | Skills played per turn |
 | Painful Stabs | Test Subject | No unblocked attack damage | Turns with unblocked hits |
@@ -233,13 +262,16 @@ Each line is played out against the shape, phase by phase:
 
 ### 4. Tags (card vocabulary)
 
-These are as in the earlier draft: read from card numbers and the mechanics
-reader, with playbook rules as a fallback and overrides kept. A tag carries
-its number where it has one.
+Tags say what a card does. They're read from card numbers and the mechanics
+reader, with playbook rules as a fallback, and overrides are kept. A tag
+carries its number where it has one ("Damage 9", "Multi-Hit 3×4",
+"Block 8").
 
 | Tag | Means |
 |---|---|
 | **Damage** | Deals damage to one enemy |
+| **Chip Damage** | Small, cheap damage: low damage for a 0–1 cost card (the line is in the playbook) |
+| **Multi-Hit** | Hits more than once (each hit counts for Chip, Arrow returns and on-hit rules) |
 | **Area** | Hits every enemy |
 | **Block** | Gains Block |
 | **Weak** | Cuts what enemies deal (Weak, lowering their Strength) |
@@ -248,26 +280,21 @@ its number where it has one.
 | **Energy** | Gains energy or makes cards cheaper |
 | **Scaling** | Grows over the fight (Strength, Dexterity, Focus, Plating, Poison, Doom, powers acting every turn), on the damage or block side |
 | **Setup** | Boosts the next card of a kind: Aim (Arrow), Stretch (Block), Vigor (Attack) |
-| **Cleanup** | Exhausts or removes junk (Status, Curse) |
+| **Clean-Up** | Gets rid of junk cards (exhausts or removes Status and Curse cards) |
 
-A line's limiting job, or a fight rule, maps to what raises it:
+A fight rule maps to what answers it, as roles and tags:
 
-| Job or rule | Raised by |
+| Rule | Answered by |
 |---|---|
-| Block every turn | Block, Scaling (block side) |
-| Survive big hits | Block, Weak, Setup (Stretch) |
-| Kill fast | Damage, Vulnerable, Energy, Setup (Vigor, Aim) |
-| Scale up | Scaling |
-| Hit every enemy | Area |
-| Hold up on bad draws | Draw, Energy, Cleanup; resource balance (below) |
-| Many hits (Slippery, Intangible, Skittish) | Multi-hit cards (Damage's chip shows the hits: "3×4") |
-| Few big hits (Personal Hive, Plating) | High damage per hit |
+| Many hits (Slippery, Intangible, Skittish) | Chip: Multi-Hit, Chip Damage |
+| Damage capped per turn (Hardened Shell) | Chip, spread over turns |
+| Few big hits (Personal Hive, Plating) | Fast Damage from high damage per hit; Clean-Up for the Dazed |
+| Junk (Status moves, Painful Stabs) | Clean-Up, Draw, Energy |
 
 ### 4b. Resource balance: Arrows and Stars
 
 Some characters have resources that some cards make and others spend. The
-deck view checks the balance per turn and counts it under *Hold up on bad
-draws*:
+deck view checks the balance per turn and counts it in the bad-draws note:
 
 - **Arrows (the Fool).** Each Shoot needs an Arrow. A shot Arrow sticks in
   the enemy until 3 more attack hits land (each hit of a multi-hit attack
@@ -305,8 +332,8 @@ Aim, Stretch and Vigor last until first used, across turns (confirmed).
   only those in hand.
 - **Deck view.** It flags setup that piles up: many Aim cards, few Shoot
   cards.
-- **Jobs.** Kill fast and Survive big hits include setup cashed in, which
-  is where the value of Aim and Stretch shows.
+- **Roles.** Fast Damage and Survival include setup cashed in, which is where
+  the value of Aim and Stretch shows.
 
 ## Milestones
 
@@ -316,9 +343,9 @@ Each ships as its own PR.
 |---|---|---|
 | **F1** | Fight shape, from patterns with distributions; fight rules read from monster powers; gaps marked; `audit --patterns` prints shapes and rules | Entomancer shows spikes and unknown order; Effigy shows 2 windows then steady; Matriarch and Test Subject are marked as gaps |
 | **F1b** | Research the gaps; `data/patterns.json` with sources, as its own data layer | Entomancer, Matriarch, Test Subject, Decimillipede and Rocket read with sourced patterns |
-| **F2** | Jobs from the simulator, replacing roles in the deck panel, act targets and enemy demands; the simulator also counts hits, damage per hit, cards and Skills played, debuffs applied; Arrow and Star balance | Starter decks give sensible numbers; tests on known decks; a Fool deck heavy on Shoot cards warns |
+| **F2** | The new roles, measured as jobs by the simulator, in the deck panel, act targets and enemy demands; the simulator also counts hits, damage per hit, cards and Skills played, debuffs applied; Arrow and Star balance; old role overrides migrate | Starter decks give sensible numbers; tests on known decks; a Fool deck heavy on Shoot cards warns |
 | **F3** | Lines (Wall, Race, Windows, Scale), phase by phase, with fight rules applied and the limiting job or rule; they replace the survival splits and the outlook text | Terror Eel: Wall works for a block-heavy deck, Race for a damage deck. Effigy reads Race. Vantom's Slippery shows the deck's hits per turn. |
-| **F4** | Tags (core, then UI), with personal tag overrides; limiting jobs mapped to tags; each card's job contributions | Every class card is tagged or listed in `audit --tags` |
+| **F4** | Tags (core, then UI), with personal tag overrides; card roles from tags; limiting roles and rules mapped to tags | Every class card is tagged or listed in `audit --tags` |
 | **F5** | Benchmarks from community runs: tag shares and jobs of decks that cleared each act; community pace per fight | The catalog carries percentiles with sample sizes; the deck panel shows shortfalls |
 | **F6** | Setup value: Aim, Stretch and Vigor scored by their consumers | The Fool's Nock test; the pile-up warning |
 
@@ -327,9 +354,14 @@ measured against. Tags come once lines need a vocabulary for "what to add".
 
 ## Decisions
 
-- **D1 Tags:** the ten. *Decided.*
-- **D2 Roles:** replaced, by jobs rather than tags, so the deck is described
-  by how it solves fights. *Decided; jobs are proposed above.*
+- **D1 Tags:** the ten, plus Chip Damage and Multi-Hit. Cleanup is spelled
+  Clean-Up. *Decided.*
+- **D2 Roles:** kept for the player and on cards, renamed for the problems
+  they solve:
+  - Mitigation, Survival, Fast Damage, Scaling Damage, AoE;
+  - plus Chip, for enemies that must be hit many times.
+
+  Each is measured as a job. Bad draws is a note, not a role. *Decided.*
 - **D3 Benchmark decks:** decks that cleared that act's boss, by character,
   falling back to all characters. *Decided.*
 - **D4 Starter cards:** counted in tag shares, and shown apart.
@@ -338,10 +370,10 @@ measured against. Tags come once lines need a vocabulary for "what to add".
 - **D6 Arrows and Stars:** resource balance per turn. Arrows count returns
   from attack hits, at 3 hits each, multi-hits counting each hit. Stars count
   spent against gained. *Decided.*
-- **D9 Job names:** plain phrases that share no name with a card or relic
-  ("Survive big hits", not "Brace"). *Decided.*
+- **D9 Names:** the roles above, which share no name with a card or relic.
+  Jobs are internal. *Decided.*
 - **D10 Fight rules:** read from monster powers, and played into the lines.
-  *Proposed, from your Vantom point.*
+  *Decided.*
 - **D7 Pattern gaps:** use the move set for now, then research each gap
   into a sourced data layer (F1b). *Decided.*
 - **D8 Choosing a line:** lead with the one losing least HP, unless it takes
