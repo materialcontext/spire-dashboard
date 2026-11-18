@@ -82,6 +82,10 @@ fn the_curated_fixes_fill_the_gaps() {
     let l = shape("LAGAVULIN_MATRIARCH_BOSS");
     assert_eq!(l.windows.iter().take(3).copied().collect::<Vec<_>>(), vec![1, 2, 3]);
     assert!(l.clocks.contains(&Clock::Ramp));
+    // Three segments cycling Bulk, Writhe, Outgas: Bulk's Strength builds.
     let d = shape("DECIMILLIPEDE_ELITE");
     assert!(d.gaps.is_empty(), "{:?}", d.gaps);
+    assert_eq!(d.kind, Kind::Ramping);
+    // Entomancer grows by 1 Strength per Pheromone Spit (wiki), not 3.
+    assert_eq!(e.turns[3].expected, 28.0);
 }

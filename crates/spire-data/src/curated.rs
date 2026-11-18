@@ -16,7 +16,7 @@
 use serde::Deserialize;
 use spire_core::DataPack;
 use spire_core::analysis::pattern;
-use spire_core::catalog::{AttackPattern, Monster, Phase};
+use spire_core::catalog::{AttackPattern, Monster, MovePower, Phase};
 use spire_core::ids::MonsterId;
 
 const PATTERNS: &str = include_str!("../../../data/patterns.json");
@@ -38,9 +38,22 @@ pub struct Entry {
     pub hp: Option<Phase>,
     #[serde(default)]
     pub phases: Vec<Phase>,
+    /// Corrections to moves the data gets wrong (hits, powers).
+    #[serde(default)]
+    pub moves: Vec<MovePatch>,
     pub sources: Vec<Source>,
     #[serde(default)]
     pub note: String,
+}
+
+/// A correction to one move: only the fields given change.
+#[derive(Clone, Debug, Deserialize)]
+pub struct MovePatch {
+    pub id: String,
+    #[serde(default)]
+    pub hits: Option<u32>,
+    #[serde(default)]
+    pub powers: Option<Vec<MovePower>>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -80,6 +93,16 @@ fn apply(entry: &Entry, m: &Monster) -> Monster {
     }
     if !entry.phases.is_empty() {
         out.phases = entry.phases.clone();
+    }
+    for patch in &entry.moves {
+        if let Some(mv) = out.moves.iter_mut().find(|m| m.id == patch.id) {
+            if let Some(h) = patch.hits {
+                mv.hits = Some(h);
+            }
+            if let Some(p) = &patch.powers {
+                mv.powers = p.clone();
+            }
+        }
     }
     out
 }
@@ -130,6 +153,9 @@ mod tests {
             assert!(e.sources.iter().all(|s| s.url.starts_with("https://") && !s.says.is_empty()), "{}", e.monster);
             let m = bundled.monsters.iter().find(|m| m.id == e.monster).expect("monster in the bundle");
             assert!(needed(&e, m), "{}: the bundled data has no gap here any more", e.monster);
+            for patch in &e.moves {
+                assert!(m.moves.iter().any(|mv| mv.id == patch.id), "{}: no move {}", e.monster, patch.id);
+            }
             let fixed = apply(&e, m);
             if e.pattern.is_some() {
                 let plan = pattern::plan(&fixed, false, 50, pattern::HORIZON);

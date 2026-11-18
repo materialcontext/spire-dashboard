@@ -29,30 +29,47 @@
           }
         ]
       },
+      "moves": [
+        {
+          "id": "PHEROMONE_SPIT",
+          "powers": [
+            {
+              "power": "PERSONAL_HIVE",
+              "target": "monster",
+              "amount": 1
+            },
+            {
+              "power": "STRENGTH",
+              "target": "monster",
+              "amount": 1
+            }
+          ]
+        }
+      ],
       "sources": [
+        {
+          "url": "https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2:Entomancer",
+          "read": true,
+          "says": "The Entomancer repeats a fixed three-move cycle: Beeeees!, then Spear!, then Pheromone Spit, and back to the start. Pheromone Spit: Gains 1 Personal Hive and 1 Strength. If Personal Hive is already at 3, gains 2 Strength instead."
+        },
         {
           "url": "https://spire-codex.com/monsters/entomancer",
           "read": true,
-          "says": "Attack Pattern: 1 Pheromone Spit, 2 Beeeees!, 3 Spear!, then back to the start."
+          "says": "Attack Pattern: 1 Pheromone Spit, 2 Beeeees!, 3 Spear!, then back to the start. Pheromone Spit: gains 2 Strength, gains 1 Personal Hive, and gains 1 Strength."
         },
         {
           "url": "https://spire-codex.com/api/monsters?channel=beta",
           "read": true,
-          "says": "Starts with Beeeees!; Pheromone Spit is followed by Beeeees! (Beeeees! and Spear! have no next move in the data)."
-        },
-        {
-          "url": "https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2:Entomancer",
-          "read": false,
-          "says": "Search summary of this page: a fixed cycle of Beeeees!, then Spear!, then Pheromone Spit, and back to the start."
+          "says": "Starts with Beeeees!; Beeeees! and Spear! have no next move."
         }
       ],
-      "note": "The cycle Codex lists, opened where Codex's data says the fight starts."
+      "note": "Codex adds both of Pheromone Spit's Strength cases together (+3); the wiki says +1, or +2 once Personal Hive is at 3 (from the third Spit). Modelled as +1, so later Beeeees! are slightly understated."
     },
     {
       "monster": "LAGAVULIN_MATRIARCH",
       "pattern": {
         "initial": "SLEEP",
-        "description": "Sleep for 3 turns, then Slash → Disembowel → Slash2 → Soul Siphon → repeat (curated)",
+        "description": "Sleeps 3 turns, then Slash → Disembowel → Slash2 → Soul Siphon → repeat (curated)",
         "states": [
           {
             "id": "SLEEP_MOVE",
@@ -100,22 +117,17 @@
       },
       "sources": [
         {
-          "url": "https://spire-codex.com/monsters/lagavulin_matriarch",
+          "url": "https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2:Lagavulin_Matriarch",
           "read": true,
-          "says": "Starts with Sleep. Opens the fight holding Plating 12 and Asleep 3."
+          "says": "The Lagavulin Matriarch starts Asleep with 12 Plating. It sleeps for 3 turns or until it takes unblocked damage, whichever comes first. When it wakes up, it loses its Plating. After waking, it repeats this four-move cycle: Slash, Disembowel, Slash2, Soul Siphon. Soul Siphon removes 2 Strength and 2 Dexterity from the player and gains 2 Strength."
         },
         {
           "url": "https://spire-codex.com/api/monsters?channel=beta",
           "read": true,
-          "says": "Asleep: 'Awakens upon losing HP or after 2 turns.' (amount 3). Awake: Slash → Disembowel → Slash2 → Soul Siphon → Slash. The sleep state has no next move."
-        },
-        {
-          "url": "https://www.sts2companion.com/bosses/lagavulin-matriarch",
-          "read": false,
-          "says": "Search summary of guides including this one: sleeps for three turns (wakes early on losing HP); the awake cycle is Slash, Disembowel, Slash2, Soul Siphon."
+          "says": "Asleep 3 ('Awakens upon losing HP or after 2 turns.'); awake cycle Slash → Disembowel → Slash2 → Soul Siphon; the sleep state has no next move."
         }
       ],
-      "note": "Asleep's text says 2 turns, its amount and the guides say 3: taken as 3. It wakes sooner if it loses HP, which is the player's choice, so the pattern shows the full sleep."
+      "note": "It wakes sooner on unblocked damage, which is the player's choice, so the pattern shows the full sleep. Its Plating lasts only while it sleeps."
     },
     {
       "monster": "TEST_SUBJECT",
@@ -136,198 +148,145 @@
           "start": "PHASE3_LACERATE"
         }
       ],
+      "moves": [
+        {
+          "id": "MULTI_CLAW",
+          "hits": 3
+        }
+      ],
       "sources": [
+        {
+          "url": "https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2:Test_Subject",
+          "read": true,
+          "says": "Phase 1: 100 HP (111 at A8+), alternates Bite and Skull Bash. Phase 2: revives with 200 (212) HP, gains Painful Stabs and loses Enrage; uses Multi-Claw every turn, starting at 3 hits and gaining +1 hit each use. Phase 3: revives with 300 (313) HP, gains Nemesis, loses Adaptable and Painful Stabs; cycles Lacerate, Big Pounce, Burning Growl. Each phase loses all status effects, including Strength."
+        },
         {
           "url": "https://spire-codex.com/api/monsters?channel=beta",
           "read": true,
-          "says": "Adaptable: 'When this creature would be defeated, it instead revives even stronger.' Respawn gains Painful Stabs and Nemesis; after reviving it uses Multi-Claw if respawns < 2, Lacerate (then Big Pounce, Burning Growl) if respawns >= 2. No HP given."
-        },
-        {
-          "url": "https://bossdown.com/guides/slay-the-spire-2-final-boss-guide/",
-          "read": false,
-          "says": "Search summary of guides including this one: Phase 1: 100/111 + Phase 2: 200/212 + Phase 3: 300/313 = ~600 total (base / Ascension 8+)."
-        },
-        {
-          "url": "https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2:Test_Subject",
-          "read": false,
-          "says": "Search summary of this page: three phases; the boss was reworked in January 2026, so older guides may be out of date."
+          "says": "Adaptable revives it; after reviving it uses Multi-Claw if respawns < 2, Lacerate if respawns >= 2. Multi-Claw is listed as one hit of 10. No HP given."
         }
       ],
-      "note": "HP per phase is from guides only (not read here). The turn spent reviving isn't counted."
+      "note": "Multi-Claw gains a hit each use; modelled at its first 3 hits. Each phase's rules apply to the whole fight here, and the turn spent reviving isn't counted."
     },
     {
       "monster": "DECIMILLIPEDE_SEGMENT_FRONT",
       "pattern": {
-        "initial": null,
-        "description": "Writhe, Bulk or Constrict, never the same twice in a row (curated)",
+        "initial": "BULK",
+        "description": "Bulk → Writhe → Outgas (Constrict in the data) → repeat, each segment starting on a different move (curated)",
         "states": [
           {
-            "id": "PICK",
-            "kind": "random",
-            "branches": [
-              {
-                "move_id": "WRITHE",
-                "no_repeat": true
-              },
-              {
-                "move_id": "BULK",
-                "no_repeat": true
-              },
-              {
-                "move_id": "CONSTRICT",
-                "no_repeat": true
-              }
-            ]
+            "id": "BULK_MOVE",
+            "kind": "move",
+            "move_id": "BULK",
+            "next": "WRITHE_MOVE"
           },
           {
             "id": "WRITHE_MOVE",
             "kind": "move",
             "move_id": "WRITHE",
-            "next": "PICK"
-          },
-          {
-            "id": "BULK_MOVE",
-            "kind": "move",
-            "move_id": "BULK",
-            "next": "PICK"
+            "next": "CONSTRICT_MOVE"
           },
           {
             "id": "CONSTRICT_MOVE",
             "kind": "move",
             "move_id": "CONSTRICT",
-            "next": "PICK"
+            "next": "BULK_MOVE"
           }
         ]
       },
       "sources": [
         {
-          "url": "https://spire-codex.com/monsters/decimillipede_segment",
+          "url": "https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2:Decimillipede",
           "read": true,
-          "says": "Attack Pattern: any of these, in no fixed order: Writhe, Bulk, Constrict (plus Reattach and Dead). Opens the fight holding Reattach 25."
+          "says": "Each segment cycles through the following pattern: Bulk, Writhe, Outgas. Each segment starts on a different move, which will remain the case until one or more of them is killed. When a segment is killed, it uses Reattach to revive with 25 HP provided at least one other segment is still alive."
         },
         {
           "url": "https://spire-codex.com/monsters/decimillipede_segment",
-          "read": false,
-          "says": "Search summary of this page: Writhe never repeats, Bulk never repeats, Constrict never repeats; a dead segment revives in 2 turns with 25 HP while other segments live."
+          "read": true,
+          "says": "Moves Writhe, Bulk, Constrict (Outgas on the wiki: 8 damage, 1 Weak); no pattern given."
         }
       ],
-      "note": "Reattach (a dead segment reviving while others live) isn't modelled: the fight reads as three segments to kill once."
+      "note": "Which segment starts on which move isn't stated; together they always cover all three. Reattach (a dead segment reviving with 25 HP while another lives) isn't modelled."
     },
     {
       "monster": "DECIMILLIPEDE_SEGMENT_MIDDLE",
       "pattern": {
-        "initial": null,
-        "description": "Writhe, Bulk or Constrict, never the same twice in a row (curated)",
+        "initial": "WRITHE",
+        "description": "Bulk → Writhe → Outgas (Constrict in the data) → repeat, each segment starting on a different move (curated)",
         "states": [
-          {
-            "id": "PICK",
-            "kind": "random",
-            "branches": [
-              {
-                "move_id": "WRITHE",
-                "no_repeat": true
-              },
-              {
-                "move_id": "BULK",
-                "no_repeat": true
-              },
-              {
-                "move_id": "CONSTRICT",
-                "no_repeat": true
-              }
-            ]
-          },
           {
             "id": "WRITHE_MOVE",
             "kind": "move",
             "move_id": "WRITHE",
-            "next": "PICK"
-          },
-          {
-            "id": "BULK_MOVE",
-            "kind": "move",
-            "move_id": "BULK",
-            "next": "PICK"
+            "next": "CONSTRICT_MOVE"
           },
           {
             "id": "CONSTRICT_MOVE",
             "kind": "move",
             "move_id": "CONSTRICT",
-            "next": "PICK"
+            "next": "BULK_MOVE"
+          },
+          {
+            "id": "BULK_MOVE",
+            "kind": "move",
+            "move_id": "BULK",
+            "next": "WRITHE_MOVE"
           }
         ]
       },
       "sources": [
         {
-          "url": "https://spire-codex.com/monsters/decimillipede_segment",
+          "url": "https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2:Decimillipede",
           "read": true,
-          "says": "Attack Pattern: any of these, in no fixed order: Writhe, Bulk, Constrict (plus Reattach and Dead). Opens the fight holding Reattach 25."
+          "says": "Each segment cycles through the following pattern: Bulk, Writhe, Outgas. Each segment starts on a different move, which will remain the case until one or more of them is killed. When a segment is killed, it uses Reattach to revive with 25 HP provided at least one other segment is still alive."
         },
         {
           "url": "https://spire-codex.com/monsters/decimillipede_segment",
-          "read": false,
-          "says": "Search summary of this page: Writhe never repeats, Bulk never repeats, Constrict never repeats; a dead segment revives in 2 turns with 25 HP while other segments live."
+          "read": true,
+          "says": "Moves Writhe, Bulk, Constrict (Outgas on the wiki: 8 damage, 1 Weak); no pattern given."
         }
       ],
-      "note": "Reattach (a dead segment reviving while others live) isn't modelled: the fight reads as three segments to kill once."
+      "note": "Which segment starts on which move isn't stated; together they always cover all three. Reattach (a dead segment reviving with 25 HP while another lives) isn't modelled."
     },
     {
       "monster": "DECIMILLIPEDE_SEGMENT_BACK",
       "pattern": {
-        "initial": null,
-        "description": "Writhe, Bulk or Constrict, never the same twice in a row (curated)",
+        "initial": "CONSTRICT",
+        "description": "Bulk → Writhe → Outgas (Constrict in the data) → repeat, each segment starting on a different move (curated)",
         "states": [
           {
-            "id": "PICK",
-            "kind": "random",
-            "branches": [
-              {
-                "move_id": "WRITHE",
-                "no_repeat": true
-              },
-              {
-                "move_id": "BULK",
-                "no_repeat": true
-              },
-              {
-                "move_id": "CONSTRICT",
-                "no_repeat": true
-              }
-            ]
-          },
-          {
-            "id": "WRITHE_MOVE",
+            "id": "CONSTRICT_MOVE",
             "kind": "move",
-            "move_id": "WRITHE",
-            "next": "PICK"
+            "move_id": "CONSTRICT",
+            "next": "BULK_MOVE"
           },
           {
             "id": "BULK_MOVE",
             "kind": "move",
             "move_id": "BULK",
-            "next": "PICK"
+            "next": "WRITHE_MOVE"
           },
           {
-            "id": "CONSTRICT_MOVE",
+            "id": "WRITHE_MOVE",
             "kind": "move",
-            "move_id": "CONSTRICT",
-            "next": "PICK"
+            "move_id": "WRITHE",
+            "next": "CONSTRICT_MOVE"
           }
         ]
       },
       "sources": [
         {
-          "url": "https://spire-codex.com/monsters/decimillipede_segment",
+          "url": "https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2:Decimillipede",
           "read": true,
-          "says": "Attack Pattern: any of these, in no fixed order: Writhe, Bulk, Constrict (plus Reattach and Dead). Opens the fight holding Reattach 25."
+          "says": "Each segment cycles through the following pattern: Bulk, Writhe, Outgas. Each segment starts on a different move, which will remain the case until one or more of them is killed. When a segment is killed, it uses Reattach to revive with 25 HP provided at least one other segment is still alive."
         },
         {
           "url": "https://spire-codex.com/monsters/decimillipede_segment",
-          "read": false,
-          "says": "Search summary of this page: Writhe never repeats, Bulk never repeats, Constrict never repeats; a dead segment revives in 2 turns with 25 HP while other segments live."
+          "read": true,
+          "says": "Moves Writhe, Bulk, Constrict (Outgas on the wiki: 8 damage, 1 Weak); no pattern given."
         }
       ],
-      "note": "Reattach (a dead segment reviving while others live) isn't modelled: the fight reads as three segments to kill once."
+      "note": "Which segment starts on which move isn't stated; together they always cover all three. Reattach (a dead segment reviving with 25 HP while another lives) isn't modelled."
     }
   ]
 }

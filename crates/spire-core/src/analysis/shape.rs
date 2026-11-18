@@ -139,7 +139,8 @@ pub fn read_turns(turns: &[Load], t: &FightThresholds) -> (f32, Vec<Spike>, Vec<
     // Quiet turns only at the start are a slow start; quiet turns that come
     // back make the fight alternate.
     let recurring = windows.len() > start;
-    let kind = if spikes.iter().any(|s| s.certain) {
+    // Spikes early in the fight; big turns only late are a ramp.
+    let kind = if spikes.iter().any(|s| s.certain && s.turn <= EARLY) {
         Kind::Spikes
     } else if start > 0 && !recurring {
         Kind::SlowStart
