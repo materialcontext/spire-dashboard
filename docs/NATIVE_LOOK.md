@@ -90,7 +90,7 @@ has to come from four things:
 | Part of Spire Dashboard | Windows 11 | macOS |
 |---|---|---|
 | Window and title bar | Native frame with Mica. Content extends into a **48px** title bar: tabs, the vitals bar and the run buttons sit in it, with tall system caption buttons. Snap layouts are kept. | Full-size content view with a transparent title bar. Traffic lights stay where the system puts them. The tabs and vitals form a unified toolbar row. |
-| Tabs (Run, Analytics, History, Cards, Relics, Enemies) | NavigationView in **Top** mode: 48px pane, a text item per tab, and a 3px accent selection indicator. | Option A, for a toolbar-centric app: a segmented control in the toolbar. Option B: a sidebar (source list), which is more Mac-like for six destinations and suits the Liquid Glass sidebar. Decision D4. |
+| Tabs (Run, Analytics, History, Cards, Relics, Enemies) | NavigationView in **Top** mode: 48px pane, a text item per tab, and a 3px accent selection indicator. | A **sidebar** (source list), following the user's sidebar size setting, in the Liquid Glass sidebar layer (D4). The vitals bar and run buttons move to the toolbar. |
 | Panels (deck, priorities, threats…) | Content layer on Mica: a `LayerFillColorDefault` surface with `CardStrokeColorDefault` 1px strokes. Rounding per the geometry rules (§4.2). | Plain grouped content on the window background. Section headers in the Headline style. No outlined boxes, since macOS rarely draws them. |
 | Floor log (right panel) | A second content-layer surface, or a Fluent "pane". | An inspector (trailing sidebar), with the toggle in the toolbar. |
 | Settings | A NavigationView settings item (gear, bottom of left mode or far right of top mode) that opens a full Settings page. | **A separate Settings window**, opened with ⌘, from the app menu. Toolbar panes, a title per pane, minimize and zoom dimmed. |
@@ -618,24 +618,27 @@ same helpers they call today, so the views themselves barely change.
   both installed and not.
 - macOS 26 and 27, on Retina and non-Retina displays, at each sidebar size.
 
-## 9. Decisions to make before starting
+## 9. Decisions (made)
 
-- **D1. Default look.** Make **System** the default on Windows and macOS, and
-  keep the current looks as themes? (Recommended: yes.)
-- **D2. Accent.** Use the system accent in System looks, with the Spirebound
-  character color kept as an identity mark (and as the app accent when macOS
-  is set to Multicolor)? (Recommended: yes.)
-- **D3. Windows title bar.** Use the native frame with content in it (snap
-  layouts, real Mica) as the default, and keep the app-drawn bar from PR #9
-  as a setting? (Recommended: yes, after the P0 spike confirms it works
-  alongside Mica For Everyone.)
-- **D4. Navigation on macOS.** Toolbar segmented control or sidebar for the
-  six tabs? (Recommended: sidebar on macOS. On Windows, NavigationView Top in
-  the title bar.)
-- **D5. Dependencies.** Approve the platform crates in §6.5.
-- **D6. Native menus.** Use a native macOS menu bar and native context menus
-  through `muda`? (Recommended: yes on macOS. Windows stays egui-drawn with
-  Fluent tokens.)
+- **D1. Default look:** **System** becomes the default on Windows and macOS.
+  The current looks stay as themes.
+- **D2. Accent:** System looks use the system accent. The Spirebound
+  character color stays as an identity mark, and serves as the app accent
+  when macOS is set to Multicolor.
+- **D3. Windows title bar:** the native frame with content in it (snap
+  layouts, real Mica) is the default. The app-drawn bar from PR #9 stays as
+  a setting. Still subject to the P0 spike confirming it works alongside
+  Mica For Everyone.
+- **D4. macOS navigation:** **sidebar** for the six tabs. Windows uses
+  NavigationView Top in the title bar.
+- **D5. Dependencies:** approved: `windows`/`windows-sys`, `objc2` and
+  `objc2-app-kit`/`objc2-foundation`, `muda`, optionally `window-vibrancy`,
+  and eframe's `accesskit` feature.
+- **D6. Native menus:** a native macOS menu bar and native context menus
+  through `muda`. Windows stays egui-drawn with Fluent tokens.
+
+See also [DESIGN_PRACTICES.md](DESIGN_PRACTICES.md) for the general lessons
+of this research, applied to the existing looks.
 
 ## 10. Still to verify on real machines
 
