@@ -599,14 +599,37 @@ fn powers_where(powers: &[WPowerDef], pick: impl Fn(&str) -> bool) -> Vec<(Strin
         .collect()
 }
 
-/// The first of `powers` the monster starts with or gains from its moves.
-fn death_power(m: &Monster, powers: &[(String, String)]) -> Option<DeathPower> {
-    let gained = m.innate_powers.iter().map(|p| (p.power.as_str(), p.amount)).chain(m.moves.iter().flat_map(|mv| {
+/// The powers a monster starts with or gives itself, with their text, each
+/// once (the first amount the data gives). Strength is left out: patterns
+/// already carry it.
+fn own_powers(m: &Monster, texts: &[(String, String)]) -> Vec<MonsterPower> {
+    let mut out: Vec<MonsterPower> = Vec::new();
+    for (power, amount) in gained(m) {
+        if power == "STRENGTH" || out.iter().any(|p| p.power == power) {
+            continue;
+        }
+        let text = texts.iter().find(|(id, _)| id == power).map_or_else(String::new, |(_, t)| t.clone());
+        out.push(MonsterPower { power: power.to_string(), text, amount: Some(amount).filter(|a| *a > 0) });
+    }
+    out
+}
+
+/// Powers a monster starts with, then those its moves give itself.
+fn gained(m: &Monster) -> impl Iterator<Item = (&str, i32)> {
+    m.innate_powers.iter().map(|p| (p.power.as_str(), p.amount)).chain(m.moves.iter().flat_map(|mv| {
         mv.powers.iter().filter(|p| p.target == PowerTarget::Monster).map(|p| (p.power.as_str(), p.amount))
-    }));
-    for (power, amount) in gained {
+    }))
+}
+
+/// The first of `powers` the monster starts with or gains from its moves.
+fn death_power(m: &Monster, powers: &[(String, String)]) -> Option<MonsterPower> {
+    for (power, amount) in gained(m) {
         if let Some((id, text)) = powers.iter().find(|(id, _)| id == power) {
-            return Some(DeathPower { power: id.clone(), text: text.clone(), amount: Some(amount).filter(|a| *a > 0) });
+            return Some(MonsterPower {
+                power: id.clone(),
+                text: text.clone(),
+                amount: Some(amount).filter(|a| *a > 0),
+            });
         }
     }
     None
@@ -657,6 +680,7 @@ fn map_monster(m: WMonster) -> Monster {
         pattern: m.attack_pattern.map(map_pattern),
         death_blow: None,
         death_summons: None,
+        powers: Vec::new(),
     }
 }
 
@@ -787,10 +811,16 @@ pub fn to_pack(
 
     let powers = parse_optional::<WPowerDef>(responses, "powers")?;
     let (blows, summons) = (death_blow_powers(&powers), death_summon_powers(&powers));
+    let texts: Vec<(String, String)> = powers.iter().map(|p| (p.id.clone(), strip_markup(&p.description))).collect();
     let monsters = parse::<WMonster>(responses, "monsters")?
         .into_iter()
         .map(map_monster)
-        .map(|m| Monster { death_blow: death_power(&m, &blows), death_summons: death_power(&m, &summons), ..m })
+        .map(|m| Monster {
+            death_blow: death_power(&m, &blows),
+            death_summons: death_power(&m, &summons),
+            powers: own_powers(&m, &texts),
+            ..m
+        })
         .collect();
 
     // Act membership comes from the acts endpoint: its lists are ids, while
@@ -1117,6 +1147,7 @@ mod tests {
             pattern: None,
             death_blow: None,
             death_summons: None,
+            powers: Vec::new(),
         };
         let blow = death_power(&giant, &blows).unwrap();
         assert_eq!((blow.power.as_str(), blow.amount), ("STEAM_ERUPTION", Some(15)));

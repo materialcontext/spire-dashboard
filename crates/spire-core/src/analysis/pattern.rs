@@ -397,6 +397,7 @@ mod tests {
             pattern: Some(pattern),
             death_blow: None,
             death_summons: None,
+            powers: Vec::new(),
         }
     }
 
