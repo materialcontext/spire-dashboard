@@ -199,7 +199,7 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
         let outlook = v
             .combat
             .filter(|_| v.state.started() && asc == v.state.ascension && enc.room != RoomType::Monster)
-            .and_then(|c| survival::for_encounter(&c.sim, enc, v.catalog, v.state, &v.playbook.simulation));
+            .and_then(|c| survival::for_encounter(&c.sim, enc, v.catalog, v.state, v.playbook));
         let vulnerable = v.catalog.rules.vulnerable_pct.unwrap_or(50);
         let plans = monsters
             .iter()
@@ -255,8 +255,16 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
             );
         }
         if !m.innate_powers.is_empty() {
-            let powers: Vec<String> = m.innate_powers.iter().map(|p| format!("{} {}", p.power, p.amount)).collect();
-            ui.label(caption(format!("Starts with {}", powers.join(", "))));
+            let powers: Vec<String> = m
+                .innate_powers
+                .iter()
+                .map(|p| format!("{} {}", crate::views::turns::power_name(&p.power), p.amount))
+                .collect();
+            let text: Vec<&str> = m.powers.iter().map(|p| p.text.as_str()).filter(|t| !t.is_empty()).collect();
+            let label = ui.label(caption(format!("Starts with {}", powers.join(", "))));
+            if !text.is_empty() {
+                label.on_hover_text(text.join("\n"));
+            }
         }
         egui::Grid::new(("moves", id)).num_columns(3).spacing([14.0, 2.0]).striped(false).show(ui, |ui| {
             for mv in &m.moves {

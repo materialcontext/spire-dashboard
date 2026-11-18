@@ -82,11 +82,15 @@ kit, so old runs replay even after a data update.
 - `rules`: fight rules read from monster powers' text (Slippery, Intangible,
   Hardened Shell, Personal Hive, Slow, Enrage…), each with what it asks of
   the deck (many hits, few big hits, few Skills…).
-- `survival`: whether a deck is on track against a fight. It plays the fight
-  out on the simulator's average damage and block against the lineup's
-  expected damage per turn, trying several attack/block splits. Status cards
-  the enemies add thin the deck's output, and monsters an on-death power
-  summons (`threats::lineup_waves`) fight as a later stage.
+- `survival`: whether a deck is on track against a fight, and which way wins
+  it. It plays the fight out on the simulator's average damage and block
+  against the lineup's expected damage per turn four ways (Race, Wall,
+  Windows on the spike turns, Scale), with the fight rules (`Mods`, from
+  `rules` and the simulator's hits, cards and Skills) changing the damage
+  that lands. Status cards the enemies add thin the deck's output, and
+  monsters an on-death power summons (`threats::lineup_waves`) fight as a
+  later stage. The lead way loses least HP unless a clocked fight runs past
+  the community's pace; `limits` name the roles that would help.
 - `events`: run `needs` (removal, heal, upgrade…), and a `watchlist` of
   act events ranked by how well they meet those needs.
 - `advice`: act targets, boss gaps, area damage and removable curses (run-specific only).
