@@ -209,7 +209,7 @@ hit, cards played, Skills played, debuffs applied, and unblocked damage.
 | Slippery | Vantom | Many hits (Chip) | Hits per turn |
 | Intangible, Nemesis | Soul Fysh, Test Subject | Many hits (Chip), or saving damage for other turns | Hits per turn |
 | Skittish | Phantasmal Gardeners | Many hits (Chip): the first one only opens it up | Hits per turn |
-| Personal Hive | Entomancer | Few, big hits, and Cleanup for the Dazed | Damage per hit; Dazed added |
+| Personal Hive | Entomancer | Few, big hits, and Clean-Up for the Dazed | Damage per hit; Dazed added |
 | Hardened Shell | Skulking Colony | Damage spread over turns, not one burst (Chip) | Damage past the cap is wasted |
 | Slow | Bygone Effigy | Many cards per turn | Cards played per turn |
 | Enrage | Test Subject | Few Skills | Skills played per turn |

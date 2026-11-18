@@ -67,8 +67,12 @@ pub struct Plan {
     pub repeats_from: Option<usize>,
     /// ...after this many turns: one full pass is `turns[..cycle_end]`.
     pub cycle_end: Option<usize>,
-    /// The data doesn't say what comes after the last turn.
+    /// The data doesn't say what comes after a point.
     pub open_ended: bool,
+    /// From this turn (1-based) the order is lost: each turn lists the moves
+    /// the pattern can still reach (every move after a dead end), so the
+    /// biggest one stays visible as a possible spike.
+    pub order_unknown_from: Option<usize>,
     /// No pattern at all: every turn is any of the monster's moves.
     pub unknown: bool,
 }
@@ -76,7 +80,8 @@ pub struct Plan {
 impl Plan {
     /// Turns worth showing once: one pass of a cycle, else everything known.
     pub fn shown(&self) -> &[Turn] {
-        let end = self.cycle_end.unwrap_or(self.turns.len()).min(self.turns.len());
+        let lost = self.order_unknown_from.map_or(self.turns.len(), |t| t.saturating_sub(1));
+        let end = self.cycle_end.unwrap_or(lost).min(lost).min(self.turns.len());
         if self.unknown { &self.turns[..self.turns.len().min(1)] } else { &self.turns[..end] }
     }
 
@@ -178,6 +183,8 @@ fn walk(monster: &Monster, start: Option<&str>, deadly: bool, vulnerable_pct: u3
         return unknown(&w, horizon);
     }
     let mut out = Plan::default();
+    // Where the order is lost to a pick whose options go different ways.
+    let mut diverged: Vec<&str> = Vec::new();
     let mut visited: Vec<(&str, usize)> = Vec::new();
     let mut last_move: Option<&str> = None;
     // Once a pick has happened, the exact order (and so a repeat) is unknown.
@@ -254,12 +261,63 @@ fn walk(monster: &Monster, start: Option<&str>, deadly: bool, vulnerable_pct: u3
                     moves.iter().map(|(mv, _, _)| move_state(&mv.id).and_then(|x| x.next.as_deref())).collect();
                 state = match nexts.first() {
                     Some(Some(first)) if nexts.iter().all(|n| *n == Some(*first)) => by_id(first),
-                    _ => None,
+                    _ => {
+                        diverged = nexts.into_iter().flatten().collect();
+                        None
+                    }
                 };
             }
         }
     }
+    if out.open_ended && out.turns.len() < horizon {
+        // The move set from here on: what the pattern can still reach from
+        // where the order was lost, or every move after a dead end.
+        let reach = reachable(pattern, &diverged);
+        let moves: Vec<&MonsterMove> = if reach.is_empty() {
+            monster.moves.iter().collect()
+        } else {
+            monster.moves.iter().filter(|m| reach.contains(&m.id.as_str())).collect()
+        };
+        if !moves.is_empty() {
+            out.order_unknown_from = Some(out.turns.len() + 1);
+            let options: Vec<MoveOption> = moves.iter().map(|m| w.option(m, None, None)).collect();
+            out.turns.resize(horizon, Turn { options, vulnerable: false });
+        }
+    }
     out
+}
+
+/// Move ids reachable from the given states, following moves' next states
+/// and picks' branches (an empty pick: the moves that return to it).
+fn reachable<'a>(pattern: &'a crate::catalog::AttackPattern, from: &[&'a str]) -> Vec<&'a str> {
+    let mut seen: Vec<&str> = Vec::new();
+    let mut moves: Vec<&str> = Vec::new();
+    let mut queue: Vec<&str> = from.to_vec();
+    while let Some(id) = queue.pop() {
+        if seen.contains(&id) {
+            continue;
+        }
+        seen.push(id);
+        let Some(s) = pattern.states.iter().find(|s| s.id == id) else { continue };
+        match s.kind {
+            StateKind::Move => {
+                moves.extend(s.move_id.as_deref());
+                queue.extend(s.next.as_deref());
+            }
+            _ => {
+                let picks = s.branches.iter().filter_map(|b| {
+                    pattern
+                        .states
+                        .iter()
+                        .find(|x| x.kind == StateKind::Move && x.move_id.as_deref() == Some(b.move_id.as_str()))
+                });
+                let returning =
+                    pattern.states.iter().filter(|x| x.kind == StateKind::Move && x.next.as_deref() == Some(id));
+                queue.extend(picks.chain(returning).map(|x| x.id.as_str()));
+            }
+        }
+    }
+    moves
 }
 
 fn unknown(w: &Walker, horizon: usize) -> Plan {
@@ -272,6 +330,7 @@ fn unknown(w: &Walker, horizon: usize) -> Plan {
         repeats_from: None,
         cycle_end: None,
         open_ended: false,
+        order_unknown_from: None,
         unknown: true,
     }
 }
