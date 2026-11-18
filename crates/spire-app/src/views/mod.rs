@@ -172,16 +172,24 @@ pub fn root(
     egui::Panel::right("log").frame(side).resizable(true).default_size(330.0).min_size(280.0).show(ui, |ui| {
         // Until the act and its boss are set, the log is locked and dimmed so
         // nothing gets logged against the wrong act.
-        let locked = log_locked(v);
+        let locked = log_locked(v) || v.following;
         egui::ScrollArea::vertical().show(ui, |ui| {
             ui.add_enabled_ui(!locked, |ui| log::show(ui, v, draft, out));
         });
-        if locked {
-            dim(ui, if v.state.act.is_none() { "Choose the act first" } else { "Choose the boss first" });
+        if v.following {
+            dim(
+                ui,
+                "Following the game",
+                "Floors log themselves as you play. Turn off Follow the game in Settings to log by hand.",
+            );
+        } else if locked {
+            let why = if v.state.act.is_none() { "Choose the act first" } else { "Choose the boss first" };
+            dim(ui, why, "The floor log unlocks once it's set.");
         }
     });
     egui::CentralPanel::default().frame(center).show(ui, |ui| {
         egui::ScrollArea::vertical().show(ui, |ui| {
+            follow_conflict(ui, st, out);
             if v.state.act.is_none() {
                 start::enter_act(ui, v, out);
                 return;
@@ -267,6 +275,26 @@ fn sidebar(ui: &mut Ui, st: &mut UiState) {
     });
 }
 
+/// The game is on a different run than the one being logged by hand.
+fn follow_conflict(ui: &mut Ui, st: &UiState, out: &mut Vec<Action>) {
+    let Some(game) = &st.follow.conflict else { return };
+    let note = format!(
+        "The game is on another run ({} floors in). Follow it, and this run is filed in history as Abandoned.",
+        game.floors
+    );
+    crate::widgets::callout(ui, "The game is on another run", Some(&note), |ui| {
+        ui.horizontal(|ui| {
+            if crate::widgets::choice_button(ui, "Follow the game's run").clicked() {
+                out.push(Action::FollowGameRun);
+            }
+            if ui.button("Stop following").clicked() {
+                out.push(Action::SetFollowGame(false));
+            }
+        });
+    });
+    ui.add_space(GAP);
+}
+
 /// Whether the floor log waits on the act or its boss being chosen.
 pub fn log_locked(v: &ViewCtx) -> bool {
     log_locked_state(v.state)
@@ -278,7 +306,7 @@ pub fn log_locked_state(s: &spire_core::run::RunState) -> bool {
 
 /// Dims a locked panel and says why. Painted over the content, so the
 /// locked controls stay visible but plainly out of play.
-fn dim(ui: &mut Ui, why: &str) {
+fn dim(ui: &mut Ui, why: &str, detail: &str) {
     use crate::style::color::*;
     let rect = ui.max_rect().expand2(egui::vec2(14.0, 0.0));
     let painter = ui.painter();
@@ -287,13 +315,11 @@ fn dim(ui: &mut Ui, why: &str) {
     let small = egui::TextStyle::Body.resolve(ui.style());
     let top = rect.top() + 90.0;
     painter.text(egui::pos2(rect.center().x, top), egui::Align2::CENTER_CENTER, why, title, accent());
-    painter.text(
-        egui::pos2(rect.center().x, top + 28.0),
-        egui::Align2::CENTER_CENTER,
-        "The floor log unlocks once it's set.",
-        small,
-        text_dim(),
-    );
+    // The explanation wraps to the panel, centred under the title.
+    let mut job = egui::text::LayoutJob::simple(detail.to_string(), small, text_dim(), rect.width() - 48.0);
+    job.halign = egui::Align::Center;
+    let galley = painter.layout_job(job);
+    painter.galley(egui::pos2(rect.center().x, top + 18.0), galley, text_dim());
 }
 
 /// The commit notice, bottom centre, with Undo.

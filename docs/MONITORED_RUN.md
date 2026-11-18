@@ -1,6 +1,8 @@
 # Plan: monitored runs
 
-Status: research and plan only. Nothing here is built.
+Status: built with the companion mod (route B), per the decisions below.
+It hasn't run against a real game yet: everything is checked against
+community `.run` files and simulated link files.
 
 Today the player logs each floor by hand. A **monitored run** would follow
 the game and log floors by itself: the room, the fight or event, cards,
@@ -237,7 +239,48 @@ existing analysis later:
 
 ---
 
-## 4. Decisions to make
+## 4. Decisions (made)
+
+- **M1. Allowed.** The app may read the game's run saves and the mod's link
+  file while monitoring is on. It never reads the game's memory, never
+  writes to the game's folders, and reads nothing while monitoring is off.
+- **M2. The companion mod.** Kept as small as possible: it reports where
+  the run save is, when it changed, and the act's boss. The game's own save
+  stays the record of the run.
+- **M3. No live combat** for now.
+- **M4. GitHub.** CI builds the mod and attaches the zip; no Workshop.
+- **M5. Card offers aren't recorded.**
+
+### As built
+
+- **`mod/SpireDashboardLink`** (C#, about 250 lines):
+  - Read-only, with no Harmony patches.
+  - Twice a second, on the game's main thread, it reads through reflection:
+    - `RunManager.Instance.IsInProgress` and `DebugOnlyGetState()`: the
+      current act index, the act, and its boss encounters.
+    - `SaveManager.Instance.CurrentProfileId` and
+      `ProgressSaveManager.GetProgressPathForProfile`: the profile's
+      `saves` folder, which is under `modded/` while mods are on.
+  - When anything changed, it writes `game-link.json` in
+    `<local app data>/SpireDashboard/`, atomically.
+  - It builds without the game: `mod/Sts2Stub` stands in for `sts2.dll`'s
+    loader attribute, and Godot comes from NuGet.
+- **`spire-data::game_link`** reads the link and the saves it names.
+- **`spire-data::game_run`** turns a run save or `.run` into our events.
+  It replays as it goes and ends with one correction to the game's own
+  totals.
+- **`spire-app::monitor`** is the watcher thread. It checks two modified
+  times twice a second, reads and sends only on a change, and wakes the UI
+  only then.
+- **`SpireApp`:**
+  - Adopts the game's run when the app has none.
+  - Updates the run it follows, with a toast per new floor.
+  - Files the run in history when it ends.
+  - Asks before replacing a hand-logged run.
+  - Locks the floor log while following.
+  - Leaves HP, including Ancient heals, to the game.
+
+## Earlier options (for the record)
 
 - **M1. The project rule.** Allow reading the game's save files (route A)
   and/or a companion mod (route B). Today `CLAUDE.md` forbids both.

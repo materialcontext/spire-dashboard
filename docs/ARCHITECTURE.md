@@ -142,6 +142,12 @@ The style layer (`style/`) has these parts:
 - **Motion constants:** `FADE` 83 ms and `MOVE` 167 ms.
 - **Per-look flags:** `caps_headings`, `motion`.
 
+`monitor.rs` follows the game for monitored runs. A background thread
+watches the companion mod's link file and the run save it names, and sends
+them on when they change. `SpireApp` then reads the save into events
+(`spire-data::game_run`) and adopts, updates or files the run. The mod
+itself is in `mod/SpireDashboardLink` (C#); see `docs/MONITORED_RUN.md`.
+
 `chrome.rs` sets up the window frame. There are three kinds:
 
 - the app-drawn title bar

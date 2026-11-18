@@ -8,6 +8,7 @@ pub mod app;
 pub mod bench;
 pub mod chrome;
 pub mod draft;
+pub mod monitor;
 pub mod style;
 pub mod views;
 pub mod widgets;

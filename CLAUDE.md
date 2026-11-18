@@ -10,8 +10,9 @@ Slay the Spire 2 macro dashboard: Rust workspace, egui UI. Read `docs/ARCHITECTU
 - `cargo fmt --all --check`
 - `cargo run -p spire-data --bin refresh-bundle`: regenerate `data/catalog.json` from Spire Codex
 - `cargo run -p spire-data --example audit [-- --cards | --sim | --mechanics]`: see how the playbook reads the data, simulate every starter deck, or list what the simulator reads from every power and relic
+- `dotnet build mod/SpireDashboardLink/SpireDashboardLink.csproj -c Release`: build the companion mod (.NET 8 SDK; builds without the game)
 
-fmt, clippy and test must pass before pushing (CI runs them).
+fmt, clippy and test must pass before pushing (CI runs them, and builds the mod).
 
 ## Rules
 
@@ -22,7 +23,7 @@ fmt, clippy and test must pass before pushing (CI runs them).
 - Run state changes only through `RunEvent`/`Change` and `run::apply`. Never mutate `RunState` elsewhere.
 - UI views push `Action`s; only `SpireApp::apply` changes state.
 - Never fetch data without an explicit user action. No background or startup updates.
-- Never read the game process or save files; the player reports state.
+- The player reports state, or, with monitored runs on (Settings → Follow the game), the app reads the game's own run saves and the companion mod's link file. Never read the game's memory or process, never write to the game's folders, and never read anything while monitoring is off.
 - New data sources are adapters that return a `DataPack`; source-specific types stay in their adapter module.
 - Slay the Spire 2 only, beta branch. Never carry over StS1 facts (A20, Act 4, keys, StS1 cards or relics). Game rules come from data (`GameRules`, ascensions) or from community run data, never from memory.
 - UI uses the palette and components in `style/` and `widgets.rs`. The themes' panels are outlined, not filled (frame cost); the System looks follow their platform (Fluent cards, macOS grouped content).

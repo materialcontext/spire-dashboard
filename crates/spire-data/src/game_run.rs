@@ -176,6 +176,8 @@ pub struct ActHint {
 pub struct GameRun {
     /// Identifies the run across saves: start time and seed.
     pub key: String,
+    /// When the run started (Unix seconds), if the game says.
+    pub start_time: Option<i64>,
     pub events: Vec<RunEvent>,
     /// Floors recorded.
     pub floors: usize,
@@ -269,7 +271,7 @@ pub fn read(json: &str, catalog: &Catalog, hint: &ActHint) -> Option<GameRun> {
     if let Some(outcome) = outcome {
         push(&mut events, &mut state, RunEvent::End { outcome, at: None });
     }
-    Some(GameRun { key, events, floors, ended, unknown })
+    Some(GameRun { key, start_time: run.start_time, events, floors, ended, unknown })
 }
 
 /// One floor's changes, naming cards as they sit in the deck now.
