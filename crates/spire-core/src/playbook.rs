@@ -302,11 +302,23 @@ pub struct SimAssumptions {
     pub arrow_return_hits: u32,
     /// Most orb slots a character can have (Spire Codex, orb mechanics).
     pub max_orb_slots: u32,
+    /// Unplayable cards a monster's Status move adds to your deck. The game
+    /// data marks the move ("Status" intent) but not the card or how many,
+    /// so this is an assumption; the survival check uses it.
+    pub status_cards: u32,
 }
 
 impl Default for SimAssumptions {
     fn default() -> Self {
-        SimAssumptions { hand_size: 5, max_hand: 10, turns: 5, trials: 400, arrow_return_hits: 3, max_orb_slots: 10 }
+        SimAssumptions {
+            hand_size: 5,
+            max_hand: 10,
+            turns: 5,
+            trials: 400,
+            arrow_return_hits: 3,
+            max_orb_slots: 10,
+            status_cards: 2,
+        }
     }
 }
 

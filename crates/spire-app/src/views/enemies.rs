@@ -199,7 +199,7 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
         let outlook = v
             .combat
             .filter(|_| v.state.started() && asc == v.state.ascension && enc.room != RoomType::Monster)
-            .and_then(|c| survival::for_encounter(&c.sim, enc, v.catalog, v.state));
+            .and_then(|c| survival::for_encounter(&c.sim, enc, v.catalog, v.state, &v.playbook.simulation));
         let vulnerable = v.catalog.rules.vulnerable_pct.unwrap_or(50);
         let plans = monsters
             .iter()

@@ -145,6 +145,88 @@ pub fn lineup_plans(enc: &Encounter, catalog: &Catalog, scaling: Scaling, turns:
     (plans, hp)
 }
 
+/// Monsters that fight together: the starting lineup, or the ones a power
+/// summons when the wave before dies.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Wave {
+    pub plans: Vec<MonsterPlan>,
+    /// Combined HP (midpoint of the range).
+    pub hp: u32,
+    /// The power that summoned it (`None` for the starting lineup).
+    pub summoned_by: Option<String>,
+}
+
+/// The most common lineup, then the monsters its on-death powers summon.
+///
+/// The data says a power summons and gives its amount; it doesn't say how
+/// many monsters that is, so the amount is read as the count:
+/// - Summoning others (Phrog Parasite's Infested 4): the encounter's
+///   `spawns`, `amount` of them, together in one wave.
+/// - Summoning itself ("in its place", Axebot's Stock 2, or no `spawns`):
+///   `amount` replacements, one wave each, as each holds one less.
+///
+/// Summoned monsters start on their `SPAWNED` move when they have one.
+pub fn lineup_waves(enc: &Encounter, catalog: &Catalog, scaling: Scaling, turns: usize) -> Vec<Wave> {
+    let (plans, hp) = lineup_plans(enc, catalog, scaling, turns);
+    let vulnerable = catalog.rules.vulnerable_pct.unwrap_or(50);
+    let summoned: Vec<(crate::ids::MonsterId, u32, String, bool)> = plans
+        .iter()
+        .filter_map(|mp| {
+            let s = catalog.monsters.get(&mp.monster)?.death_summons.as_ref()?;
+            let amount = s.amount.unwrap_or(1).max(1) as u32;
+            let others = enc.spawns.iter().find(|m| **m != mp.monster);
+            Some(match others {
+                Some(other) => (other.clone(), amount * mp.count, s.power.clone(), false),
+                None => (mp.monster.clone(), amount, s.power.clone(), true),
+            })
+        })
+        .collect();
+    let wave_of = |id: &crate::ids::MonsterId, count: u32, power: &str| -> Option<Wave> {
+        let m = catalog.monsters.get(id)?;
+        let (lo, hi) = m.hp_at(scaling.tough);
+        let plan = pattern::plan_spawned(m, scaling.deadly, vulnerable, turns);
+        let mp =
+            MonsterPlan { monster: id.clone(), name: m.name.clone(), count, plan, death_blow: m.death_blow.is_some() };
+        Some(Wave { plans: vec![mp], hp: (lo + hi) / 2 * count, summoned_by: Some(power.to_string()) })
+    };
+    let mut waves = vec![Wave { plans, hp, summoned_by: None }];
+    for (id, n, power, in_place) in &summoned {
+        let (repeats, count) = if *in_place { (*n, 1) } else { (1, *n) };
+        waves.extend((0..repeats).filter_map(|_| wave_of(id, count, power)));
+    }
+    waves
+}
+
+/// Expected Status moves per enemy turn from a lineup's plans, counting
+/// copies: each puts unplayable cards into the player's deck. Past what a
+/// plan says, its average turn.
+pub fn lineup_statuses(plans: &[MonsterPlan], turns: usize) -> Vec<f32> {
+    let status = |t: &pattern::Turn| -> f32 {
+        let n = t.options.len().max(1) as f32;
+        let weighted: f32 = t.options.iter().map(|o| o.chance.unwrap_or(0.0)).sum();
+        t.options
+            .iter()
+            .filter(|o| o.intent.to_ascii_lowercase().contains("status"))
+            .map(|o| if weighted > 0.0 { o.chance.unwrap_or(0.0) / weighted } else { 1.0 / n })
+            .sum()
+    };
+    (0..turns)
+        .map(|t| {
+            plans
+                .iter()
+                .map(|mp| {
+                    let per = match mp.plan.turns.get(t) {
+                        Some(turn) => status(turn),
+                        None if mp.plan.turns.is_empty() => 0.0,
+                        None => mp.plan.turns.iter().map(status).sum::<f32>() / mp.plan.turns.len() as f32,
+                    };
+                    per * mp.count as f32
+                })
+                .sum()
+        })
+        .collect()
+}
+
 /// Expected damage per enemy turn from a lineup's plans, counting copies.
 pub fn lineup_incoming(plans: &[MonsterPlan], turns: usize) -> Vec<(u32, f32, u32)> {
     let mut total = vec![(0u32, 0f32, 0u32); turns];

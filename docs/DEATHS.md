@@ -128,9 +128,22 @@ Ideas, roughly from cheapest to richest:
 | **Tight** | It wins, losing 60–99%. |
 | **At risk** | It loses all your HP first, or doesn't win within 20 turns. |
 
+What it accounts for beyond the lineup's own damage:
+
+- **Status cards.** Each enemy move with a Status intent adds unplayable
+  cards (`status_cards` in the playbook's `simulation`, 2 by default: the data
+  marks the move, not the count). The deck's damage and block shrink by
+  `deck / (deck + added)` from the next turn on.
+- **Summons on death.** A power whose text says the monster summons when it
+  dies (Infested, Stock) adds a later stage: the encounter's `spawns`, its
+  amount of them (Phrog Parasite: 4 Wrigglers), or that many replacements one
+  at a time when it summons itself (Axebot). They start on their `SPAWNED`
+  move. The amount read as a count is an inference; the tooltip says so.
+
 What it leaves out, so it reads as a guide, not a forecast:
 
-- **Enemies die together.** Damage from one that falls early still counts.
+- **Enemies in a stage die together.** Damage from one that falls early still
+  counts, and damage past a stage's HP carries into the next.
 - **Debuffs.** Weak and Frail on you aren't modelled, and neither are debuffs
   on enemies. The one exception is Vulnerable from the enemy's pattern.
 - **Outside the simulator.** Potions, and cards the simulator can't read.

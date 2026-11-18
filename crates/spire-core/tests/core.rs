@@ -56,6 +56,7 @@ fn monster(id: &str, hp: u32, hit: u32, intent: &str) -> Monster {
         hp_max_asc: None,
         pattern: None,
         death_blow: None,
+        death_summons: None,
     }
 }
 

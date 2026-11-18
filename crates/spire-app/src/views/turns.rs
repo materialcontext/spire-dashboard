@@ -232,41 +232,40 @@ pub fn deaths(
         d.get_temp_mut_or_insert_with::<std::sync::Arc<str>>(id, || deaths_text(plans, s).into()).clone()
     });
     ui.label(RichText::new(&*text).small().color(if rate >= 0.1 { bad() } else { text_dim() })).on_hover_ui(|ui| {
-        ui.label(format!(
-            "{} of {} community fights (Spire Codex) ended the run. A turn is listed when it has at least {:.0}% of those deaths.",
-            s.deaths,
-            s.fights,
-            DEADLY_SHARE * 100.0
-        ));
+        ui.label(format!("{} of {} community fights (Spire Codex) ended the run.", s.deaths, s.fights));
+        let shares: Vec<String> =
+            deadly(Some(s)).iter().take(4).map(|(t, share)| format!("turn {t}: {:.0}%", share * 100.0)).collect();
+        if !shares.is_empty() {
+            ui.label(format!("Deaths by turn: {}.", shares.join(", ")));
+        }
         if let Some((won, died)) = s.hp_in {
             ui.label(format!("Players who won came in with {won} HP (median); those who died, {died}."));
         }
     });
 }
 
+/// "Ends 20% of runs · most on turn 7 (Lunging Bite)". The shares and
+/// counts are in the tooltip.
 fn deaths_text(plans: &[MonsterPlan], s: &EncounterStats) -> String {
-    let rate = s.death_rate();
     let turns: Vec<String> = deadly(Some(s))
         .iter()
-        .take(3)
-        .map(|(t, share)| {
-            let pct = share * 100.0;
-            // A monster that explodes after dying can kill on the turn after
-            // its own death, as well as with that turn's move.
+        .take(2)
+        .map(|(t, _)| {
+            // A monster that explodes after dying can also kill on the turn
+            // after its death.
             let blast = plans.iter().any(|p| p.death_blow) && *t > 1;
             match (move_on(plans, *t), blast) {
-                (Some(m), true) => format!("turn {t} ({m}, or its blast after a turn {} kill, {pct:.0}%)", t - 1),
-                (None, true) => format!("turn {t} (or its blast after a turn {} kill, {pct:.0}%)", t - 1),
-                (Some(m), false) => format!("turn {t} ({m}, {pct:.0}%)"),
-                (None, false) => format!("turn {t} ({pct:.0}%)"),
+                (Some(m), true) => format!("turn {t} ({m} or its blast)"),
+                (None, true) => format!("turn {t} (or its blast)"),
+                (Some(m), false) => format!("turn {t} ({m})"),
+                (None, false) => format!("turn {t}"),
             }
         })
         .collect();
-    let mut text = format!("{:.0}% of runs that reach this fight end here", rate * 100.0);
+    let mut text = format!("Ends {:.0}% of runs", s.death_rate() * 100.0);
     if !turns.is_empty() {
-        text.push_str(&format!(", most on {}", turns.join(", ")));
+        text.push_str(&format!(" · most on {}", turns.join(" and ")));
     }
-    text.push('.');
     text
 }
 
@@ -310,6 +309,21 @@ pub fn outlook(ui: &mut Ui, o: &Outlook, stats: Option<&EncounterStats>) {
             Split::NeedFrom(at) => format!("blocking turns that bring {at}+ damage, attacking all-out otherwise"),
         };
         ui.label(format!("Best simple plan: {plan}."));
+        for j in &o.joins {
+            let who = if j.count == 1 { j.name.clone() } else { format!("{} {}s", j.count, j.name) };
+            ui.label(format!(
+                "Then {who} join ({}), fought once the ones before fall. The data says the power \
+                 summons but not how many, so its amount is read as the count.",
+                spire_core::analysis::pattern::power_words(&j.power)
+            ));
+        }
+        if o.status_cards > 0 && o.best.junk >= 0.5 {
+            ui.label(format!(
+                "Its Status moves add about {:.0} unplayable cards to your deck by then, thinning your draws. \
+                 Counted as {} per move: the game data marks the move but not how many cards.",
+                o.best.junk, o.status_cards
+            ));
+        }
         if let Some(b) = o.best.blast_turn {
             ui.label(format!(
                 "It explodes at the end of your turn after it dies, so the fight costs one more enemy turn \
@@ -329,7 +343,7 @@ pub fn outlook(ui: &mut Ui, o: &Outlook, stats: Option<&EncounterStats>) {
         ui.label(
             RichText::new(
                 "From the deck simulator's average damage and block per turn against the enemies' \
-                 expected moves. Leaves out debuffs on you, enemies dying early, and potions.",
+                 expected moves. Leaves out debuffs on you, enemies dying early, overkill, and potions.",
             )
             .small()
             .color(text_faint()),
