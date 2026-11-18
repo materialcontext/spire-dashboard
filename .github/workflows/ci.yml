@@ -19,7 +19,7 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 
-  # Windows- and macOS-only code (src/platform.rs, the title bar) is
+  # Windows- and macOS-only code (spire-platform, the title bar) is
   # compiled out on Linux, so lint it on those systems too.
   platforms:
     strategy:
@@ -34,3 +34,23 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  # The companion mod (C#). Builds without the game: see mod/Sts2Stub.
+  # The zip is what players drop into <game>/mods/.
+  mod:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: dotnet build mod/SpireDashboardLink/SpireDashboardLink.csproj -c Release
+      - name: Package
+        run: |
+          mkdir -p package/SpireDashboardLink
+          cp mod/SpireDashboardLink/bin/Release/net8.0/SpireDashboardLink.dll package/SpireDashboardLink/
+          cp mod/SpireDashboardLink/SpireDashboardLink.json package/SpireDashboardLink/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SpireDashboardLink
+          path: package/

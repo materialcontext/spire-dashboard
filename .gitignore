@@ -1,1 +1,6 @@
 /target
+
+# Companion mod build output
+mod/**/bin/
+mod/**/obj/
+mod/out/

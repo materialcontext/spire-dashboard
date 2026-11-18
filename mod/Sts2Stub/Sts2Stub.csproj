@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    A compile-time stand-in for the game's sts2.dll, which is proprietary and
+    can't be in the repo or CI. It declares only the one type the mod names
+    directly, with the same assembly name, namespace and constructor, so the
+    real sts2.dll answers for it when the game loads the mod. Never shipped.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>sts2</AssemblyName>
+    <AssemblyVersion>0.0.0.0</AssemblyVersion>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+</Project>
