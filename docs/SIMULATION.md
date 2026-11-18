@@ -24,10 +24,10 @@ Each fact is marked with its source:
 | Step | Rule | Source |
 |---|---|---|
 | 1 | Start from the printed damage, with the upgrade applied. | Data |
-| 2 | Add flat bonuses: Strength; "deals N additional damage" relics and powers (Strike Dummy, Accuracy, Miniature Cannon); and, on the attack's first hit only, Vigor and Aim (Aim only on Shoot cards). | Codex (Strength is additive and comes first); Assumed (that Vigor and Aim join Strength in this step) |
+| 2 | Add flat bonuses: Strength; "deals N additional damage" relics and powers (Strike Dummy, Accuracy, Miniature Cannon); Vigor; and Aim (Shoot cards only). Vigor and Aim are spent by the attack but count on every hit. | Codex (Strength is additive and comes first); Player (Vigor and Aim apply to every hit) |
 | 3 | Multiply: first-attack bonuses (Lethality), then Vulnerable on the target. | Codex (multipliers come after flat bonuses) |
-| 4 | Vulnerable is the game's percentage, 50%. Paper Phrog replaces it ("75% rather than 50%"). Cruelty adds to it: 50 + 25 = 75%. | Data (power text); Assumed (that Cruelty adds rather than multiplies) |
-| 5 | Round down once, per hit. | Codex (each hit goes through the whole pipeline); Wiki (one rounding at the end) |
+| 4 | Vulnerable is the game's percentage, 50%. Paper Phrog replaces it ("75% rather than 50%"). Cruelty adds to it: 50 + 25 = 75%. | Data (power text); Player (Cruelty adds) |
+| 5 | Round down once, per hit. | Codex (each hit goes through the whole pipeline); Wiki (one rounding at the end); still unconfirmed in game |
 | 6 | Multi-hit attacks repeat steps 1–5 for each hit; Thumbscrew adds one hit to attacks that already hit more than once. | Codex; Data |
 
 Example: a Strike (6) with Strike Dummy (+1) into a Vulnerable enemy deals
@@ -42,7 +42,8 @@ Attacks". *[Data]*
 ## Block from a card
 
 Card Block, plus Dexterity, plus "additional Block from Defend cards"
-(Fasten), plus Stretch (consumed). There's no Frail in the simulator, since
+(Fasten), plus Stretch. Stretch is spent by the card but adds to each of its
+Block gains. *[Player]* There's no Frail in the simulator, since
 there are no enemies to apply it. *[Codex]* for the Dexterity step. Block
 from relics, powers and orbs doesn't get Dexterity. *[Codex: "card block"]*
 
@@ -84,7 +85,7 @@ from relics, powers and orbs doesn't get Dexterity. *[Codex: "card block"]*
    other effects.
 3. Fire "whenever you play…" and "every N plays" triggers.
 4. **A power's own triggers start with the next card.** Afterimage doesn't
-   give Block for itself. *[Assumed]* The test is `powers_trigger_on_later_cards_not_themselves`.
+   give Block for itself. *[Player]* The test is `powers_trigger_on_later_cards_not_themselves`.
 5. Exhaust (Exhaust keyword, or Corruption) fires "whenever a card is
    exhausted". Otherwise the card is discarded *after* it resolves, so its own
    draw can't shuffle it back in.
@@ -109,8 +110,9 @@ what the simulator does:
 
 - **Strength or flat bonus vs Vulnerable:** the bonus is added first, then
   multiplied. 6 + 2 Strength into Vulnerable deals 12, not 11.
-- **Vigor on a multi-hit attack:** Vigor is added to the first hit only, before
-  multipliers. *[Assumed]*
+- **Vigor on a multi-hit attack:** Vigor is added to every hit, before
+  multipliers, and spent by that attack. The same goes for Aim on shots, and
+  for Stretch on a card's Block. *[Player]*
 - **Combat-start draw relics vs the opening hand:** they add to it, so Bag of
   Preparation and Ring of the Snake mean a 7-card first hand.
 - **Combat-start energy (Lantern):** it applies after the energy reset, so it
@@ -125,22 +127,16 @@ what the simulator does:
 - **Trigger chains:** a trigger that causes another trigger (a draw that fires
   an on-draw that draws…) stops at three levels deep.
 
-## Open questions
+## Settled and open questions
 
-These are worth checking in game. Each is one line in `sim.rs` if the game
-disagrees:
+**Confirmed by a player:**
+- Cruelty adds to Vulnerable (75%).
+- Vigor, Aim (on shots) and Stretch (on Block) apply to every hit or Block gain of the card that spends them.
+- "Whenever you play a card" powers don't count themselves.
+- No card reads a current value at the moment a same-timing effect fires, so the order of same-timing relics and powers doesn't change results. The simulator fires relics first (in pickup order), then powers in play order.
 
-1. Whether Cruelty adds to Vulnerable (75%) or multiplies it (1.5 × 1.25 = 87.5%).
-2. Whether Vigor applies to every hit of a multi-hit attack or only the first.
-3. Whether "whenever you play a card" powers count themselves.
-4. Rounding: the wiki says once at the end. The simulator rounds each hit,
-   matching Codex's "full pipeline per hit". The two agree except when
-   fractions would add up across hits.
-5. Same-timing order between relics, and between relics and powers. The
-   simulator fires relics first (in pickup order), then powers in play order.
-   For additive effects (Block, Strength, Energy, draws) the order doesn't
-   change the totals. It would matter for anything that reads a current value,
-   and none of the effects the simulator reads do.
+**Still open:**
+- Rounding: the wiki says once at the end; Codex says each hit goes through the whole pipeline. The simulator rounds down per hit. The two only differ when fractions would add up across hits.
 
 ## What isn't read yet
 
