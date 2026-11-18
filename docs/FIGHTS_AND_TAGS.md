@@ -209,7 +209,7 @@ Each line is played out against the shape, phase by phase:
 |---|---|---|
 | **Wall** | Blocks the pressure every turn, attacks with the rest | Steady and alternating fights |
 | **Race** | Attacks every turn and takes the hits | Anything you can kill in time |
-| **Windows** | Blocks the spike turns in full, goes all in on the quiet ones | Spike cycles: Vantom, Knight Gang, Mecha Knight, Insatiable, Effigy's sleep |
+| **Windows** | Blocks the spike turns in full, goes all in on the quiet ones | Spike cycles: Vantom, Knight Gang, Mecha Knight, Insatiable |
 | **Scale** | Sets up early, then wins late | Long fights that start slowly |
 
 - **Each line reports:**
