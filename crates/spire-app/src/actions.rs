@@ -35,6 +35,8 @@ pub enum Action {
         roles: Option<Vec<spire_core::playbook::Role>>,
     },
     SetLargeText(bool),
+    /// Use the system title bar (true) or the app's own (false).
+    SetSystemTitleBar(bool),
     ToggleDataWindow,
     /// Jump to a catalog entry.
     Open(Link),

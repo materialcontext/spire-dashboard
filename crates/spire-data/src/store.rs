@@ -25,6 +25,8 @@ pub struct Settings {
     pub look: Option<String>,
     /// The "Larger text" readability option.
     pub large_text: bool,
+    /// Use the operating system's title bar instead of the app's own.
+    pub system_title_bar: bool,
 }
 
 /// The app's data directory. All reads tolerate missing files.

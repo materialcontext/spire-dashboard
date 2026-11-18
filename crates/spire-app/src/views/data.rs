@@ -54,6 +54,15 @@ pub fn window(
                 .small()
                 .color(text_faint()),
             );
+            let mut system = !crate::chrome::custom();
+            if ui.checkbox(&mut system, "Use the system title bar").changed() {
+                out.push(Action::SetSystemTitleBar(system));
+            }
+            ui.label(
+                RichText::new("Off: the header doubles as the title bar, so desktop themes can't restyle or hide it.")
+                    .small()
+                    .color(text_faint()),
+            );
             ui.add_space(10.0);
 
             ui.label(eyebrow("Game data"));

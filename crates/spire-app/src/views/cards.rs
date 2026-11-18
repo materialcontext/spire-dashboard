@@ -43,6 +43,8 @@ pub struct CardBrowser {
     pub role: RoleFilter,
     pub keyword: Option<&'static str>,
     pub selected: Option<CardId>,
+    /// The detail pane shows the upgraded card.
+    pub upgraded: bool,
     /// Filter key and matching cards, rebuilt only when the key changes.
     cache: Option<(u64, Vec<CardId>)>,
 }
@@ -58,6 +60,7 @@ impl Default for CardBrowser {
             role: RoleFilter::Any,
             keyword: None,
             selected: None,
+            upgraded: false,
             cache: None,
         }
     }
@@ -250,25 +253,35 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser, out: &mut Vec<Actio
         ui.label(RichText::new("Select a card to see its text, roles and enchantments.").color(text_dim()));
         return;
     };
+    let changes = card.upgrade_changes();
+    let can_upgrade = !changes.is_empty() || card.upgrade_text.as_ref().is_some_and(|t| !t.trim().is_empty());
+    let up = b.upgraded && can_upgrade;
     ui.horizontal(|ui| {
         stripe(ui, style::card_type_color(card.card_type), 26.0);
-        ui.label(RichText::new(&card.name).heading());
+        let name = if up { format!("{}+", card.name) } else { card.name.clone() };
+        ui.label(RichText::new(name).heading().color(if up { good() } else { text() }));
+        if can_upgrade {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                crate::widgets::segmented(ui, &mut b.upgraded, &[(false, "Base"), (true, "Upgraded")]);
+            });
+        }
     });
     ui.label(
         RichText::new(format!(
             "{} · {:?} · cost {} · {}",
             card.card_type.label(),
             card.rarity,
-            card.cost_label(),
+            card.cost_label_at(up),
             pool_label(&card.color)
         ))
         .color(text_dim()),
     );
-    if !card.keywords.is_empty() {
+    let keywords = card.keywords_at(up);
+    if !keywords.is_empty() {
         ui.horizontal_wrapped(|ui| {
-            for k in &card.keywords {
+            for k in keywords {
                 let eternal = k.eq_ignore_ascii_case("Eternal");
-                crate::widgets::chip(ui, k.as_str(), if eternal { bad() } else { info() });
+                crate::widgets::chip(ui, k, if eternal { bad() } else { info() });
             }
         });
     }
@@ -280,11 +293,12 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser, out: &mut Vec<Actio
     ui.add_space(8.0);
     ui.label(eyebrow("Text"));
     hairline(ui);
-    ui.label(&card.text);
-    if let Some(up) = &card.upgrade_text {
+    ui.label(card.text_at(up));
+    if !changes.is_empty() {
         ui.add_space(4.0);
-        ui.label(RichText::new("Upgraded").small().color(good()));
-        ui.label(up);
+        ui.label(RichText::new(format!("Upgrade: {}", changes.join(" · "))).small().color(good()));
+    } else if !can_upgrade {
+        ui.label(RichText::new("No upgrade").small().color(text_faint()));
     }
 
     ui.add_space(10.0);

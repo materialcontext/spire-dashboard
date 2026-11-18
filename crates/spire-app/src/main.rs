@@ -7,11 +7,16 @@ fn main() -> eframe::Result {
     // `SPIRE_BENCH=<scenario>[:frames]` renders a scenario continuously,
     // prints frame timings, and exits. See `bench.rs`.
     let bench = std::env::var("SPIRE_BENCH").ok().and_then(|s| RenderBench::parse(&s));
+    let settings = spire_data::store::Store::default_location().settings();
+    // The app draws its own title bar unless the player chose the system one
+    // (see `chrome.rs`), so the window is created without decorations.
+    spire_app::chrome::init(!settings.system_title_bar);
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Spire Dashboard")
             .with_inner_size([1400.0, 900.0])
-            .with_min_inner_size([900.0, 600.0]),
+            .with_min_inner_size([900.0, 600.0])
+            .with_decorations(settings.system_title_bar),
         ..Default::default()
     };
     let mut options = options;
@@ -25,7 +30,6 @@ fn main() -> eframe::Result {
         options,
         Box::new(move |cc| {
             // SPIRE_LOOK overrides the saved appearance (for reviews and screenshots).
-            let settings = spire_data::store::Store::default_location().settings();
             // SPIRE_LARGE=1 forces Larger text on (screenshots); else the saved choice.
             let large = std::env::var("SPIRE_LARGE").map_or(settings.large_text, |v| v == "1");
             spire_app::style::set_large(&cc.egui_ctx, large);

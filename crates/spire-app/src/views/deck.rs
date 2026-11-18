@@ -93,7 +93,7 @@ fn card_row(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
         stripe(ui, style::card_type_color(row.card_type), 18.0);
-        let cost = v.catalog.cards.get(&row.card.card).map_or("?".to_string(), |c| c.cost_label());
+        let cost = v.catalog.cards.get(&row.card.card).map_or("?".to_string(), |c| c.cost_label_at(row.card.upgraded));
         ui.add_sized([14.0, 18.0], egui::Label::new(RichText::new(cost).small().color(accent())));
         let name = if row.count > 1 { format!("{}× {}", row.count, row.name) } else { row.name.clone() };
         let color = if row.card.upgraded { good() } else { text() };
@@ -189,12 +189,20 @@ fn card_tooltip(ui: &mut Ui, v: &ViewCtx, row: &DeckRow) {
         Some(card) => {
             ui.label(RichText::new(&row.name).strong());
             ui.label(
-                RichText::new(format!("{} · {:?} · cost {}", card.card_type.label(), card.rarity, card.cost_label()))
-                    .small()
-                    .color(text_dim()),
+                RichText::new(format!(
+                    "{} · {:?} · cost {}",
+                    card.card_type.label(),
+                    card.rarity,
+                    card.cost_label_at(row.card.upgraded)
+                ))
+                .small()
+                .color(text_dim()),
             );
-            let text = if row.card.upgraded { card.upgrade_text.as_ref().unwrap_or(&card.text) } else { &card.text };
-            ui.label(text);
+            ui.label(card.text_at(row.card.upgraded));
+            let keywords = card.keywords_at(row.card.upgraded);
+            if !keywords.is_empty() {
+                ui.label(RichText::new(keywords.join(" · ")).small().color(info()));
+            }
         }
         None => {
             ui.label("Not in the game data");

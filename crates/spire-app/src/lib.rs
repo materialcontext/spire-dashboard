@@ -4,6 +4,7 @@
 pub mod actions;
 pub mod app;
 pub mod bench;
+pub mod chrome;
 pub mod draft;
 pub mod style;
 pub mod views;
