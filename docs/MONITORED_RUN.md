@@ -90,7 +90,10 @@ with mods on. The mod's own lookup of this folder (the game's
 `GetProgressPathForProfile`) came back empty there, so the app finds it
 itself: every `<store>/<account>/[modded/]profile<N>/saves` under the game's
 data folder, choosing the one whose `current_run.save` changed last
-(`game_link::Link::locate`).
+(`game_link::Link::locate`). The folder the mod names is only one candidate:
+save-path mods such as UnifiedSavePath keep modded saves in the vanilla
+`profile<N>`, while the game's own lookup still reports `modded/profile<N>`,
+which can hold an old run from before.
 
 Our Spire Codex adapter (`codex_runs.rs`) already parses the `.run` format
 for community statistics. Its per-floor record, `map_point_history`, maps

@@ -25,17 +25,94 @@ use spire_core::Catalog;
 use spire_core::ids::*;
 use spire_core::run::{Change, DeckCard, NodeKind, NodeReport, Outcome, RunEvent, RunState, apply};
 
+/// The live run save (`current_run.save`) writes some ids as objects
+/// where a finished `.run` writes `"ACT.HIVE"`: the act, say, with its id
+/// inside, or an id as `{category, entry}`. These read either, so the same
+/// record types serve both files.
+mod lenient {
+    use serde::{Deserialize, Deserializer};
+    use serde_json::Value;
+
+    /// `CATEGORY.ENTRY`, as the game writes ids.
+    fn looks_like_id(s: &str) -> bool {
+        s.split_once('.').is_some_and(|(c, e)| {
+            !c.is_empty() && !e.is_empty() && c.chars().all(|ch| ch.is_ascii_uppercase() || ch == '_')
+        })
+    }
+
+    /// The id a value stands for: a string, a `{category, entry}` pair, an
+    /// `id`-like key, or else the first `CATEGORY.ENTRY` string inside.
+    pub fn id_of(v: &Value) -> Option<String> {
+        match v {
+            Value::String(s) => Some(s.clone()),
+            Value::Number(n) => Some(n.to_string()),
+            Value::Object(m) => pair(m)
+                .or_else(|| ["id", "model_id", "modelid"].iter().find_map(|k| get(m, k).and_then(id_of)))
+                .or_else(|| deep(v)),
+            _ => None,
+        }
+    }
+
+    fn get<'a>(m: &'a serde_json::Map<String, Value>, k: &str) -> Option<&'a Value> {
+        m.iter().find(|(key, _)| key.eq_ignore_ascii_case(k)).map(|(_, v)| v)
+    }
+
+    /// `{"category": "ACT", "entry": "HIVE"}` is `ACT.HIVE`.
+    fn pair(m: &serde_json::Map<String, Value>) -> Option<String> {
+        match (get(m, "category"), get(m, "entry")) {
+            (Some(Value::String(c)), Some(Value::String(e))) => Some(format!("{c}.{e}")),
+            _ => None,
+        }
+    }
+
+    fn deep(v: &Value) -> Option<String> {
+        match v {
+            Value::String(s) if looks_like_id(s) => Some(s.clone()),
+            Value::Object(m) => pair(m).or_else(|| m.values().find_map(deep)),
+            Value::Array(a) => a.iter().find_map(deep),
+            _ => None,
+        }
+    }
+
+    pub fn id<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+        Ok(id_of(&Value::deserialize(d)?).unwrap_or_default())
+    }
+
+    pub fn opt_id<'de, D: Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
+        Ok(id_of(&Value::deserialize(d)?))
+    }
+
+    pub fn ids<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
+        Ok(match Value::deserialize(d)? {
+            Value::Array(a) => a.iter().filter_map(id_of).collect(),
+            other => id_of(&other).into_iter().collect(),
+        })
+    }
+
+    pub fn opt_i64<'de, D: Deserializer<'de>>(d: D) -> Result<Option<i64>, D::Error> {
+        Ok(match Value::deserialize(d)? {
+            Value::Number(n) => n.as_i64(),
+            Value::String(s) => s.parse().ok(),
+            _ => None,
+        })
+    }
+}
+
 #[derive(Deserialize, Default)]
 #[serde(default)]
 struct WRun {
+    #[serde(deserialize_with = "lenient::ids")]
     acts: Vec<String>,
     ascension: u32,
+    #[serde(deserialize_with = "lenient::opt_id")]
     seed: Option<String>,
+    #[serde(deserialize_with = "lenient::opt_i64")]
     start_time: Option<i64>,
     players: Vec<WPlayer>,
     map_point_history: Vec<Vec<WPoint>>,
     win: Option<bool>,
     was_abandoned: Option<bool>,
+    #[serde(deserialize_with = "lenient::opt_id")]
     killed_by_encounter: Option<String>,
 }
 
@@ -43,6 +120,7 @@ struct WRun {
 #[serde(default)]
 struct WPlayer {
     id: Option<serde_json::Value>,
+    #[serde(deserialize_with = "lenient::opt_id")]
     character: Option<String>,
     deck: Vec<WCard>,
     relics: Vec<WId>,
@@ -53,6 +131,7 @@ struct WPlayer {
 #[derive(Deserialize, Default, Clone)]
 #[serde(default)]
 struct WCard {
+    #[serde(deserialize_with = "lenient::id")]
     id: String,
     current_upgrade_level: Option<u32>,
     enchantment: Option<WId>,
@@ -61,12 +140,14 @@ struct WCard {
 #[derive(Deserialize, Default, Clone)]
 #[serde(default)]
 struct WId {
+    #[serde(deserialize_with = "lenient::id")]
     id: String,
 }
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
 struct WPoint {
+    #[serde(deserialize_with = "lenient::opt_id")]
     map_point_type: Option<String>,
     player_stats: Vec<WStats>,
     rooms: Vec<WRoom>,
@@ -75,12 +156,14 @@ struct WPoint {
 #[derive(Deserialize, Default)]
 #[serde(default)]
 struct WRoom {
+    #[serde(deserialize_with = "lenient::id")]
     model_id: String,
 }
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
 struct WChoice {
+    #[serde(deserialize_with = "lenient::id")]
     choice: String,
     was_picked: bool,
 }
@@ -89,6 +172,7 @@ struct WChoice {
 #[serde(default)]
 struct WEnchanted {
     card: WCard,
+    #[serde(deserialize_with = "lenient::id")]
     enchantment: String,
 }
 
@@ -108,13 +192,17 @@ struct WStats {
     current_gold: Option<i32>,
     cards_gained: Vec<WCard>,
     cards_removed: Vec<WCard>,
+    #[serde(deserialize_with = "lenient::ids")]
     upgraded_cards: Vec<String>,
     cards_enchanted: Vec<WEnchanted>,
     cards_transformed: Vec<WTransformed>,
     relic_choices: Vec<WChoice>,
+    #[serde(deserialize_with = "lenient::ids")]
     relics_removed: Vec<String>,
     potion_choices: Vec<WChoice>,
+    #[serde(deserialize_with = "lenient::ids")]
     potion_used: Vec<String>,
+    #[serde(deserialize_with = "lenient::ids")]
     potion_discarded: Vec<String>,
 }
 
@@ -212,11 +300,24 @@ impl std::fmt::Display for Unreadable {
     }
 }
 
+/// Which top-level field didn't read, with the parser's message.
+fn shape_error(value: &serde_json::Value, e: serde_json::Error) -> String {
+    let field = value.as_object().and_then(|m| {
+        m.iter().find(|(k, v)| {
+            let one = serde_json::Value::Object([((*k).clone(), (*v).clone())].into_iter().collect());
+            WRun::deserialize(&one).is_err()
+        })
+    });
+    match field {
+        Some((k, _)) => format!("field `{k}`: {e}"),
+        None => e.to_string(),
+    }
+}
+
 /// Reads a run save or `.run` file, or says why it can't.
 pub fn read(json: &str, catalog: &Catalog, hint: &ActHint) -> Result<GameRun, Unreadable> {
-    let run: WRun = serde_json::from_str(json).map_err(|e| {
-        if json.trim_start().starts_with('{') { Unreadable::Shape(e.to_string()) } else { Unreadable::NotJson }
-    })?;
+    let value: serde_json::Value = serde_json::from_str(json).map_err(|_| Unreadable::NotJson)?;
+    let run = WRun::deserialize(&value).map_err(|e| Unreadable::Shape(shape_error(&value, e)))?;
     let player = run.players.first().ok_or(Unreadable::NoPlayer)?;
     let character = CharacterId::new(entry(player.character.as_deref().ok_or(Unreadable::NoCharacter)?));
     let start = RunEvent::start(catalog, &character, run.ascension)
@@ -429,6 +530,34 @@ mod tests {
         let d = deck_card(&c);
         assert_eq!((d.card.as_str(), d.upgraded), ("BASH", true));
         assert_eq!(d.enchantment.as_ref().map(|e| e.as_str()), Some("SHARP"));
+    }
+
+    #[test]
+    fn reads_ids_written_as_objects() {
+        // The live save writes acts (and maybe other ids) as objects.
+        let cat = catalog();
+        let json = include_str!("../tests/fixtures/finished.run");
+        let plain = read(json, &cat, &ActHint::default()).expect("reads");
+        let mut v: serde_json::Value = serde_json::from_str(json).unwrap();
+        v["acts"] = serde_json::json!([
+            {"id": "ACT.UNDERDOCKS", "rooms": {"boss": "ENCOUNTER.X"}},
+            {"id": {"category": "ACT", "entry": "HIVE"}},
+            {"model": {"Category": "ACT", "Entry": "GLORY"}},
+        ]);
+        v["players"][0]["character"] = serde_json::json!({"id": v["players"][0]["character"].clone()});
+        v["seed"] = serde_json::json!(12345);
+        let objects = read(&v.to_string(), &cat, &ActHint::default()).expect("reads");
+        assert_eq!(objects.events[1..], plain.events[1..]);
+        assert_eq!(objects.floors, plain.floors);
+    }
+
+    #[test]
+    fn names_the_field_that_did_not_read() {
+        let v = serde_json::json!({"acts": [], "players": "nobody", "ascension": 1});
+        let Err(Unreadable::Shape(why)) = read(&v.to_string(), &catalog(), &ActHint::default()) else {
+            panic!("should not read")
+        };
+        assert!(why.starts_with("field `players`"), "{why}");
     }
 
     #[test]
