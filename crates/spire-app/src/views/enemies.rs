@@ -128,10 +128,8 @@ pub fn list(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
             let h = ui.spacing().interact_size.y;
             let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), h), Sense::click());
             if ui.is_rect_visible(rect) {
+                crate::widgets::row_backplate(ui, &resp, &e.name, selected);
                 let painter = ui.painter();
-                if selected || resp.hovered() {
-                    painter.rect_filled(rect, 0.0, if selected { surface_hi() } else { surface() });
-                }
                 let mid = rect.center().y;
                 painter.text(
                     egui::pos2(rect.min.x + 8.0, mid),

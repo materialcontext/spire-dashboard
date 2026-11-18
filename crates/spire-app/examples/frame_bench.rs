@@ -23,13 +23,22 @@ struct Row {
     tex_frames: usize,
 }
 
+/// The look under test: `SPIRE_LOOK` (with `SPIRE_SYSTEM=windows|macos`
+/// for the System look on any OS), else the default theme.
+fn style(ctx: &egui::Context) {
+    match std::env::var("SPIRE_LOOK") {
+        Ok(look) => spire_app::style::set_look(ctx, &look),
+        Err(_) => spire_app::style::configure(ctx),
+    }
+}
+
 fn ms(d: std::time::Duration) -> f64 {
     d.as_secs_f64() * 1000.0
 }
 
 fn run(scenario: Scenario, frames: usize, ppp: f32) -> Row {
     let ctx = egui::Context::default();
-    spire_app::style::configure(&ctx);
+    style(&ctx);
     ctx.set_pixels_per_point(ppp);
     let mut app = scenario.app();
     let mut time = 0.0;
@@ -86,7 +95,7 @@ fn startup(reps: usize) -> (f64, f64) {
         let mut app = Scenario::IdleLate.app();
         load.push(ms(t.elapsed()));
         let ctx = egui::Context::default();
-        spire_app::style::configure(&ctx);
+        style(&ctx);
         let t = Instant::now();
         let mut out = ctx.run_ui(Scenario::IdleLate.raw_input(0, 0.0), |ui| app.frame(ui));
         out.textures_delta.clear();
@@ -99,7 +108,7 @@ fn startup(reps: usize) -> (f64, f64) {
 /// Vertices per shape kind for one frame of a scenario (`--shapes NAME`).
 fn shape_breakdown(scenario: Scenario) {
     let ctx = egui::Context::default();
-    spire_app::style::configure(&ctx);
+    style(&ctx);
     let mut app = scenario.app();
     let mut out = None;
     for i in 0..40 {

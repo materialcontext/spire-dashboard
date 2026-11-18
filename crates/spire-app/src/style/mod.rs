@@ -26,12 +26,17 @@
 //!   triangles and feathering adds a ring per shape. Text keeps its own
 //!   anti-aliasing (glyphs are pre-rasterised).
 
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+mod system;
+
+use std::cell::{Cell, RefCell};
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use eframe::egui::{self, Color32, CornerRadius, FontFamily, FontId, Shadow, Stroke, TextStyle};
 use spire_core::catalog::CardType;
 use spire_core::playbook::Role;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Palette {
     pub bg: Color32,
     pub surface: Color32,
@@ -57,9 +62,40 @@ pub enum Typeface {
     Inter,
     /// Everything in the monospace face.
     Mono,
+    /// The OS's own UI font (Segoe UI Variable, SF Pro), read from the
+    /// system at runtime; Inter when it can't be.
+    System,
+}
+
+/// The platform a System look follows: its conventions as well as its
+/// colours (navigation, Settings, dialogs, menus).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Native {
+    Windows,
+    Mac,
+}
+
+/// How a panel is drawn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PanelStyle {
+    /// A border and no fill (cheap on software renderers).
+    Outlined,
+    /// Fluent's card: a translucent fill, a hairline stroke, rounded.
+    Card,
+    /// macOS grouped content: a soft fill, no stroke, rounded.
+    Grouped,
+}
+
+/// Control fills by state, for looks whose controls are filled.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Fills {
+    pub rest: Color32,
+    pub hover: Color32,
+    pub pressed: Color32,
 }
 
 /// One complete visual treatment.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LookDef {
     /// Stable id, used in settings and `SPIRE_LOOK`.
     pub name: &'static str,
@@ -81,6 +117,29 @@ pub struct LookDef {
     pub caps_headings: bool,
     /// Brief fades and slides (83 to 167 ms) where something changes.
     pub motion: bool,
+    /// A System look: follows this platform's conventions.
+    pub native: Option<Native>,
+    /// Corner radius of controls and list rows, and of overlays (windows,
+    /// menus, dialogs, cards). 0 keeps square corners and no feathering.
+    pub radius: u8,
+    pub overlay_radius: u8,
+    /// Height of buttons and fields, before Larger text.
+    pub control_height: f32,
+    pub button_padding: (f32, f32),
+    pub panel: PanelStyle,
+    pub card_fill: Color32,
+    pub card_stroke: Color32,
+    /// The content layer drawn under the panels (Fluent's layer on Mica,
+    /// macOS's window background beside the sidebar). Transparent for none.
+    pub layer: Color32,
+    /// Text on an accent fill; the background colour when unset.
+    pub on_accent: Option<Color32>,
+    /// Filled controls; outlined ones on the surface when unset.
+    pub fills: Option<Fills>,
+    /// Soft shadows under menus and dialogs.
+    pub shadows: bool,
+    /// The window may show a system material (Mica) through the content.
+    pub translucent: bool,
 }
 
 const fn rgb(r: u8, g: u8, b: u8) -> Color32 {
@@ -148,6 +207,19 @@ const BASE: LookDef = LookDef {
     tinted_chips: false,
     caps_headings: false,
     motion: true,
+    native: None,
+    radius: 0,
+    overlay_radius: 0,
+    control_height: 24.0,
+    button_padding: (10.0, 4.0),
+    panel: PanelStyle::Outlined,
+    card_fill: Color32::TRANSPARENT,
+    card_stroke: Color32::TRANSPARENT,
+    layer: Color32::TRANSPARENT,
+    on_accent: None,
+    fills: None,
+    shadows: false,
+    translucent: false,
 };
 
 pub const LOOKS: &[LookDef] = &[
@@ -261,16 +333,50 @@ pub const LOOKS: &[LookDef] = &[
     },
 ];
 
-/// The look new installs start with.
-pub const DEFAULT_LOOK: &str = "spirebound";
+/// The System look's id: built at runtime for the platform (see `system`).
+pub const SYSTEM_LOOK: &str = "system";
 
-static LOOK: AtomicUsize = AtomicUsize::new(0);
+/// The look new installs start with: System on Windows and macOS
+/// (decision D1), Spirebound elsewhere.
+pub const DEFAULT_LOOK: &str = if cfg!(any(windows, target_os = "macos")) { SYSTEM_LOOK } else { "spirebound" };
+
+thread_local! {
+    /// The look in use. Read by every colour accessor, so a thread-local
+    /// cell (one load) rather than a lock. The UI runs on one thread.
+    static CURRENT: Cell<&'static LookDef> = const { Cell::new(&LOOKS[0]) };
+    /// What the OS last said about its look.
+    static APPEARANCE: Cell<crate::platform::Appearance> = Cell::new(crate::platform::Appearance::default());
+    /// System looks built so far, reused when the same one comes back
+    /// (each is a few hundred bytes, kept for the life of the process).
+    static BUILT: RefCell<Vec<&'static LookDef>> = const { RefCell::new(Vec::new()) };
+}
+
+/// The platform whose System look this build offers: this OS, or the one
+/// named by `SPIRE_SYSTEM=windows|macos` (to preview it anywhere).
+pub fn native() -> Option<Native> {
+    static NATIVE: OnceLock<Option<Native>> = OnceLock::new();
+    *NATIVE.get_or_init(|| match std::env::var("SPIRE_SYSTEM").as_deref() {
+        Ok("windows") => Some(Native::Windows),
+        Ok("macos") => Some(Native::Mac),
+        _ if cfg!(windows) => Some(Native::Windows),
+        _ if cfg!(target_os = "macos") => Some(Native::Mac),
+        _ => None,
+    })
+}
+
+/// The window shows a system material (Mica) behind transparent areas.
+static MATERIAL: AtomicBool = AtomicBool::new(false);
+
+/// Records whether the window got its material (see `chrome::material`).
+pub fn set_material(on: bool) {
+    MATERIAL.store(on, Ordering::Relaxed);
+}
 /// Current character colour (RGBA), or 0 for none; drives `character_accent`.
 static CHARACTER: AtomicU32 = AtomicU32::new(0);
 /// The "Larger text" readability option, applied on top of any look.
-static LARGE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static LARGE: AtomicBool = AtomicBool::new(false);
 /// The system asked for less motion.
-static REDUCE_MOTION: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static REDUCE_MOTION: AtomicBool = AtomicBool::new(false);
 
 /// Follows the system's reduced-motion preference.
 pub fn set_reduce_motion(ctx: &egui::Context, on: bool) {
@@ -304,12 +410,72 @@ pub fn tinted_chips() -> bool {
     current().tinted_chips || large()
 }
 
+#[inline]
 pub fn current() -> &'static LookDef {
-    &LOOKS[LOOK.load(Ordering::Relaxed).min(LOOKS.len() - 1)]
+    CURRENT.with(Cell::get)
 }
 
+/// A look by id. The System look is listed only where it's offered.
 pub fn find_look(name: &str) -> Option<&'static LookDef> {
+    if name == SYSTEM_LOOK {
+        return native().map(|n| system_look(n, current().light));
+    }
     LOOKS.iter().find(|l| l.name == name)
+}
+
+/// The looks to offer: System first where there is one, then the themes.
+pub fn looks() -> Vec<(&'static str, &'static str, &'static str)> {
+    let system = native().map(|n| {
+        let blurb = system_look(n, current().light).blurb;
+        (SYSTEM_LOOK, "System", blurb)
+    });
+    system.into_iter().chain(LOOKS.iter().map(|l| (l.name, l.label, l.blurb))).collect()
+}
+
+/// The System look for this mode and the OS's current appearance.
+fn system_look(native: Native, light: bool) -> &'static LookDef {
+    let look = system::look(native, light, &APPEARANCE.with(Cell::get));
+    BUILT.with(|b| {
+        let mut b = b.borrow_mut();
+        if let Some(found) = b.iter().find(|l| ***l == look) {
+            return *found;
+        }
+        let leaked: &'static LookDef = Box::leak(Box::new(look));
+        b.push(leaked);
+        leaked
+    })
+}
+
+/// Whether the System look is showing.
+pub fn is_system() -> bool {
+    current().native.is_some()
+}
+
+/// Takes in what the OS says about its look. Rebuilds the System look if
+/// it's showing and anything changed.
+pub fn set_appearance(ctx: &egui::Context, a: crate::platform::Appearance) {
+    if APPEARANCE.with(|c| c.replace(a)) != a && is_system() {
+        let light = current().light;
+        if let Some(n) = native() {
+            CURRENT.with(|c| c.set(system_look(n, light)));
+            configure(ctx);
+        }
+    }
+}
+
+/// Light or dark for the System look: the OS's mode as eframe sees it,
+/// else as the platform module read it.
+fn system_light(ctx: &egui::Context) -> bool {
+    // SPIRE_THEME=light|dark pins the mode (previews and screenshots).
+    match std::env::var("SPIRE_THEME").as_deref() {
+        Ok("light") => return true,
+        Ok("dark") => return false,
+        _ => {}
+    }
+    match ctx.system_theme() {
+        Some(t) => t == egui::Theme::Light,
+        None => APPEARANCE.with(Cell::get).dark.is_some_and(|d| !d),
+    }
 }
 
 /// Palette accessors. Functions rather than constants so the look can
@@ -341,6 +507,13 @@ pub mod color {
     #[inline]
     pub fn accent() -> Color32 {
         super::current().palette.accent
+    }
+
+    /// Text on an accent fill (selected chips, primary buttons).
+    #[inline]
+    pub fn on_accent() -> Color32 {
+        let look = super::current();
+        look.on_accent.unwrap_or(look.palette.bg)
     }
 
     /// The identity colour: the current character's on looks that follow
@@ -427,8 +600,8 @@ pub fn strong_family() -> FontFamily {
     FontFamily::Name("strong".into())
 }
 
-const INTER: &[u8] = include_bytes!("../assets/fonts/Inter-Regular.otf");
-const INTER_SEMIBOLD: &[u8] = include_bytes!("../assets/fonts/Inter-SemiBold.otf");
+const INTER: &[u8] = include_bytes!("../../assets/fonts/Inter-Regular.otf");
+const INTER_SEMIBOLD: &[u8] = include_bytes!("../../assets/fonts/Inter-SemiBold.otf");
 
 fn fonts(typeface: Typeface) -> egui::FontDefinitions {
     use std::sync::Arc;
@@ -452,8 +625,41 @@ fn fonts(typeface: Typeface) -> egui::FontDefinitions {
         Typeface::Ubuntu => {
             defs.families.insert(strong_family(), proportional);
         }
+        Typeface::System => match crate::platform::system_font() {
+            Some(font) => {
+                let (regular, strong) = system_fonts(font);
+                defs.font_data.insert("System".into(), Arc::new(regular));
+                defs.font_data.insert("System-Strong".into(), Arc::new(strong));
+                defs.families.insert(FontFamily::Proportional, with(&["System"], &proportional));
+                defs.families.insert(strong_family(), with(&["System-Strong", "System"], &proportional));
+            }
+            // No system font to read: Inter, as the other looks use.
+            None => return fonts(Typeface::Inter),
+        },
     }
     defs
+}
+
+/// Regular and emphasis faces from the system font: one variable font at
+/// two weights, or two files.
+fn system_fonts(font: crate::platform::SystemFont) -> (egui::FontData, egui::FontData) {
+    use crate::platform::SystemFont;
+    use egui::epaint::text::{FontTweak, VariationCoords};
+    match font {
+        SystemFont::Variable { data, regular, strong, optical } => {
+            let at = |weight: f32| {
+                let coords = match optical {
+                    Some(o) => VariationCoords::new([(b"wght", weight), (b"opsz", o)]),
+                    None => VariationCoords::new([(b"wght", weight)]),
+                };
+                egui::FontData::from_static(data).tweak(FontTweak { coords, ..FontTweak::default() })
+            };
+            (at(regular), at(strong))
+        }
+        SystemFont::Static { regular, strong } => {
+            (egui::FontData::from_static(regular), egui::FontData::from_static(strong))
+        }
+    }
 }
 
 /// `SPIRE_STYLE=default` keeps egui's stock style (for A/B benchmarks).
@@ -461,10 +667,18 @@ pub fn tuned() -> bool {
     std::env::var("SPIRE_STYLE").map_or(true, |v| v != "default")
 }
 
-/// Applies the named look (unknown names fall back to the default).
+/// Applies the named look (unknown names fall back to the default). The
+/// System look follows the OS's light or dark mode.
 pub fn set_look(ctx: &egui::Context, name: &str) {
-    let index = LOOKS.iter().position(|l| l.name == name).or_else(|| LOOKS.iter().position(|l| l.name == DEFAULT_LOOK));
-    LOOK.store(index.unwrap_or(0), Ordering::Relaxed);
+    let look = match (name, native()) {
+        (SYSTEM_LOOK, Some(n)) => system_look(n, system_light(ctx)),
+        _ => LOOKS
+            .iter()
+            .find(|l| l.name == name)
+            .or_else(|| LOOKS.iter().find(|l| l.name == DEFAULT_LOOK))
+            .unwrap_or(&LOOKS[0]),
+    };
+    CURRENT.with(|c| c.set(look));
     configure(ctx);
 }
 
@@ -502,8 +716,9 @@ pub fn configure(ctx: &egui::Context) {
         ]
         .into();
         style.spacing.item_spacing = if roomy { egui::vec2(10.0, 8.0) } else { egui::vec2(8.0, 6.0) };
-        style.spacing.button_padding = egui::vec2(10.0, if roomy { 5.0 } else { 4.0 });
-        style.spacing.interact_size.y = if roomy { 28.0 } else { 24.0 };
+        let (pad_x, pad_y) = look.button_padding;
+        style.spacing.button_padding = egui::vec2(pad_x, if roomy { pad_y + 1.0 } else { pad_y });
+        style.spacing.interact_size.y = if roomy { look.control_height + 4.0 } else { look.control_height };
         // Popups and collapsing sections fade briefly; nothing animates while idle.
         style.animation_time = if motion() { FADE } else { 0.0 };
 
@@ -511,15 +726,21 @@ pub fn configure(ctx: &egui::Context) {
         // Pressed is one step past hover: lighter on dark looks, darker on light ones.
         let pressed = mix(surface_hi(), strong_fg, 0.1);
         let line = look.border;
+        let control = CornerRadius::same(look.radius);
+        let overlay = CornerRadius::same(look.overlay_radius);
         let v = &mut style.visuals;
         v.dark_mode = !look.light;
         v.panel_fill = Color32::TRANSPARENT;
         v.window_fill = surface();
-        v.window_stroke = Stroke::new(line, border_hi());
-        v.window_shadow = Shadow::NONE;
-        v.popup_shadow = Shadow::NONE;
-        v.window_corner_radius = CornerRadius::ZERO;
-        v.menu_corner_radius = CornerRadius::ZERO;
+        v.window_stroke = Stroke::new(line, if look.native.is_some() { border() } else { border_hi() });
+        // Fluent's flyout and dialog elevation, softened: one blurred shape each.
+        let shade = |alpha: u8| Color32::from_black_alpha(if look.light { alpha / 2 } else { alpha });
+        v.popup_shadow =
+            if look.shadows { Shadow { offset: [0, 8], blur: 16, spread: 0, color: shade(70) } } else { Shadow::NONE };
+        v.window_shadow =
+            if look.shadows { Shadow { offset: [0, 16], blur: 32, spread: 0, color: shade(90) } } else { Shadow::NONE };
+        v.window_corner_radius = overlay;
+        v.menu_corner_radius = overlay;
         v.extreme_bg_color = input();
         v.faint_bg_color = surface();
         v.code_bg_color = input();
@@ -535,38 +756,78 @@ pub fn configure(ctx: &egui::Context) {
         w.noninteractive.weak_bg_fill = surface();
         w.noninteractive.bg_stroke = Stroke::new(line, border());
         w.noninteractive.fg_stroke = Stroke::new(1.0, text());
-        w.inactive.bg_fill = surface();
-        w.inactive.weak_bg_fill = surface();
-        // Controls are outlined at 3:1 or better (WCAG non-text contrast);
-        // decorative panel outlines keep the softer border.
-        w.inactive.bg_stroke = Stroke::new(line, border_hi());
-        w.inactive.fg_stroke = Stroke::new(1.0, text());
-        w.hovered.bg_fill = surface_hi();
-        w.hovered.weak_bg_fill = surface_hi();
-        w.hovered.bg_stroke = Stroke::new(line, text_dim());
-        w.hovered.fg_stroke = Stroke::new(1.0, strong_fg);
-        w.active.bg_fill = pressed;
-        w.active.weak_bg_fill = pressed;
-        w.active.bg_stroke = Stroke::new(line, accent());
-        w.active.fg_stroke = Stroke::new(1.0, text_dim());
+        match look.fills {
+            // Filled controls (Fluent, AppKit): a fill per state, a hairline
+            // stroke, the accent only on the focused or pressed edge.
+            Some(f) => {
+                for (state, fill) in [(&mut w.inactive, f.rest), (&mut w.hovered, f.hover), (&mut w.active, f.pressed)]
+                {
+                    state.bg_fill = fill;
+                    state.weak_bg_fill = fill;
+                    state.bg_stroke = Stroke::new(1.0, border());
+                }
+                w.inactive.fg_stroke = Stroke::new(1.0, text());
+                w.hovered.fg_stroke = Stroke::new(1.0, text());
+                // Fluent: pressed text goes secondary.
+                w.active.fg_stroke = Stroke::new(1.0, text_dim());
+            }
+            None => {
+                w.inactive.bg_fill = surface();
+                w.inactive.weak_bg_fill = surface();
+                // Controls are outlined at 3:1 or better (WCAG non-text contrast);
+                // decorative panel outlines keep the softer border.
+                w.inactive.bg_stroke = Stroke::new(line, border_hi());
+                w.inactive.fg_stroke = Stroke::new(1.0, text());
+                w.hovered.bg_fill = surface_hi();
+                w.hovered.weak_bg_fill = surface_hi();
+                w.hovered.bg_stroke = Stroke::new(line, text_dim());
+                w.hovered.fg_stroke = Stroke::new(1.0, strong_fg);
+                w.active.bg_fill = pressed;
+                w.active.weak_bg_fill = pressed;
+                w.active.bg_stroke = Stroke::new(line, accent());
+                w.active.fg_stroke = Stroke::new(1.0, text_dim());
+            }
+        }
         w.open = w.hovered;
         // Disabled controls fade to about 40%, a tier of their own (Fluent
         // uses 36%), so they no longer look like faint hint text.
         v.disabled_alpha = 0.4;
         for s in [&mut w.noninteractive, &mut w.inactive, &mut w.hovered, &mut w.active, &mut w.open] {
-            s.corner_radius = CornerRadius::ZERO;
+            s.corner_radius = control;
             s.expansion = 0.0;
         }
     });
     // With square corners, anti-aliasing feathers only the odd diagonal
-    // (checkmarks, arrows); text is pre-antialiased.
-    ctx.tessellation_options_mut(|o| o.feathering = false);
+    // (checkmarks, arrows); text is pre-antialiased. Rounded looks need it.
+    let rounded = look.radius > 0 || look.overlay_radius > 0;
+    ctx.tessellation_options_mut(|o| o.feathering = rounded);
 }
 
 /// The colour the framebuffer is cleared to (panels are transparent).
+/// Clear (transparent) where the window shows a system material: Mica
+/// then fills every pixel the app leaves unpainted.
 pub fn clear_color(_visuals: &egui::Visuals) -> [f32; 4] {
     if !tuned() {
         return Color32::from_rgba_unmultiplied(12, 12, 12, 180).to_normalized_gamma_f32();
     }
+    if material() {
+        return [0.0; 4];
+    }
     bg().to_normalized_gamma_f32()
+}
+
+/// A system material shows through: the window has one and the look
+/// allows it.
+pub fn material() -> bool {
+    MATERIAL.load(Ordering::Relaxed) && current().translucent
+}
+
+/// Corner radius for controls and list rows in the current look.
+pub fn radius() -> f32 {
+    current().radius as f32
+}
+
+/// Corner radius for overlays and cards in the current look.
+pub fn overlay_radius() -> f32 {
+    current().overlay_radius as f32
 }

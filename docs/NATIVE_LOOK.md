@@ -1,6 +1,44 @@
 # Plan: native looks for Windows 11 and macOS
 
-Status: research and plan only. Nothing here is built yet.
+Status: built, except where noted under "What's built" below. None of it
+has been tried on a real Windows or Mac yet (P0); the checks so far are CI
+builds for both and screenshots of the System looks previewed on Linux.
+
+## What's built
+
+| Area | Windows 11 | macOS |
+|---|---|---|
+| Default look | **System** (D1) | **System** (D1) |
+| Colours | Fluent tokens (§4.3) over the OS accent and its shades; contrast themes take every colour from the theme | `NSColor` semantic colours for the current appearance, and the OS accent |
+| Light/dark | Follows the OS live; accent, contrast and transparency are read again when the window regains focus | Same |
+| Font | Segoe UI Variable from `C:\Windows\Fonts` (Text optical size, 400/600), Segoe UI on Windows 10, Inter if neither | SF Pro from `/System/Library/Fonts/SFNS.ttf` (400/590), Inter if missing |
+| Type ramp | Subtitle 20, Body 14, Caption 12 | Title 3 15, Body 13, Subheadline 11 |
+| Shapes | 4px controls, 8px overlays and cards; 32px controls | 6px controls, 10px overlays; 24px controls |
+| Panels | Fluent cards (translucent fill, hairline) on the content layer | Grouped content: soft fill, no outline (outlined with Increase Contrast) |
+| Window | The app-drawn title bar stays the default (Mica For Everyone made the native one transparent here), with Fluent caption buttons and Mica's solid fallback colour. With **Use the system title bar** on, Mica shows behind a transparent window (`window-vibrancy`) when transparency effects are on and no contrast theme is | Real title bar, transparent over full-size content; traffic lights in place |
+| Navigation | NavigationView top mode: text items, 16×3 accent pill | Sidebar with the six tabs; the toolbar row holds the vitals and run buttons |
+| Settings | A page of the window (top-right navigation item) | A separate Settings window, opened with ⌘, from the app menu |
+| Menus | — | Native menu bar (`muda`): app menu, Edit, View (⌘1–6), Run, Window |
+| Dialogs | Smoke behind (#4D000000), 8px corners, shadow | Lighter dim, 10px corners; Cancel leads, the action trails |
+| Lists | Rounded hover backplate, accent pill on the selected row | Rounded selection, no hover |
+| Screen readers | AccessKit on; custom rows, tabs and nav items report name and selection | Same |
+
+Not built, and why:
+
+- **macOS vibrancy.** `window-vibrancy` adds its blur view as a subview of
+  the content view. egui draws into that view's own layer, which sits under
+  every subview, so the blur would cover the UI. Doing it properly means
+  placing the blur behind the content view, which needs `unsafe`
+  Objective-C, and this workspace forbids `unsafe`. The sidebar uses a
+  solid tint instead.
+- **Windows title bar with content and snap layouts.** Extending content
+  into the native title bar needs a window subclass for `WM_NCHITTEST`
+  (`unsafe`). The app-drawn title bar remains.
+- **Native context menus.** `muda`'s context menus are `unsafe fn`; context
+  menus stay egui-drawn, in the platform's shapes and colours.
+- **Liquid Glass**, per §1.
+- **Per-size tracking and SF's optical size.** Segoe UI Variable gets its
+  Text optical size; SF Pro uses its default.
 
 The goal is a look on each platform that a regular Windows or Mac user can't
 tell apart from a first-party app: the same fonts, colors, materials, shapes,

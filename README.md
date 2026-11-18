@@ -109,7 +109,8 @@ system title bar** brings back the operating system's own.
 
 | Look | Style |
 |---|---|
-| **Spirebound** (default) | High contrast in Inter. Your character's colour marks the header; gold marks what you can act on. |
+| **System** (default on Windows and macOS) | Looks like the operating system. Windows 11 gets Segoe UI, your accent colour, Fluent cards and Mica, with tabs across the top and Settings as a page. macOS gets SF Pro, your accent colour, a sidebar, a toolbar, the menu bar and a Settings window. Follows light and dark mode, and Windows contrast themes. See `docs/NATIVE_LOOK.md`. |
+| **Spirebound** (default on Linux) | High contrast in Inter. Your character's colour marks the header; gold marks what you can act on. |
 | **Forge** | Charcoal and embers. |
 | **Neon Spire** | Synthwave with glowing edges. |
 | **Grimoire** | A light theme: parchment, ink and crimson. |
@@ -126,7 +127,7 @@ On a first run it starts on if Windows' text size is above 100%.
 
 **Match system light/dark** follows the operating system: Grimoire in light
 mode, Spirebound in dark. Picking a look while it's on sets the look for that
-mode.
+mode. The System look follows light and dark on its own.
 
 Every look shares the same rules, from the Windows and macOS design guidance
 (see `docs/DESIGN_PRACTICES.md`):

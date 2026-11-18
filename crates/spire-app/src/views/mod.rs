@@ -57,11 +57,40 @@ impl Tab {
     }
 }
 
-pub fn root(ui: &mut Ui, v: &ViewCtx, draft: &mut NodeDraft, st: &mut UiState, out: &mut Vec<Action>) {
+/// The whole window. `settings` draws the Settings contents, for the
+/// platforms where Settings is a page of the window (Windows' System look).
+pub fn root(
+    ui: &mut Ui,
+    v: &ViewCtx,
+    draft: &mut NodeDraft,
+    st: &mut UiState,
+    out: &mut Vec<Action>,
+    settings: &mut dyn FnMut(&mut Ui, &mut UiState, &mut Vec<Action>),
+) {
     let side = egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 16, top: 0, bottom: 0 });
+    let native = crate::style::current().native;
+    // macOS: a sidebar of tabs down the left, under the traffic lights.
+    if native == Some(crate::style::Native::Mac) {
+        sidebar(ui, st);
+    }
     egui::Panel::top("top").frame(side).show(ui, |ui| top::show(ui, v, st, out));
+    content_layer(ui);
     dialogs::show(ui, v, st, out);
     toast(ui, st, out);
+
+    // Windows: Settings is a page in the window.
+    if native == Some(crate::style::Native::Windows) && st.show_data {
+        let page = egui::Frame::new().inner_margin(egui::Margin::symmetric(24, 16));
+        egui::CentralPanel::default().frame(page).show(ui, |ui| {
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                ui.set_max_width(720.0);
+                ui.label(crate::widgets::title("Settings"));
+                ui.add_space(crate::style::space::m());
+                settings(ui, st, out);
+            });
+        });
+        return;
+    }
 
     let center = egui::Frame::new().inner_margin(egui::Margin::same(GAP as i8));
     match st.tab {
@@ -174,9 +203,71 @@ pub fn root(ui: &mut Ui, v: &ViewCtx, draft: &mut NodeDraft, st: &mut UiState, o
     });
 }
 
+/// The look's content layer under the panels: Fluent's layer over Mica
+/// (translucent, so Mica shows through it), or macOS's window background
+/// beside the sidebar. Nothing for looks without one.
+fn content_layer(ui: &Ui) {
+    let layer = crate::style::current().layer;
+    // Opaque and the same as the cleared background: nothing to draw.
+    if layer.a() == 0 || (layer == crate::style::color::bg() && !crate::style::material()) {
+        return;
+    }
+    let rect = ui.available_rect_before_wrap();
+    ui.painter().rect_filled(rect, 0.0, layer);
+}
+
+/// macOS's source list: the six tabs down the left, rows 28 tall with a
+/// rounded selection, below the title bar (where the traffic lights sit).
+fn sidebar(ui: &mut Ui, st: &mut UiState) {
+    use crate::style::color::*;
+    let look = crate::style::current();
+    // A sidebar tint: a touch darker than the window in light mode, a touch
+    // lighter in dark (the solid stand-in for the sidebar material).
+    let fill =
+        if look.light { crate::style::color::bg().gamma_multiply(0.96) } else { egui::Color32::from_white_alpha(8) };
+    let frame = egui::Frame::new().fill(fill).inner_margin(egui::Margin { left: 10, right: 10, top: 0, bottom: 10 });
+    egui::Panel::left("sidebar").frame(frame).exact_size(200.0).resizable(false).show(ui, |ui| {
+        // The title bar strip: drag to move, double-click to zoom.
+        let (strip, drag) =
+            ui.allocate_exact_size(egui::vec2(ui.available_width(), 52.0), egui::Sense::click_and_drag());
+        let _ = strip;
+        if drag.double_clicked() {
+            let max = ui.ctx().input(|i| i.viewport().maximized.unwrap_or(false));
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!max));
+        } else if drag.drag_started_by(egui::PointerButton::Primary) {
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+        }
+        ui.spacing_mut().item_spacing.y = 2.0;
+        for (n, tab) in Tab::ALL.into_iter().enumerate() {
+            let selected = st.tab == tab;
+            let (rect, r) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 28.0), egui::Sense::click());
+            r.widget_info(|| egui::WidgetInfo::selected(egui::Role::Tab, true, selected, tab.label()));
+            if selected {
+                ui.painter().rect_filled(rect, crate::style::radius(), surface_hi());
+            }
+            let font = egui::TextStyle::Body.resolve(ui.style());
+            ui.painter().text(
+                egui::pos2(rect.min.x + 10.0, rect.center().y),
+                egui::Align2::LEFT_CENTER,
+                tab.label(),
+                font,
+                text(),
+            );
+            let r = r.on_hover_text(format!("{} ({})", tab.label(), crate::widgets::shortcut(&(n + 1).to_string())));
+            if r.clicked() {
+                st.tab = tab;
+            }
+        }
+    });
+}
+
 /// Whether the floor log waits on the act or its boss being chosen.
 pub fn log_locked(v: &ViewCtx) -> bool {
-    v.state.started() && (v.state.act.is_none() || v.state.boss.is_none())
+    log_locked_state(v.state)
+}
+
+pub fn log_locked_state(s: &spire_core::run::RunState) -> bool {
+    s.started() && (s.act.is_none() || s.boss.is_none())
 }
 
 /// Dims a locked panel and says why. Painted over the content, so the

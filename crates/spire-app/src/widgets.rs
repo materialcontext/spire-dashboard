@@ -6,27 +6,42 @@ use spire_core::playbook::{Opportunity, contains_ci};
 
 use crate::style::color::*;
 
-/// An outlined panel with an uppercase title, an optional right-side note,
-/// and a hairline under the header. Outlined rather than filled: borders
-/// cost a few pixels to draw, fills cost their whole area.
+/// The frame a panel is drawn in, by the look's panel style: outlined
+/// (border, no fill: cheap on software renderers), a Fluent card
+/// (translucent fill, hairline, rounded) or macOS grouped content (soft
+/// fill, rounded, no outline).
+pub fn panel_frame() -> egui::Frame {
+    let look = crate::style::current();
+    let margin = egui::Margin { left: 16, right: 16, top: 12, bottom: 12 };
+    let frame = egui::Frame::new().inner_margin(margin);
+    match look.panel {
+        crate::style::PanelStyle::Outlined => {
+            frame.stroke(Stroke::new(look.border, border())).corner_radius(look.overlay_radius)
+        }
+        crate::style::PanelStyle::Card => {
+            frame.fill(look.card_fill).stroke(Stroke::new(1.0, look.card_stroke)).corner_radius(look.overlay_radius)
+        }
+        crate::style::PanelStyle::Grouped => frame.fill(look.card_fill).corner_radius(look.overlay_radius),
+    }
+}
+
+/// A panel with a title, an optional right-side note, and a hairline under
+/// the header, drawn in the look's panel style ([`panel_frame`]).
 pub fn panel<R>(ui: &mut Ui, title: &str, note: Option<&str>, add: impl FnOnce(&mut Ui) -> R) -> R {
     let look = crate::style::current();
-    let shown = egui::Frame::new()
-        .stroke(Stroke::new(look.border, border()))
-        .inner_margin(egui::Margin { left: 16, right: 16, top: 12, bottom: 12 })
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.label(eyebrow(title));
-                if let Some(note) = note {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(RichText::new(note).small().color(text_faint()));
-                    });
-                }
-            });
-            hairline(ui);
-            add(ui)
+    let shown = panel_frame().show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.horizontal(|ui| {
+            ui.label(eyebrow(title));
+            if let Some(note) = note {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(RichText::new(note).small().color(text_faint()));
+                });
+            }
         });
+        hairline(ui);
+        add(ui)
+    });
     if look.glow {
         // One faint outer outline: reads as a glow for a few hundred pixels.
         let rect = shown.response.rect.expand(2.0);
@@ -39,7 +54,10 @@ pub fn panel<R>(ui: &mut Ui, title: &str, note: Option<&str>, add: impl FnOnce(&
 /// accent colour. For a step the player must take before anything else
 /// (choosing the act or its boss). Still outlined, not filled.
 pub fn callout<R>(ui: &mut Ui, title: &str, note: Option<&str>, add: impl FnOnce(&mut Ui) -> R) -> R {
+    let look = crate::style::current();
     egui::Frame::new()
+        .fill(look.card_fill)
+        .corner_radius(look.overlay_radius)
         .stroke(Stroke::new(2.0, accent()))
         .inner_margin(egui::Margin { left: 16, right: 16, top: 12, bottom: 16 })
         .show(ui, |ui| {
@@ -106,9 +124,10 @@ pub fn chip(ui: &mut Ui, text: impl Into<String>, color: Color32) -> egui::Respo
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
         if crate::style::tinted_chips() {
-            painter.rect_filled(rect, 0.0, color.gamma_multiply(0.18));
+            painter.rect_filled(rect, crate::style::radius(), color.gamma_multiply(0.18));
         }
-        painter.rect_stroke(rect, 0.0, Stroke::new(1.0, color.gamma_multiply(0.7)), StrokeKind::Inside);
+        let r = crate::style::radius();
+        painter.rect_stroke(rect, r, Stroke::new(1.0, color.gamma_multiply(0.7)), StrokeKind::Inside);
         painter.galley(rect.min + PAD, galley, color);
     }
     response
@@ -216,7 +235,7 @@ pub fn segmented<T: PartialEq + Clone>(ui: &mut Ui, value: &mut T, options: &[(T
         ui.spacing_mut().item_spacing.x = 4.0;
         for (opt, label) in options {
             let selected = *value == *opt;
-            let text = RichText::new(*label).color(if selected { bg() } else { text() });
+            let text = RichText::new(*label).color(if selected { on_accent() } else { text() });
             let button = egui::Button::new(text)
                 .fill(if selected { accent() } else { Color32::TRANSPARENT })
                 .stroke(Stroke::new(1.0, if selected { accent() } else { border() }));
@@ -232,7 +251,7 @@ pub fn segmented<T: PartialEq + Clone>(ui: &mut Ui, value: &mut T, options: &[(T
 /// The single most important action in a panel.
 pub fn primary_button(ui: &mut Ui, text: &str, enabled: bool) -> egui::Response {
     let label = RichText::new(text).family(crate::style::strong_family());
-    let button = egui::Button::new(label.color(if enabled { bg() } else { text_faint() }))
+    let button = egui::Button::new(label.color(if enabled { on_accent() } else { text_faint() }))
         .fill(if enabled { accent() } else { Color32::TRANSPARENT })
         .stroke(if enabled { Stroke::NONE } else { Stroke::new(1.0, border()) })
         .min_size(vec2(ui.available_width(), 32.0));
@@ -524,4 +543,48 @@ pub fn culled<R>(
     let shown = ui.scope(add);
     ui.ctx().data_mut(|d| d.insert_temp(id, shown.response.rect.size()));
     Some(shown.inner)
+}
+
+/// The backplate of a custom-painted list row, by platform: Fluent's
+/// rounded hover fill with a 3×16 accent pill on the selected row; macOS's
+/// rounded selection (rows don't light up on hover); flat fills elsewhere.
+/// Also tells screen readers the row's name and whether it's selected.
+pub fn row_backplate(ui: &Ui, resp: &egui::Response, name: &str, selected: bool) {
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::ListBoxOption, true, selected, name));
+    let rect = resp.rect;
+    let painter = ui.painter();
+    let hovered = resp.hovered();
+    let r = crate::style::radius();
+    match crate::style::current().native {
+        Some(crate::style::Native::Windows) => {
+            if selected || hovered {
+                painter.rect_filled(rect.shrink2(vec2(0.0, 1.0)), r, surface_hi());
+            }
+            if selected {
+                let pill = Rect::from_center_size(egui::pos2(rect.min.x + 7.0, rect.center().y), vec2(3.0, 16.0));
+                painter.rect_filled(pill, 1.5, accent());
+            }
+        }
+        Some(crate::style::Native::Mac) => {
+            if selected {
+                painter.rect_filled(rect.shrink2(vec2(0.0, 1.0)), r, surface_hi());
+            }
+        }
+        None => {
+            if selected || hovered {
+                painter.rect_filled(rect, 0.0, if selected { surface_hi() } else { surface() });
+            }
+        }
+    }
+}
+
+/// A modal dialog in the platform's style: Fluent's smoke behind it
+/// (#4D000000), a lighter dim on macOS, egui's default elsewhere.
+pub fn modal(id: &'static str) -> egui::Modal {
+    let m = egui::Modal::new(egui::Id::unique(id));
+    match crate::style::current().native {
+        Some(crate::style::Native::Windows) => m.backdrop_color(Color32::from_black_alpha(0x4D)),
+        Some(crate::style::Native::Mac) => m.backdrop_color(Color32::from_black_alpha(0x26)),
+        None => m,
+    }
 }

@@ -9,8 +9,13 @@
 //! - Drag any window edge or corner to resize.
 //!
 //! Settings can bring back the system title bar.
+//!
+//! On macOS with the System look the window keeps its real title bar,
+//! made transparent over full-size content ("unified"): the traffic
+//! lights stay where the system puts them and the app's toolbar row sits
+//! beside them. On Windows the System look can put Mica behind the window.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use eframe::egui::{self, Color32, CursorIcon, Rect, ResizeDirection, Sense, Stroke, Ui, ViewportCommand, pos2, vec2};
 
@@ -18,6 +23,71 @@ use crate::style::color::*;
 
 /// Whether the app draws its own title bar (the default).
 static CUSTOM: AtomicBool = AtomicBool::new(true);
+/// macOS unified title bar: the system's traffic lights over our content.
+static UNIFIED: AtomicBool = AtomicBool::new(false);
+/// The light/dark the window material was last set for (0 unset, 1 light, 2 dark).
+static MATERIAL_MODE: AtomicU8 = AtomicU8::new(0);
+
+/// Width the macOS traffic lights take at the left of the title bar,
+/// with their margin.
+pub const TRAFFIC_LIGHTS: f32 = 78.0;
+
+/// The window keeps macOS's title bar, transparent over the content.
+pub fn unified() -> bool {
+    UNIFIED.load(Ordering::Relaxed)
+}
+
+/// Sets up the macOS unified title bar (startup only; see `main.rs`).
+pub fn init_unified(on: bool) {
+    UNIFIED.store(on, Ordering::Relaxed);
+    if on {
+        CUSTOM.store(false, Ordering::Relaxed);
+    }
+}
+
+/// Puts Windows 11's Mica behind the window, matching light or dark. Call
+/// at startup and whenever the mode changes; cheap when nothing changed.
+/// The window must have been created transparent. Records whether it
+/// worked, so the app clears to transparent only then.
+pub fn material(window: Window, dark: bool) {
+    let mode = if dark { 2 } else { 1 };
+    if MATERIAL_MODE.swap(mode, Ordering::Relaxed) != mode {
+        apply_mica(window, dark);
+    }
+}
+
+/// `window-vibrancy` sets the system backdrop (Mica, Windows 11 22H2 and
+/// later) and the dark title bar; it fails cleanly on older Windows.
+#[cfg(windows)]
+fn apply_mica(window: Window, dark: bool) {
+    let ok = match window {
+        Window::Creation(cc) => window_vibrancy::apply_mica(cc, Some(dark)),
+        Window::Frame(f) => window_vibrancy::apply_mica(f, Some(dark)),
+    }
+    .is_ok();
+    crate::style::set_material(ok);
+}
+
+#[cfg(not(windows))]
+fn apply_mica(_window: Window, _dark: bool) {}
+
+/// The native window, as eframe hands it over at startup or each frame.
+pub enum Window<'a> {
+    Creation(&'a eframe::CreationContext<'a>),
+    Frame(&'a eframe::Frame),
+}
+
+/// Whether the window should be created transparent so Mica can show:
+/// the System look on Windows 11, in the system frame, with transparency
+/// effects on and no contrast theme. Decided before the window exists.
+///
+/// Only with the system frame: Mica behind an undecorated window isn't
+/// documented, and if it didn't take, the transparent window would show
+/// the desktop through it. The app-drawn title bar gets Mica's own solid
+/// fallback colour instead, as Windows shows when Mica is off.
+pub fn wants_material(system_look: bool, system_frame: bool, a: &crate::platform::Appearance) -> bool {
+    cfg!(windows) && system_look && system_frame && a.transparency && a.contrast.is_none()
+}
 
 /// Pixels along each window edge that start a resize.
 const EDGE: f32 = 5.0;
@@ -45,7 +115,7 @@ fn maximized(ctx: &egui::Context) -> bool {
 /// widgets added later sit on top, so tabs and buttons keep their clicks.
 /// The header's height is measured each frame and used for the next.
 pub fn title_bar_area(ui: &mut Ui) {
-    if !custom() {
+    if !custom() && !unified() {
         return;
     }
     let id = egui::Id::unique("title-bar-height");
@@ -64,7 +134,7 @@ pub fn title_bar_area(ui: &mut Ui) {
 
 /// Records the header's height for [`title_bar_area`] on the next frame.
 pub fn title_bar_done(ui: &Ui, top: f32) {
-    if custom() {
+    if custom() || unified() {
         let height = ui.min_rect().bottom() - top;
         ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique("title-bar-height"), height));
     }
@@ -101,11 +171,21 @@ pub fn window_buttons(ui: &mut Ui) {
 }
 
 fn button(ui: &mut Ui, glyph: Glyph, tip: &str) -> egui::Response {
-    let (rect, r) = ui.allocate_exact_size(vec2(40.0, 30.0), Sense::click());
+    // Windows 11 caption buttons are 46 wide; other looks keep them compact.
+    let fluent = crate::style::current().native == Some(crate::style::Native::Windows);
+    let size = if fluent { vec2(46.0, 32.0) } else { vec2(40.0, 30.0) };
+    let (rect, r) = ui.allocate_exact_size(size, Sense::click());
     let hovered = r.hovered();
     let painter = ui.painter();
     if hovered {
-        let fill = if matches!(glyph, Glyph::Close) { Color32::from_rgb(196, 43, 28) } else { surface_hi() };
+        // Close turns red (Fluent's #C42B1C); the others take the subtle
+        // hover fill, pressed one step further.
+        let fill = match (glyph, r.is_pointer_button_down_on()) {
+            (Glyph::Close, false) => Color32::from_rgb(196, 43, 28),
+            (Glyph::Close, true) => Color32::from_rgb(200, 64, 49),
+            (_, false) => surface_hi(),
+            (_, true) => border(),
+        };
         painter.rect_filled(rect, 0.0, fill);
     }
     let color = match (glyph, hovered) {
@@ -113,7 +193,7 @@ fn button(ui: &mut Ui, glyph: Glyph, tip: &str) -> egui::Response {
         (_, true) => text(),
         _ => text_dim(),
     };
-    let stroke = Stroke::new(1.2, color);
+    let stroke = Stroke::new(if fluent { 1.0 } else { 1.2 }, color);
     let c = rect.center();
     let h = 5.0;
     match glyph {
