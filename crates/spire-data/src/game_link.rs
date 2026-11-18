@@ -147,13 +147,27 @@ pub fn pick_save_dir(dirs: &[PathBuf], profile: Option<i32>) -> Option<PathBuf> 
 pub const RUN_SAVE: &str = "current_run.save";
 
 impl Link {
-    /// Fills in the saves folder, run save and history from the game's data
-    /// folder when the mod didn't give them (or gave one that's gone).
+    /// Settles the saves folder, run save and history: the folder whose run
+    /// save changed last, among the game's data folder and the one the mod
+    /// named. The mod's is only a candidate: a save-path mod (UnifiedSavePath
+    /// keeps modded saves in the vanilla `profile<N>`) makes the game write
+    /// somewhere other than the folder its own lookup reports, which may
+    /// still hold an old run. With no run save anywhere, the mod's folder,
+    /// else the profile it names.
     pub fn locate(&mut self, game: &Path) {
-        if self.save_dir.as_deref().is_some_and(Path::is_dir) {
-            return;
+        let named = self.save_dir.clone().filter(|d| d.is_dir());
+        let mut dirs = save_dirs(game);
+        if let Some(d) = named.as_ref().filter(|d| !dirs.contains(d)) {
+            dirs.push(d.clone());
         }
-        let Some(dir) = pick_save_dir(&save_dirs(game), self.profile_id) else { return };
+        let newest_run = dirs
+            .iter()
+            .filter_map(|d| Some((modified(&d.join(RUN_SAVE))?, d)))
+            .max_by_key(|(t, _)| *t)
+            .map(|(_, d)| d.clone());
+        let Some(dir) = newest_run.or(named).or_else(|| pick_save_dir(&dirs, self.profile_id)) else {
+            return;
+        };
         let run_save = dir.join(RUN_SAVE);
         self.run_save = run_save.is_file().then_some(run_save);
         self.history_dir = Some(dir.join("history"));
@@ -226,10 +240,22 @@ mod tests {
         assert_eq!(link.save_dir, Some(plain.clone()));
         assert_eq!(link.run_save, Some(plain.join(RUN_SAVE)));
         assert_eq!(link.history_dir, Some(plain.join("history")));
-        // A folder the mod named and that exists is kept.
+        // The mod names the modded folder, but the game writes the vanilla
+        // one (UnifiedSavePath): the newer run save wins.
         let mut named = Link { save_dir: Some(modded.clone()), ..Link::default() };
         named.locate(&game);
-        assert_eq!(named.save_dir, Some(modded));
+        assert_eq!(named.save_dir, Some(plain.clone()));
+        // Once the modded folder holds the newer run save, it wins.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(modded.join(RUN_SAVE), "{}").unwrap();
+        named.locate(&game);
+        assert_eq!(named.save_dir, Some(modded.clone()));
+        // No run save anywhere: the folder the mod named.
+        std::fs::remove_file(plain.join(RUN_SAVE)).unwrap();
+        std::fs::remove_file(modded.join(RUN_SAVE)).unwrap();
+        let mut named = Link { save_dir: Some(other.clone()), profile_id: Some(1), ..Link::default() };
+        named.locate(&game);
+        assert_eq!(named.save_dir, Some(other));
         let _ = std::fs::remove_dir_all(game);
     }
 }
