@@ -44,6 +44,10 @@ struct WRun {
     players: Vec<serde_json::Value>,
     #[serde(default)]
     map_point_history: Vec<Vec<WPoint>>,
+    #[serde(default)]
+    killed_by_encounter: Option<String>,
+    #[serde(default)]
+    win: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -60,6 +64,8 @@ struct WPoint {
 struct WStats {
     #[serde(default)]
     damage_taken: Option<u32>,
+    #[serde(default)]
+    current_hp: Option<u32>,
 }
 
 #[derive(Deserialize)]
@@ -84,6 +90,10 @@ pub struct Fight {
     pub monsters: Vec<String>,
     pub damage_taken: Option<u32>,
     pub turns: Option<u32>,
+    /// HP going into the fight (after the previous room).
+    pub hp_in: Option<u32>,
+    /// The run ended in this fight.
+    pub died: bool,
 }
 
 fn strip(id: &str) -> &str {
@@ -101,36 +111,48 @@ fn is_empty_value(v: &Option<serde_json::Value>) -> bool {
 
 /// Extracts single-player, unmodified fights from JSONL. Bad lines are skipped.
 pub fn fights(jsonl: &str) -> Vec<Fight> {
-    jsonl
+    let runs = jsonl
         .lines()
         .filter_map(|line| serde_json::from_str::<WRun>(line).ok())
-        .filter(|run| run.players.len() == 1 && is_empty_value(&run.modifiers))
-        .enumerate()
-        .flat_map(|(r, run)| {
-            run.map_point_history
-                .into_iter()
-                .enumerate()
-                .flat_map(move |(a, points)| points.into_iter().map(move |p| (r, a, p)))
-        })
-        .flat_map(|(run, act, point)| {
-            let damage = match point.player_stats.as_slice() {
-                [only] => only.damage_taken,
-                _ => None,
-            };
-            point.rooms.into_iter().filter(|r| !r.monster_ids.is_empty()).map(move |room| {
-                let mut monsters: Vec<String> = room.monster_ids.iter().map(|m| strip(m).to_string()).collect();
-                monsters.sort();
-                Fight {
-                    run,
-                    act,
-                    encounter: strip(&room.model_id).to_string(),
-                    monsters,
-                    damage_taken: damage,
-                    turns: room.turns_taken,
+        .filter(|run| run.players.len() == 1 && is_empty_value(&run.modifiers));
+    let mut out = Vec::new();
+    for (r, run) in runs.enumerate() {
+        let killer = run.killed_by_encounter.as_deref().map(strip).filter(|k| *k != "NONE");
+        let lost = run.win == Some(false);
+        let points = run.map_point_history.len();
+        let mut hp_before: Option<u32> = None;
+        for (act, acts) in run.map_point_history.into_iter().enumerate() {
+            let last_act = act + 1 == points;
+            let n = acts.len();
+            for (i, point) in acts.into_iter().enumerate() {
+                let (damage, hp_after) = match point.player_stats.as_slice() {
+                    [only] => (only.damage_taken, only.current_hp),
+                    _ => (None, None),
+                };
+                let last = last_act && i + 1 == n;
+                for room in point.rooms.into_iter().filter(|r| !r.monster_ids.is_empty()) {
+                    let mut monsters: Vec<String> = room.monster_ids.iter().map(|m| strip(m).to_string()).collect();
+                    monsters.sort();
+                    let encounter = strip(&room.model_id).to_string();
+                    let died = last && lost && killer == Some(encounter.as_str());
+                    out.push(Fight {
+                        run: r,
+                        act,
+                        encounter,
+                        monsters,
+                        damage_taken: damage,
+                        turns: room.turns_taken,
+                        hp_in: hp_before,
+                        died,
+                    });
                 }
-            })
-        })
-        .collect()
+                if hp_after.is_some() {
+                    hp_before = hp_after;
+                }
+            }
+        }
+    }
+    out
 }
 
 /// Fights from several export pages, with run indices kept unique across
@@ -361,12 +383,47 @@ pub fn read_encounter(fights: &[&[String]], summoner: bool) -> Option<Reading> {
         (ls, Vec::new())
     };
 
-    Some(Reading { lineups, spawns, stats: EncounterStats { fights: n as u32, avg_damage_taken: 0.0, avg_turns: 0.0 } })
+    Some(Reading { lineups, spawns, stats: EncounterStats { fights: n as u32, ..Default::default() } })
 }
 
 fn average(values: impl Iterator<Item = u32>) -> f32 {
     let (sum, n) = values.fold((0u64, 0u32), |(s, n), v| (s + u64::from(v), n + 1));
     if n == 0 { 0.0 } else { (sum as f64 / f64::from(n)) as f32 }
+}
+
+/// Turns tracked one by one in the death histogram; later deaths count
+/// in the last bucket.
+pub const DEATH_TURNS: usize = 15;
+
+fn percentile(mut values: Vec<u32>, p: f32) -> Option<u32> {
+    if values.is_empty() {
+        return None;
+    }
+    values.sort_unstable();
+    let i = ((values.len() as f32 * p) as usize).min(values.len() - 1);
+    Some(values[i])
+}
+
+/// Deaths, the turns they happened on, what survivors took and the HP
+/// both groups came in with.
+fn outcomes<'a>(stats: &mut EncounterStats, fights: impl Iterator<Item = &'a Fight>) {
+    let fights: Vec<&Fight> = fights.collect();
+    let dead: Vec<&&Fight> = fights.iter().filter(|f| f.died).collect();
+    stats.deaths = dead.len() as u32;
+    stats.death_turns = vec![0; DEATH_TURNS];
+    for f in &dead {
+        if let Some(t) = f.turns.filter(|t| *t > 0) {
+            stats.death_turns[(t as usize).min(DEATH_TURNS) - 1] += 1;
+        }
+    }
+    while stats.death_turns.last() == Some(&0) {
+        stats.death_turns.pop();
+    }
+    let won: Vec<&&Fight> = fights.iter().filter(|f| !f.died).collect();
+    let damage: Vec<u32> = won.iter().filter_map(|f| f.damage_taken).collect();
+    stats.win_damage = percentile(damage.clone(), 0.5).zip(percentile(damage, 0.9));
+    let hp = |list: &[&&Fight]| percentile(list.iter().filter_map(|f| f.hp_in).collect(), 0.5);
+    stats.hp_in = hp(&won).zip(hp(&dead));
 }
 
 /// Fills `lineups`, `spawns` and `stats` on the pack's encounters.
@@ -417,6 +474,7 @@ pub fn enrich(pack: &mut DataPack, fights: &[Fight]) -> EnrichSummary {
         if let Some(mut r) = read_encounter(&lineups, summoner) {
             r.stats.avg_damage_taken = average(list.iter().filter_map(|(_, f)| f.damage_taken));
             r.stats.avg_turns = average(list.iter().filter_map(|(_, f)| f.turns));
+            outcomes(&mut r.stats, list.iter().map(|(_, f)| *f));
             total += list.len();
             readings.insert((*enc).to_string(), r);
         }
@@ -554,5 +612,20 @@ mod tests {
         assert_eq!(f[0].monsters, ["A", "B"]);
         assert_eq!(f[0].damage_taken, Some(7));
         assert_eq!(f[0].turns, Some(3));
+    }
+
+    #[test]
+    fn records_entering_hp_and_the_fight_that_ended_the_run() {
+        let run = r#"{"players":[{}],"modifiers":[],"win":false,"killed_by_encounter":"ENCOUNTER.BOSS","map_point_history":[[{"player_stats":[{"current_hp":50}],"rooms":[{"model_id":"EVENT.NEOW"}]},{"player_stats":[{"damage_taken":10,"current_hp":40}],"rooms":[{"model_id":"ENCOUNTER.BOSS","monster_ids":["MONSTER.A"],"turns_taken":4}]}],[{"player_stats":[{"damage_taken":40,"current_hp":0}],"rooms":[{"model_id":"ENCOUNTER.BOSS","monster_ids":["MONSTER.A"],"turns_taken":7}]}]]}"#;
+        let f = fights(run);
+        assert_eq!(f.len(), 2);
+        assert_eq!((f[0].hp_in, f[0].died), (Some(50), false));
+        assert_eq!((f[1].hp_in, f[1].died), (Some(40), true));
+        let mut stats = EncounterStats::default();
+        outcomes(&mut stats, f.iter());
+        assert_eq!(stats.deaths, 1);
+        assert_eq!(stats.death_turns, vec![0, 0, 0, 0, 0, 0, 1]);
+        assert_eq!(stats.win_damage, Some((10, 10)));
+        assert_eq!(stats.hp_in, Some((50, 40)));
     }
 }

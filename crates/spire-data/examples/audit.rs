@@ -65,7 +65,7 @@ fn main() {
                 .encounters_in(&act.id, room)
                 .map(|e| {
                     let t = threat_profile(e, &cat, &pb, Default::default());
-                    format!("{}{}:{}hp/{}dmg", e.name, if e.weak { "(w)" } else { "" }, t.hp_min, t.worst_turn)
+                    format!("{}{}:{}hp/{}dmg", e.name, if e.weak { "(w)" } else { "" }, t.hp_min, t.peak_turn)
                 })
                 .collect();
             rows.sort();

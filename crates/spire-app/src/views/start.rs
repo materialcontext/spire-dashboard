@@ -47,25 +47,40 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
             ui.label(eyebrow("Ascension"));
             ui.add_space(crate::style::space::xs());
             let max = v.catalog.rules.max_ascension;
-            st.new_ascension = st.new_ascension.min(max);
-            let labels: Vec<(u32, String)> = (0..=max).map(|n| (n, n.to_string())).collect();
-            let options: Vec<(u32, &str)> = labels.iter().map(|(n, s)| (*n, s.as_str())).collect();
+            st.new_ascension = st.new_ascension.map(|a| a.min(max));
+            let labels: Vec<(Option<u32>, String)> = (0..=max).map(|n| (Some(n), n.to_string())).collect();
+            let options: Vec<(Option<u32>, &str)> = labels.iter().map(|(n, s)| (*n, s.as_str())).collect();
             segmented(ui, &mut st.new_ascension, &options);
-            if let Some(level) = v.catalog.ascensions.get(&st.new_ascension) {
-                ui.add_space(crate::style::space::xs());
-                ui.label(RichText::new(&level.name).strong().color(text()));
-                ui.label(RichText::new(&level.text).small().color(text_dim()));
-                if st.new_ascension > 1 {
-                    ui.label(RichText::new("Includes every lower level.").small().color(text_faint()));
+            match st.new_ascension.and_then(|a| v.catalog.ascensions.get(&a).map(|l| (a, l))) {
+                Some((a, level)) => {
+                    ui.add_space(crate::style::space::xs());
+                    ui.label(RichText::new(&level.name).strong().color(text()));
+                    ui.label(RichText::new(&level.text).small().color(text_dim()));
+                    if a > 1 {
+                        ui.label(RichText::new("Includes every lower level.").small().color(text_faint()));
+                    }
                 }
+                None if st.new_ascension.is_none() => {
+                    ui.add_space(crate::style::space::xs());
+                    ui.label(RichText::new("Pick the ascension you're playing.").small().color(text_dim()));
+                }
+                None => {}
             }
 
             ui.add_space(crate::style::space::l());
+            let ready = st.new_character.clone().zip(st.new_ascension);
             ui.allocate_ui(vec2(260.0, 36.0), |ui| {
-                if primary_button(ui, "Start run", st.new_character.is_some()).clicked()
-                    && let Some(character) = st.new_character.clone()
+                let r = primary_button(ui, "Start run", ready.is_some());
+                let r = match (&st.new_character, st.new_ascension) {
+                    (None, None) => r.on_disabled_hover_text("Pick a character and an ascension first"),
+                    (None, _) => r.on_disabled_hover_text("Pick a character first"),
+                    (_, None) => r.on_disabled_hover_text("Pick an ascension first"),
+                    _ => r,
+                };
+                if r.clicked()
+                    && let Some((character, ascension)) = ready
                 {
-                    out.push(Action::NewRun { character, ascension: st.new_ascension });
+                    out.push(Action::NewRun { character, ascension });
                 }
             });
         });

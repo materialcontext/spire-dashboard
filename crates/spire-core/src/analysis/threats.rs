@@ -1,7 +1,8 @@
 //! Reading encounters as threats, and previewing what the next node can be.
 
 use crate::analysis::deck::{Coverage, DeckProfile, coverage};
-use crate::catalog::{Catalog, Encounter, RoomType};
+use crate::analysis::pattern;
+use crate::catalog::{Catalog, Encounter, Monster, RoomType};
 use crate::ids::EncounterId;
 use crate::playbook::{ActPlan, Capability, Playbook, Role};
 use crate::run::{NodeKind, RunState};
@@ -17,8 +18,9 @@ pub struct ThreatProfile {
     pub hp_max: u32,
     /// Biggest single move across all enemies (damage x hits).
     pub max_hit: u32,
-    /// Sum of each enemy's biggest move: the worst-case turn.
-    pub worst_turn: u32,
+    /// Most damage the enemies can deal in one turn over the turns this
+    /// fight usually lasts, following their move patterns.
+    pub peak_turn: u32,
     pub buffs: bool,
     pub summons: bool,
     pub debuffs: bool,
@@ -43,44 +45,58 @@ impl Scaling {
     }
 }
 
-fn lineup_profile<'a>(monsters: impl Iterator<Item = &'a crate::catalog::Monster>, scaling: Scaling) -> ThreatProfile {
-    monsters.fold(ThreatProfile::default(), |mut t, m| {
+/// Turns a fight is read over: as long as it usually lasts (community
+/// average, rounded up), else the pattern horizon.
+pub fn typical_turns(enc: &Encounter) -> usize {
+    enc.stats
+        .as_ref()
+        .filter(|s| s.avg_turns > 0.0)
+        .map_or(pattern::HORIZON, |s| (s.avg_turns.ceil() as usize).clamp(1, pattern::HORIZON))
+}
+
+fn lineup_profile(monsters: &[&Monster], scaling: Scaling, vulnerable_pct: u32, turns: usize) -> ThreatProfile {
+    let mut t = monsters.iter().fold(ThreatProfile::default(), |mut t, m| {
         let (hp_min, hp_max) = m.hp_at(scaling.tough);
         t.enemies += 1;
         t.hp_min += hp_min;
         t.hp_max += hp_max;
         let biggest = m.moves.iter().map(|mv| mv.total_damage_at(scaling.deadly)).max().unwrap_or(0);
         t.max_hit = t.max_hit.max(biggest);
-        t.worst_turn += biggest;
         t.buffs |= m.moves.iter().any(|mv| mv.intent_has("buff"));
         t.summons |= m.moves.iter().any(|mv| mv.intent_has("summon"));
         t.debuffs |= m.moves.iter().any(|mv| mv.intent_has("debuff"));
         t.statuses |= m.moves.iter().any(|mv| mv.intent_has("status"));
         t
-    })
+    });
+    let plans: Vec<pattern::Plan> =
+        monsters.iter().map(|m| pattern::plan(m, scaling.deadly, vulnerable_pct, turns)).collect();
+    t.peak_turn = pattern::incoming(&plans, turns).iter().map(|(_, _, most)| *most).max().unwrap_or(0);
+    t
 }
 
 /// Reads an encounter as numbers. With known lineups, counts every monster
 /// instance and spans all variants (HP from the smallest to the largest
-/// lineup, the worst turn of any). Without them, falls back to one of each
+/// lineup, the peak turn of any). Without them, falls back to one of each
 /// listed type plus the playbook's name heuristic for groups.
 pub fn threat_profile(enc: &Encounter, catalog: &Catalog, playbook: &Playbook, scaling: Scaling) -> ThreatProfile {
     let resolve =
         |ids: &'_ [crate::ids::MonsterId]| ids.iter().filter_map(|id| catalog.monsters.get(id)).collect::<Vec<_>>();
+    let vulnerable = catalog.rules.vulnerable_pct.unwrap_or(50);
+    let turns = typical_turns(enc);
     let mut t = if enc.lineups.is_empty() {
-        let mut t = lineup_profile(resolve(&enc.monsters).into_iter(), scaling);
+        let mut t = lineup_profile(&resolve(&enc.monsters), scaling, vulnerable, turns);
         t.group = playbook.sounds_like_group(&enc.name);
         t
     } else {
         let profiles: Vec<ThreatProfile> =
-            enc.lineups.iter().map(|l| lineup_profile(resolve(&l.monsters).into_iter(), scaling)).collect();
+            enc.lineups.iter().map(|l| lineup_profile(&resolve(&l.monsters), scaling, vulnerable, turns)).collect();
         profiles.iter().fold(ThreatProfile { hp_min: u32::MAX, ..Default::default() }, |acc, p| ThreatProfile {
             enemies: acc.enemies.max(p.enemies),
             group: false,
             hp_min: acc.hp_min.min(p.hp_min),
             hp_max: acc.hp_max.max(p.hp_max),
             max_hit: acc.max_hit.max(p.max_hit),
-            worst_turn: acc.worst_turn.max(p.worst_turn),
+            peak_turn: acc.peak_turn.max(p.peak_turn),
             buffs: acc.buffs || p.buffs,
             summons: acc.summons || p.summons,
             debuffs: acc.debuffs || p.debuffs,
@@ -89,6 +105,54 @@ pub fn threat_profile(enc: &Encounter, catalog: &Catalog, playbook: &Playbook, s
     };
     t.summons |= !enc.spawns.is_empty();
     t
+}
+
+/// One monster type in a lineup and what it does each turn.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MonsterPlan {
+    pub monster: crate::ids::MonsterId,
+    pub name: String,
+    pub count: u32,
+    pub plan: pattern::Plan,
+}
+
+/// The most common lineup's monsters, their turn plans for `turns` turns,
+/// and their combined HP (midpoint of the range).
+pub fn lineup_plans(enc: &Encounter, catalog: &Catalog, scaling: Scaling, turns: usize) -> (Vec<MonsterPlan>, u32) {
+    let vulnerable = catalog.rules.vulnerable_pct.unwrap_or(50);
+    let counts: Vec<(&crate::ids::MonsterId, u32)> = match enc.lineups.first() {
+        Some(l) => l.counts(),
+        None => enc.monsters.iter().map(|m| (m, 1)).collect(),
+    };
+    let mut hp = 0;
+    let plans = counts
+        .into_iter()
+        .filter_map(|(id, count)| {
+            let m = catalog.monsters.get(id)?;
+            let (lo, hi) = m.hp_at(scaling.tough);
+            hp += (lo + hi) / 2 * count;
+            Some(MonsterPlan {
+                monster: id.clone(),
+                name: m.name.clone(),
+                count,
+                plan: pattern::plan(m, scaling.deadly, vulnerable, turns),
+            })
+        })
+        .collect();
+    (plans, hp)
+}
+
+/// Expected damage per enemy turn from a lineup's plans, counting copies.
+pub fn lineup_incoming(plans: &[MonsterPlan], turns: usize) -> Vec<(u32, f32, u32)> {
+    let mut total = vec![(0u32, 0f32, 0u32); turns];
+    for mp in plans {
+        for (t, (lo, ex, hi)) in pattern::incoming(std::slice::from_ref(&mp.plan), turns).into_iter().enumerate() {
+            total[t].0 += lo * mp.count;
+            total[t].1 += ex * mp.count as f32;
+            total[t].2 += hi * mp.count;
+        }
+    }
+    total
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -111,8 +175,8 @@ pub fn demands(t: &ThreatProfile, room: RoomType, plan: Option<&ActPlan>) -> Vec
         push(Capability::Aoe, why);
     }
     if let Some(plan) = plan {
-        if t.worst_turn >= plan.big_hit {
-            push(Capability::Role(Role::FrontloadDefense), format!("up to {} damage in one turn", t.worst_turn));
+        if t.peak_turn >= plan.big_hit {
+            push(Capability::Role(Role::FrontloadDefense), format!("up to {} damage in one turn", t.peak_turn));
         }
         let long = match room {
             RoomType::Monster => plan.long_fight_hp.monster,
@@ -153,6 +217,10 @@ pub struct ThreatPreview {
     /// Names of monsters that can join mid-fight.
     pub spawns: Vec<String>,
     pub stats: Option<crate::catalog::EncounterStats>,
+    /// The most common lineup, turn by turn.
+    pub plans: Vec<MonsterPlan>,
+    /// Its combined HP.
+    pub lineup_hp: u32,
 }
 
 impl ThreatPreview {
@@ -173,6 +241,7 @@ pub fn preview(
 ) -> ThreatPreview {
     let plan = playbook.act(act_index);
     let profile = threat_profile(enc, catalog, playbook, scaling);
+    let (plans, lineup_hp) = lineup_plans(enc, catalog, scaling, pattern::HORIZON);
     let checks = demands(&profile, enc.room, plan)
         .into_iter()
         .map(|d| DemandCheck {
@@ -191,6 +260,8 @@ pub fn preview(
         lineups: enc.lineups.iter().map(|l| (catalog.lineup_label(l), l.share)).collect(),
         spawns: enc.spawns.iter().map(|m| catalog.monster_name(m)).collect(),
         stats: enc.stats.clone(),
+        plans,
+        lineup_hp,
     }
 }
 

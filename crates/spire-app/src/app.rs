@@ -5,6 +5,7 @@ use std::sync::mpsc::{Receiver, channel};
 use eframe::egui;
 use spire_core::analysis::Dashboard;
 use spire_core::analysis::sim::{DeckSim, simulate};
+use spire_core::analysis::survival::{self, Outlook};
 use spire_core::analysis::timeline::{Timeline, timeline};
 use spire_core::run::{Change, Outcome, RunEvent, RunState};
 use spire_core::{Catalog, Playbook, Run};
@@ -26,6 +27,24 @@ pub struct ViewCtx<'a> {
     pub generation: u64,
     /// Run analytics, computed only while the Analytics tab is open.
     pub analytics: Option<&'a Analytics>,
+    /// The deck simulation and fight outlooks, once built for this state.
+    pub combat: Option<&'a Combat>,
+}
+
+/// The live deck's simulation and how it fares against this act's elites
+/// and bosses. Built lazily (a few milliseconds) for the tabs that show it.
+pub struct Combat {
+    /// The dashboard generation it was built for. It can lag the run by a
+    /// moment (see `prepare_tab`); keys layout caches.
+    pub generation: u64,
+    pub sim: DeckSim,
+    pub outlooks: Vec<(spire_core::EncounterId, Outlook)>,
+}
+
+impl Combat {
+    pub fn outlook(&self, id: &spire_core::EncounterId) -> Option<&Outlook> {
+        self.outlooks.iter().find(|(e, _)| e == id).map(|(_, o)| o)
+    }
 }
 
 /// The live run's charts and deck simulation. Costlier than the dashboard
@@ -40,7 +59,8 @@ pub struct UiState {
     pub threat_tab: spire_core::run::NodeKind,
     pub show_data: bool,
     pub new_character: Option<spire_core::CharacterId>,
-    pub new_ascension: u32,
+    /// Unset until picked: every run asks for its ascension.
+    pub new_ascension: Option<u32>,
     pub source_url: String,
     pub messages: Vec<String>,
     pub updating: bool,
@@ -69,6 +89,10 @@ pub struct Toast {
     pub until: f64,
 }
 
+/// Seconds the run must stay unchanged before the deck simulation behind
+/// the fight outlooks is rebuilt.
+const COMBAT_SETTLE: f64 = 0.15;
+
 /// Seconds a commit notice stays up.
 const TOAST_SECONDS: f64 = 6.0;
 
@@ -84,6 +108,9 @@ pub struct SpireApp {
     generation: u64,
     /// Analytics and the generation they were built for.
     analytics: Option<(u64, Analytics)>,
+    combat: Option<Combat>,
+    /// When the dashboard generation last changed (`ctx.input().time`).
+    changed: (u64, f64),
     draft: NodeDraft,
     ui: UiState,
     update_rx: Option<Receiver<Result<fetch::Fetched, String>>>,
@@ -121,11 +148,13 @@ impl SpireApp {
             dash,
             generation: 0,
             analytics: None,
+            combat: None,
+            changed: (0, 0.0),
             ui: UiState {
                 threat_tab: spire_core::run::NodeKind::Monster,
                 show_data: false,
                 new_character: None,
-                new_ascension: 0,
+                new_ascension: None,
                 source_url,
                 messages,
                 updating: false,
@@ -308,6 +337,8 @@ impl SpireApp {
         match action {
             Action::NewRun { character, ascension } => match RunEvent::start(&self.catalog, &character, ascension) {
                 Some(start) => {
+                    // The next run asks again.
+                    self.ui.new_ascension = None;
                     self.run = Run { started_at: Some(spire_data::now_rfc3339()), ..Run::default() };
                     self.run.push(start);
                     self.run_changed();
@@ -335,6 +366,12 @@ impl SpireApp {
                 self.run_changed();
                 if boss {
                     self.ancient_heal();
+                }
+                // A floor that leaves the player at 0 HP ends the run: offer
+                // the End run dialog with the fight already filled in.
+                if node && self.state.hp <= 0 && self.state.outcome.is_none() {
+                    self.ui.end_run_open = true;
+                    self.ui.end_encounter = self.state.encounters_seen.last().cloned();
                 }
                 if node {
                     let now = ctx.input(|i| i.time);
@@ -455,6 +492,20 @@ impl SpireApp {
                 }
             }
             Action::ToggleDataWindow => self.ui.show_data = !self.ui.show_data,
+            Action::SaveHistory { id, run } => match self.store.update_archived(&id, &run) {
+                Ok(()) => {
+                    self.ui.history.invalidate();
+                    self.note("Run history updated.");
+                }
+                Err(e) => self.note(format!("Could not save the edited run: {e}")),
+            },
+            Action::DeleteHistory(id) => match self.store.delete_archived(&id) {
+                Ok(()) => {
+                    self.ui.history.invalidate();
+                    self.note("Run deleted from history.");
+                }
+                Err(e) => self.note(format!("Could not delete the run: {e}")),
+            },
         }
     }
 }
@@ -473,7 +524,7 @@ impl SpireApp {
         if self.ui.toast.as_ref().is_some_and(|t| ctx.input(|i| i.time) > t.until) {
             self.ui.toast = None;
         }
-        self.prepare_tab();
+        self.prepare_tab(&ctx);
         {
             let view = ViewCtx {
                 catalog: &self.catalog,
@@ -483,6 +534,7 @@ impl SpireApp {
                 can_undo: self.run.events.len() > 1,
                 generation: self.generation,
                 analytics: self.analytics.as_ref().filter(|(g, _)| *g == self.generation).map(|(_, a)| a),
+                combat: self.combat.as_ref(),
             };
             views::root(ui, &view, &mut self.draft, &mut self.ui, &mut actions);
             if self.ui.show_data {
@@ -500,16 +552,45 @@ impl SpireApp {
 impl SpireApp {
     /// Builds what the open tab needs and nothing else: analytics for the
     /// live run, or the archived runs read from disk.
-    fn prepare_tab(&mut self) {
+    fn prepare_tab(&mut self, ctx: &egui::Context) {
+        use crate::views::Tab;
+        let fights = matches!(self.ui.tab, Tab::Run | Tab::Enemies | Tab::Analytics);
+        let now = ctx.input(|i| i.time);
+        if self.changed.0 != self.generation {
+            self.changed = (self.generation, now);
+        }
+        // The deck simulation takes a few milliseconds: rebuild it once the
+        // run has settled for a moment, not on the frame of every commit or
+        // undo. The previous outlook stays up meanwhile.
+        let stale = self.combat.as_ref().is_none_or(|c| c.generation != self.generation);
+        let settled = self.combat.is_none() || now - self.changed.1 >= COMBAT_SETTLE;
+        if fights && self.state.started() && stale && !settled {
+            ctx.request_repaint_after(std::time::Duration::from_secs_f64(COMBAT_SETTLE));
+        }
+        if fights && self.state.started() && stale && settled {
+            let sim = simulate(&self.state, &self.catalog, &self.playbook.simulation);
+            let mut outlooks = Vec::new();
+            for t in self.dash.threats.iter().flat_map(|(_, l)| l.iter()).chain(self.dash.bosses.iter()) {
+                if t.room == spire_core::catalog::RoomType::Monster || outlooks.iter().any(|(e, _)| *e == t.encounter) {
+                    continue;
+                }
+                let Some(enc) = self.catalog.encounters.get(&t.encounter) else { continue };
+                if let Some(o) = survival::for_encounter(&sim, enc, &self.catalog, &self.state) {
+                    outlooks.push((t.encounter.clone(), o));
+                }
+            }
+            self.combat = Some(Combat { generation: self.generation, sim, outlooks });
+        }
         match self.ui.tab {
-            crate::views::Tab::Analytics if self.analytics.as_ref().is_none_or(|(g, _)| *g != self.generation) => {
-                let a = Analytics {
-                    timeline: timeline(&self.run, &self.catalog, &self.playbook),
-                    sim: simulate(&self.state, &self.catalog, &self.playbook.simulation),
+            Tab::Analytics if self.analytics.as_ref().is_none_or(|(g, _)| *g != self.generation) => {
+                let sim = match &self.combat {
+                    Some(c) if c.generation == self.generation => c.sim.clone(),
+                    _ => simulate(&self.state, &self.catalog, &self.playbook.simulation),
                 };
+                let a = Analytics { timeline: timeline(&self.run, &self.catalog, &self.playbook), sim };
                 self.analytics = Some((self.generation, a));
             }
-            crate::views::Tab::History if self.ui.history.needs_load() => {
+            Tab::History if self.ui.history.needs_load() => {
                 self.ui.history.load(self.store.archived_runs());
             }
             _ => {}

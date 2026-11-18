@@ -513,8 +513,11 @@ impl RoomType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MonsterMove {
+    /// Stable id, as the attack pattern names it (e.g. `"EYE_LASERS"`).
+    #[serde(default)]
+    pub id: String,
     pub name: String,
     /// Intent label, e.g. `"Attack + Buff"`.
     pub intent: String,
@@ -527,17 +530,104 @@ pub struct MonsterMove {
     /// Damage per hit at ascensions with deadlier enemies.
     #[serde(default)]
     pub damage_asc: Option<u32>,
+    /// Powers the move applies: Strength to itself, Weak to the player…
+    #[serde(default)]
+    pub powers: Vec<MovePower>,
+}
+
+/// A power a monster move applies, and to whom.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct MovePower {
+    pub power: String,
+    pub target: PowerTarget,
+    pub amount: i32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PowerTarget {
+    /// The monster itself.
+    Monster,
+    Player,
+    /// Allies or anything else.
+    Other,
+}
+
+/// How a monster picks its moves, from the game's move state machine.
+///
+/// States are moves (with a fixed `next`), random picks (weighted
+/// branches, some that can't repeat or have a cap) or conditional picks
+/// (branches guarded by a game condition we can't evaluate).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct AttackPattern {
+    /// The move the fight opens with, if fixed.
+    #[serde(default)]
+    pub initial: Option<String>,
+    #[serde(default)]
+    pub states: Vec<PatternState>,
+    /// The data source's own summary, e.g. "Ebb → Eye Lasers → repeat".
+    #[serde(default)]
+    pub description: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PatternState {
+    pub id: String,
+    pub kind: StateKind,
+    /// For a move state: the move it performs.
+    #[serde(default)]
+    pub move_id: Option<String>,
+    /// For a move state: the state after it.
+    #[serde(default)]
+    pub next: Option<String>,
+    /// For a random or conditional state: the moves it picks from.
+    #[serde(default)]
+    pub branches: Vec<PatternBranch>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StateKind {
+    Move,
+    Random,
+    Conditional,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PatternBranch {
+    pub move_id: String,
+    /// Relative weight of a random branch.
+    #[serde(default)]
+    pub weight: Option<f32>,
+    /// A random branch that can't be picked twice in a row.
+    #[serde(default)]
+    pub no_repeat: bool,
+    /// A random branch that can be picked at most this many times in a row.
+    #[serde(default)]
+    pub max_times: Option<u32>,
+    /// The game condition guarding a conditional branch, in plain words.
+    #[serde(default)]
+    pub condition: Option<String>,
 }
 
 impl MonsterMove {
+    /// Damage per hit, using the ascension value when `deadly` and known.
+    pub fn per_hit_at(&self, deadly: bool) -> Option<u32> {
+        if deadly { self.damage_asc.or(self.damage) } else { self.damage }
+    }
+
+    /// Strength the move gives the monster itself.
+    pub fn self_strength(&self) -> i32 {
+        self.powers.iter().filter(|p| p.target == PowerTarget::Monster && p.power == "STRENGTH").map(|p| p.amount).sum()
+    }
+
     pub fn total_damage(&self) -> u32 {
         self.total_damage_at(false)
     }
 
     /// Damage × hits, using the ascension value when `deadly` and known.
     pub fn total_damage_at(&self, deadly: bool) -> u32 {
-        let per_hit = if deadly { self.damage_asc.or(self.damage) } else { self.damage };
-        per_hit.unwrap_or(0) * self.hits.unwrap_or(1).max(1)
+        self.per_hit_at(deadly).unwrap_or(0) * self.hits.unwrap_or(1).max(1)
     }
 
     pub fn intent_has(&self, word: &str) -> bool {
@@ -561,9 +651,16 @@ pub struct Monster {
     pub hp_min_asc: Option<u32>,
     #[serde(default)]
     pub hp_max_asc: Option<u32>,
+    /// How it picks moves, if known.
+    #[serde(default)]
+    pub pattern: Option<AttackPattern>,
 }
 
 impl Monster {
+    pub fn move_by_id(&self, id: &str) -> Option<&MonsterMove> {
+        self.moves.iter().find(|m| m.id == id)
+    }
+
     /// `(min, max)` HP, using ascension values when `tough` and known.
     pub fn hp_at(&self, tough: bool) -> (u32, u32) {
         let (min, max) = if tough {
@@ -624,12 +721,50 @@ impl Lineup {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct EncounterStats {
     /// Fights the averages are based on.
     pub fights: u32,
     pub avg_damage_taken: f32,
     pub avg_turns: f32,
+    /// Runs that ended in this fight.
+    #[serde(default)]
+    pub deaths: u32,
+    /// Deaths by the turn they happened on: index 0 is turn 1. The last
+    /// entry also counts every later turn.
+    #[serde(default)]
+    pub death_turns: Vec<u32>,
+    /// Damage the survivors took: median and 90th percentile.
+    #[serde(default)]
+    pub win_damage: Option<(u32, u32)>,
+    /// Median HP players entered with: survivors, then those who died.
+    #[serde(default)]
+    pub hp_in: Option<(u32, u32)>,
+}
+
+impl EncounterStats {
+    /// Share of fights that ended the run (0–1).
+    pub fn death_rate(&self) -> f32 {
+        if self.fights == 0 { 0.0 } else { self.deaths as f32 / self.fights as f32 }
+    }
+
+    /// The turns most deaths happen on: every turn with at least
+    /// `share` of the deaths, most first.
+    pub fn deadly_turns(&self, share: f32) -> Vec<(u32, f32)> {
+        let total: u32 = self.death_turns.iter().sum();
+        if total == 0 {
+            return Vec::new();
+        }
+        let mut out: Vec<(u32, f32)> = self
+            .death_turns
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (i as u32 + 1, *n as f32 / total as f32))
+            .filter(|(_, s)| *s >= share)
+            .collect();
+        out.sort_by(|a, b| b.1.total_cmp(&a.1));
+        out
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

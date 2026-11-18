@@ -58,8 +58,15 @@ kit, so old runs replay even after a data update.
 
 - `deck`: classify cards into roles; `DeckProfile` (by type and by role, with
   starter cards counted separately); `coverage` against act targets.
-- `threats`: `ThreatProfile` per encounter (HP, worst turn, buffs, groups),
-  the `demands` it places on a deck, and `next_threats` for a node type.
+- `threats`: `ThreatProfile` per encounter (HP, peak turn, buffs, groups),
+  the `demands` it places on a deck, `next_threats` for a node type, and the
+  most common lineup's turn plans.
+- `pattern`: a monster's turns read from its move state machine (cycles,
+  weighted random picks, conditional picks), carrying its Strength and the
+  player's Vulnerable forward while the order is known.
+- `survival`: whether a deck is on track against a fight. It plays the fight
+  out on the simulator's average damage and block against the lineup's
+  expected damage per turn, trying several attack/block splits.
 - `events`: run `needs` (removal, heal, upgrade…), and a `watchlist` of
   act events ranked by how well they meet those needs.
 - `advice`: act targets, boss gaps, area damage and removable curses (run-specific only).

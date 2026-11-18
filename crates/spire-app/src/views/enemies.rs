@@ -1,7 +1,9 @@
 //! Enemy catalog: every encounter, its lineups, and each monster's moves.
 
 use eframe::egui::{self, RichText, Sense, Ui, vec2};
-use spire_core::analysis::threats::{Scaling, preview};
+use spire_core::analysis::pattern;
+use spire_core::analysis::survival;
+use spire_core::analysis::threats::{MonsterPlan, Scaling, preview};
 use spire_core::catalog::{Encounter, RoomType};
 use spire_core::ids::{ActId, EncounterId, MonsterId};
 use spire_core::playbook::contains_ci;
@@ -18,6 +20,17 @@ pub struct EnemyBrowser {
     pub selected: Option<EncounterId>,
     /// Ascension the stats are shown at; `None` follows the current run.
     pub ascension: Option<u32>,
+    /// The selected encounter read for the deck, and what it was read for.
+    view: Option<(u64, Reading)>,
+}
+
+/// What the detail pane shows for an encounter, built when the selection,
+/// ascension, run or deck simulation changes rather than every frame.
+struct Reading {
+    preview: spire_core::analysis::ThreatPreview,
+    outlook: Option<survival::Outlook>,
+    /// Each monster's turns, in the order the pane lists monsters.
+    plans: Vec<MonsterPlan>,
 }
 
 impl EnemyBrowser {
@@ -147,7 +160,7 @@ pub fn list(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
     });
 }
 
-pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &EnemyBrowser) {
+pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
     ui.add_space(crate::style::space::s());
     let Some(enc) = b.selected.as_ref().and_then(|id| v.catalog.encounters.get(id)) else {
         ui.label(eyebrow("Encounter"));
@@ -169,12 +182,6 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &EnemyBrowser) {
         .color(text_dim()),
     );
     ui.add_space(crate::style::space::s());
-    let p = preview(enc, v.catalog, v.playbook, act.map_or(0, |a| a.index), scaling, &v.dash.deck, false);
-    let title = if v.state.started() { "Against your deck" } else { "Threat" };
-    panel(ui, title, Some(&format!("A{asc}")), |ui| {
-        crate::views::threats::preview_body(ui, &p);
-    });
-
     // Every monster that can take part: lineup members, then spawns.
     let mut monsters: Vec<&MonsterId> = Vec::new();
     for m in enc.lineups.iter().flat_map(|l| l.monsters.iter()).chain(enc.monsters.iter()).chain(enc.spawns.iter()) {
@@ -182,6 +189,42 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &EnemyBrowser) {
             monsters.push(m);
         }
     }
+    let key = {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        (&enc.id, asc, v.generation, v.combat.map(|c| c.generation)).hash(&mut h);
+        h.finish()
+    };
+    if b.view.as_ref().is_none_or(|(k, _)| *k != key) {
+        let preview = preview(enc, v.catalog, v.playbook, act.map_or(0, |a| a.index), scaling, &v.dash.deck, false);
+        // The survival check plays out this run, so only at its ascension.
+        let outlook = v
+            .combat
+            .filter(|_| v.state.started() && asc == v.state.ascension && enc.room != RoomType::Monster)
+            .and_then(|c| survival::for_encounter(&c.sim, enc, v.catalog, v.state));
+        let vulnerable = v.catalog.rules.vulnerable_pct.unwrap_or(50);
+        let plans = monsters
+            .iter()
+            .filter_map(|id| {
+                let m = v.catalog.monsters.get(*id)?;
+                Some(MonsterPlan {
+                    monster: (*id).clone(),
+                    name: m.name.clone(),
+                    count: 1,
+                    plan: pattern::plan(m, scaling.deadly, vulnerable, pattern::HORIZON),
+                })
+            })
+            .collect();
+        b.view = Some((key, Reading { preview, outlook, plans }));
+    }
+    let Some((_, reading)) = &b.view else { return };
+    let title = if v.state.started() { "Against your deck" } else { "Threat" };
+    panel(ui, title, Some(&format!("A{asc}")), |ui| {
+        crate::views::threats::preview_body(ui, key, &reading.preview, reading.outlook.as_ref());
+    });
+
+    // Deaths map onto one monster's turns only when it fights alone.
+    let single = monsters.len() == 1;
     ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Monsters"));
     hairline(ui);
@@ -228,5 +271,13 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &EnemyBrowser) {
                 ui.end_row();
             }
         });
+        if m.pattern.is_some()
+            && let Some(mp) = reading.plans.iter().find(|p| p.monster == *id)
+        {
+            ui.add_space(crate::style::space::xs());
+            ui.label(RichText::new("Turn by turn").small().strong().color(text_dim()));
+            let stats = enc.stats.as_ref().filter(|_| enc.room != RoomType::Monster);
+            crate::views::turns::table(ui, mp, stats, single);
+        }
     }
 }

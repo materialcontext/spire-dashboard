@@ -1,7 +1,9 @@
 //! Potential next fights by room type.
 
 use eframe::egui::{self, RichText, Ui};
+use spire_core::analysis::survival::Outlook;
 use spire_core::analysis::{Coverage, ThreatPreview};
+use spire_core::catalog::RoomType;
 use spire_core::run::NodeKind;
 
 use crate::actions::{Action, Link};
@@ -13,7 +15,14 @@ use crate::widgets::{chip, coverage_color, culled, link, panel, segmented};
 const LINEUPS_SHOWN: usize = 3;
 
 /// Lineup, stats and demand chips for one encounter.
-pub fn preview_body(ui: &mut Ui, t: &ThreatPreview) {
+/// `key` identifies this preview's content for caching its labels: pass the
+/// dashboard generation (and anything else it depends on).
+pub fn preview_body(
+    ui: &mut Ui,
+    key: impl std::hash::Hash + std::fmt::Debug + Copy,
+    t: &ThreatPreview,
+    outlook: Option<&Outlook>,
+) {
     match t.lineups.as_slice() {
         [] => {}
         // A single monster's lineup would just repeat the encounter name.
@@ -44,13 +53,23 @@ pub fn preview_body(ui: &mut Ui, t: &ThreatPreview) {
         (min, max) if max > min => format!("{min}–{max} HP"),
         (min, _) => format!("{min} HP"),
     };
-    let mut facts = vec![hp, format!("worst turn {}", p.worst_turn)];
+    let mut facts = vec![hp];
     for (on, word) in [(p.buffs, "buffs"), (p.debuffs, "debuffs"), (p.statuses, "statuses")] {
         if on {
             facts.push(word.into());
         }
     }
     ui.label(RichText::new(facts.join("  ·  ")).small().color(text_dim()));
+    // Turns where runs end are marked for elites and bosses only.
+    let boss_or_elite = t.room != RoomType::Monster;
+    crate::views::turns::strip(ui, (key, &t.encounter), &t.plans, t.stats.as_ref().filter(|_| boss_or_elite));
+    // Elites and bosses: when runs end here, and whether this deck is on track.
+    if boss_or_elite {
+        crate::views::turns::deaths(ui, (key, &t.encounter), &t.plans, t.stats.as_ref());
+        if let Some(o) = outlook {
+            crate::views::turns::outlook(ui, o, t.stats.as_ref());
+        }
+    }
     if let Some(s) = &t.stats {
         ui.label(
             RichText::new(format!(
@@ -101,7 +120,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
             ui.label(RichText::new("Nothing known for this act.").color(text_dim()));
         }
         for t in list {
-            culled(ui, ("threat", v.generation, st.threat_tab, &t.encounter), |ui| {
+            culled(ui, ("threat", v.generation, v.combat.map(|c| c.generation), st.threat_tab, &t.encounter), |ui| {
                 ui.add_space(crate::style::space::s());
                 ui.horizontal(|ui| {
                     let name = RichText::new(&t.name).family(crate::style::strong_family()).color(if t.seen {
@@ -120,7 +139,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
                         ui.label(RichText::new(word).small().strong().color(color));
                     });
                 });
-                preview_body(ui, t);
+                preview_body(ui, v.generation, t, v.combat.and_then(|c| c.outlook(&t.encounter)));
             });
         }
     });

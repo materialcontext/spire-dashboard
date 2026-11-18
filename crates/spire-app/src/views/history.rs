@@ -10,6 +10,7 @@ use spire_core::analysis::timeline::{Timeline, timeline};
 use spire_core::ids::CharacterId;
 use spire_core::run::{Outcome, Run, RunState, RunSummary};
 
+use crate::actions::Action;
 use crate::app::ViewCtx;
 use crate::style::{self, color::*};
 use crate::views::analytics;
@@ -62,6 +63,17 @@ pub struct HistoryBrowser {
     selected: Option<String>,
     detail: Option<Detail>,
     show_all_odds: bool,
+    /// The Edit run pop-over, while open.
+    editing: Option<Editing>,
+}
+
+/// A run being edited: a draft copy of its log, saved only on request.
+struct Editing {
+    id: String,
+    original: Run,
+    draft: Run,
+    notes: String,
+    confirm_delete: bool,
 }
 
 impl HistoryBrowser {
@@ -73,6 +85,8 @@ impl HistoryBrowser {
     pub fn load(&mut self, runs: Vec<(String, Run)>) {
         self.runs = runs.into_iter().map(|(id, run)| ArchivedRun { summary: run.summary(), id, run }).collect();
         self.loaded = true;
+        // The selected run may have been edited: analyse it again.
+        self.detail = None;
         if self.selected.as_ref().is_none_or(|s| !self.runs.iter().any(|r| r.id == *s)) {
             self.selected = self.runs.first().map(|r| r.id.clone());
         }
@@ -216,7 +230,8 @@ pub fn list(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser) {
 }
 
 /// Centre: the selected run's charts and a floor-by-floor replay.
-pub fn detail(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser) {
+pub fn detail(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser, out: &mut Vec<Action>) {
+    edit_dialog(ui, v, h, out);
     let Some(selected) = h.selected.clone() else {
         ui.label(RichText::new("Pick a run on the left.").color(text_dim()));
         return;
@@ -239,7 +254,21 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser) {
             word = format!("Died to {}", v.catalog.encounter_name(e));
         }
         ui.label(RichText::new(word).color(outcome_color(outcome)));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.button("Edit run…").on_hover_text("Fix the ascension, result or floors, or add notes").clicked() {
+                h.editing = Some(Editing {
+                    id: archived.id.clone(),
+                    original: archived.run.clone(),
+                    draft: archived.run.clone(),
+                    notes: archived.run.notes.clone().unwrap_or_default(),
+                    confirm_delete: false,
+                });
+            }
+        });
     });
+    if let Some(notes) = archived.run.notes.as_deref().filter(|n| !n.trim().is_empty()) {
+        ui.label(RichText::new(notes).color(text_dim()));
+    }
     ui.label(
         RichText::new(format!("{} · reached floor {} · act {}", date(s), s.floor, s.act_index + 1))
             .small()
@@ -363,4 +392,199 @@ fn floor_strip(ui: &mut Ui, v: &ViewCtx, t: &Timeline, floor: &mut usize) {
     {
         *floor = at(pos);
     }
+}
+
+/// The Edit run pop-over: ascension, result, notes and floors, on a draft
+/// that's written to disk only on Save.
+fn edit_dialog(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser, out: &mut Vec<Action>) {
+    let Some(e) = h.editing.as_mut() else { return };
+    let mut close = false;
+    let modal = egui::Modal::new(egui::Id::unique("edit-run")).show(ui.ctx(), |ui| {
+        ui.set_width(460.0);
+        ui.label(crate::widgets::title("Edit run"));
+        let s = e.draft.summary();
+        ui.label(RichText::new(format!("{} · started {}", character_name(v, &s), date(&s))).small().color(text_dim()));
+        hairline(ui);
+
+        // Ascension: the start is resolved again for the new level.
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("Ascension").color(text_dim()));
+            let mut asc = s.ascension;
+            egui::ComboBox::from_id_salt("edit-asc").selected_text(asc.to_string()).show_ui(ui, |ui| {
+                for n in 0..=v.catalog.rules.max_ascension {
+                    ui.selectable_value(&mut asc, n, n.to_string());
+                }
+            });
+            if asc != s.ascension
+                && let Some(run) = e.draft.with_ascension(v.catalog, asc)
+            {
+                e.draft = run;
+            }
+        });
+        ui.label(
+            RichText::new("Starting HP, potion slots and the ascension curse follow the new level.")
+                .small()
+                .color(text_faint()),
+        );
+
+        // Result.
+        ui.add_space(crate::style::space::s());
+        ui.label(eyebrow("Result"));
+        let mut kind = match &s.outcome {
+            Some(Outcome::Victory) => 0,
+            Some(Outcome::Died { .. }) => 1,
+            _ => 2,
+        };
+        let before = kind;
+        segmented(ui, &mut kind, &[(0, "Victory"), (1, "Died"), (2, "Abandoned")]);
+        let mut killer = match &s.outcome {
+            Some(Outcome::Died { encounter }) => encounter.clone(),
+            _ => None,
+        };
+        let old_killer = killer.clone();
+        if kind == 1 {
+            let fights: Vec<spire_core::EncounterId> =
+                e.draft.floors().iter().rev().filter_map(|(_, _, n)| n.encounter.clone()).collect();
+            let label = killer.as_ref().map_or("Unknown".to_string(), |k| v.catalog.encounter_name(k));
+            egui::ComboBox::from_id_salt("edit-killer")
+                .selected_text(format!("Died to {label}"))
+                .width(ui.available_width())
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut killer, None, "Unknown");
+                    for f in fights {
+                        let name = v.catalog.encounter_name(&f);
+                        ui.selectable_value(&mut killer, Some(f), name);
+                    }
+                });
+        }
+        if kind != before || killer != old_killer {
+            let outcome = match kind {
+                0 => Outcome::Victory,
+                1 => Outcome::Died { encounter: killer },
+                _ => Outcome::Abandoned,
+            };
+            e.draft = e.draft.with_outcome(Some(outcome));
+        }
+
+        // Notes.
+        ui.add_space(crate::style::space::s());
+        ui.label(eyebrow("Notes"));
+        ui.add(
+            egui::TextEdit::multiline(&mut e.notes)
+                .hint_text("Anything worth remembering about this run")
+                .desired_rows(2)
+                .desired_width(f32::INFINITY),
+        );
+
+        // Floors.
+        ui.add_space(crate::style::space::s());
+        ui.label(eyebrow("Floors"));
+        let floors: Vec<(usize, u32, spire_core::run::NodeKind, Option<spire_core::EncounterId>, String)> = e
+            .draft
+            .floors()
+            .into_iter()
+            .map(|(i, f, n)| {
+                let what = n.event.as_ref().map(|ev| v.catalog.event_name(ev)).unwrap_or_default();
+                (i, f, n.kind, n.encounter.clone(), what)
+            })
+            .collect();
+        let mut remove = None;
+        let mut refight = None;
+        egui::ScrollArea::vertical().max_height(240.0).show(ui, |ui| {
+            if floors.is_empty() {
+                ui.label(RichText::new("No floors were logged.").small().color(text_dim()));
+            }
+            for (i, f, kind, encounter, what) in &floors {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(format!("{f:>2}  {}", kind.label())).small().color(text_dim()));
+                    match kind.room() {
+                        Some(room) => {
+                            let mut pick = encounter.clone();
+                            let label = pick.as_ref().map_or("Unknown fight".into(), |x| v.catalog.encounter_name(x));
+                            egui::ComboBox::from_id_salt(("edit-floor", *i)).selected_text(label).width(220.0).show_ui(
+                                ui,
+                                |ui| {
+                                    let mut options: Vec<_> =
+                                        v.catalog.encounters.values().filter(|x| x.room == room).collect();
+                                    options.sort_by(|a, b| a.name.cmp(&b.name));
+                                    for x in options {
+                                        ui.selectable_value(&mut pick, Some(x.id.clone()), &x.name);
+                                    }
+                                },
+                            );
+                            if pick != *encounter {
+                                refight = Some((*i, pick));
+                            }
+                        }
+                        None => {
+                            ui.label(RichText::new(what).small().color(text()));
+                        }
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let x =
+                            egui::Button::new(RichText::new("Remove").small().color(bad())).frame_when_inactive(false);
+                        if ui.add(x).on_hover_text("Remove this floor from the run").clicked() {
+                            remove = Some(*i);
+                        }
+                    });
+                });
+            }
+        });
+        if let Some((i, pick)) = refight {
+            e.draft = e.draft.with_floor_encounter(i, pick);
+        }
+        if let Some(i) = remove {
+            e.draft = e.draft.without_floor(i);
+        }
+
+        ui.add_space(crate::style::space::m());
+        let notes = Some(e.notes.trim().to_string()).filter(|n| !n.is_empty());
+        let edited = Run { notes: notes.clone(), ..e.draft.clone() };
+        let changed = edited != e.original;
+        if e.confirm_delete {
+            ui.label(RichText::new("Delete this run from history for good?").color(bad()));
+            let (delete, keep) = crate::widgets::dialog_row(
+                ui,
+                |ui| crate::widgets::destructive_button(ui, "Delete run"),
+                |ui| crate::widgets::dialog_button(ui, "Keep it"),
+            );
+            if delete {
+                out.push(Action::DeleteHistory(e.id.clone()));
+                close = true;
+            } else if keep {
+                e.confirm_delete = false;
+            }
+        } else {
+            ui.horizontal(|ui| {
+                let (save, cancel) = crate::widgets::dialog_row(
+                    ui,
+                    |ui| primary_save(ui, changed),
+                    |ui| crate::widgets::dialog_button(ui, "Cancel"),
+                );
+                if save {
+                    out.push(Action::SaveHistory { id: e.id.clone(), run: Box::new(edited) });
+                    close = true;
+                } else if cancel {
+                    close = true;
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let b = egui::Button::new(RichText::new("Delete run…").color(bad())).frame_when_inactive(false);
+                    if ui.add(b).clicked() {
+                        e.confirm_delete = true;
+                    }
+                });
+            });
+        }
+    });
+    if close || modal.should_close() {
+        h.editing = None;
+    }
+}
+
+fn primary_save(ui: &mut Ui, enabled: bool) -> egui::Response {
+    let label = RichText::new("Save changes").family(style::strong_family());
+    let b = egui::Button::new(label.color(if enabled { bg() } else { text_faint() }))
+        .fill(if enabled { accent() } else { egui::Color32::TRANSPARENT })
+        .min_size(egui::vec2(0.0, 32.0));
+    ui.add_enabled(enabled, b)
 }

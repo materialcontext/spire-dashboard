@@ -5,7 +5,9 @@ pub mod deck;
 pub mod events;
 pub mod floors;
 pub mod healing;
+pub mod pattern;
 pub mod sim;
+pub mod survival;
 pub mod threats;
 pub mod timeline;
 

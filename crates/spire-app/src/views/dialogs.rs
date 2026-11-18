@@ -14,13 +14,22 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
         let modal = egui::Modal::new(egui::Id::unique("end-run")).show(&ctx, |ui| {
             ui.set_width(380.0);
             ui.label(crate::widgets::title("End run"));
-            ui.label(RichText::new("The run is filed in history with this result.").small().color(text_dim()));
+            // At 0 HP the run was lost: Died leads and is the default.
+            let dead = v.state.hp <= 0;
+            let note = if dead {
+                "You're at 0 HP. The run is filed in history with this result."
+            } else {
+                "The run is filed in history with this result."
+            };
+            ui.label(RichText::new(note).small().color(text_dim()));
             hairline(ui);
-            if primary_button(ui, "Victory", true).clicked() {
+            if !dead && primary_button(ui, "Victory", true).clicked() {
                 out.push(Action::EndRun(Outcome::Victory));
                 st.end_run_open = false;
             }
-            ui.add_space(crate::style::space::s());
+            if !dead {
+                ui.add_space(crate::style::space::s());
+            }
             ui.label(eyebrow("Died to"));
             let label = st.end_encounter.as_ref().map_or("Unknown".to_string(), |e| v.catalog.encounter_name(e));
             egui::ComboBox::from_id_salt("death").selected_text(label).width(ui.available_width()).show_ui(ui, |ui| {
@@ -37,9 +46,21 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
                     }
                 }
             });
-            if ui.add_sized([ui.available_width(), 28.0], egui::Button::new("Died")).clicked() {
+            let died = if dead {
+                primary_button(ui, "Died", true)
+            } else {
+                ui.add_sized([ui.available_width(), 28.0], egui::Button::new("Died"))
+            };
+            if died.clicked() {
                 out.push(Action::EndRun(Outcome::Died { encounter: st.end_encounter.clone() }));
                 st.end_run_open = false;
+            }
+            if dead {
+                ui.add_space(crate::style::space::s());
+                if ui.button("Victory").clicked() {
+                    out.push(Action::EndRun(Outcome::Victory));
+                    st.end_run_open = false;
+                }
             }
             ui.add_space(crate::style::space::s());
             ui.horizontal(|ui| {

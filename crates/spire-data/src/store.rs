@@ -195,6 +195,25 @@ impl Store {
     }
 
     /// Archived runs, newest first. Unreadable files are skipped.
+    /// Replaces an archived run (edited in History). Written to a temporary
+    /// file first, so a failed write never leaves half a run.
+    pub fn update_archived(&self, id: &str, run: &Run) -> Result<(), DataError> {
+        let dir = self.dir.join(RUNS_DIR);
+        let path = archived_path(&dir, id)?;
+        let json = serde_json::to_string_pretty(run).map_err(|e| DataError::Parse(e.to_string()))?;
+        let tmp = dir.join(format!("{id}.json.tmp"));
+        fs::write(&tmp, json)?;
+        fs::rename(&tmp, path)?;
+        Ok(())
+    }
+
+    /// Deletes an archived run for good.
+    pub fn delete_archived(&self, id: &str) -> Result<(), DataError> {
+        let path = archived_path(&self.dir.join(RUNS_DIR), id)?;
+        fs::remove_file(path)?;
+        Ok(())
+    }
+
     pub fn archived_runs(&self) -> Vec<(String, Run)> {
         let Ok(entries) = fs::read_dir(self.dir.join(RUNS_DIR)) else { return Vec::new() };
         let mut runs: Vec<(String, Run)> = entries
@@ -288,6 +307,19 @@ impl Drop for RunSaver {
     }
 }
 
+/// The file of an archived run. Ids are file stems the store made; anything
+/// that could leave the runs folder is refused.
+fn archived_path(dir: &std::path::Path, id: &str) -> Result<std::path::PathBuf, DataError> {
+    if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Err(DataError::Parse(format!("not a run id: {id}")));
+    }
+    let path = dir.join(format!("{id}.json"));
+    if !path.exists() {
+        return Err(DataError::Parse(format!("no saved run {id}")));
+    }
+    Ok(path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -360,6 +392,16 @@ mod tests {
         // Same start time twice gets a distinct id.
         let again = store.archive_run(&listed[0].1).unwrap();
         assert_ne!(again, ids[1]);
+
+        // Edits replace the file; deletes remove it; odd ids are refused.
+        let edited = Run { notes: Some("misclick".into()), ..listed[0].1.clone() };
+        store.update_archived(&ids[1], &edited).unwrap();
+        let reread = store.archived_runs();
+        assert_eq!(reread.iter().find(|(id, _)| *id == ids[1]).unwrap().1.notes.as_deref(), Some("misclick"));
+        store.delete_archived(&again).unwrap();
+        assert_eq!(store.archived_runs().len(), 2);
+        assert!(store.update_archived("../run", &edited).is_err());
+        assert!(store.delete_archived("missing").is_err());
     }
 
     #[test]
