@@ -151,7 +151,7 @@ fn fights(ui: &mut Ui, salt: &str, catalog: &Catalog, t: &Timeline) {
         .collect();
     let community: Vec<[f64; 2]> =
         fights.iter().filter_map(|p| Some([p.floor as f64, p.community_lost? as f64])).collect();
-    let bar_color = style::role_color(Role::FrontloadDamage);
+    let bar_color = style::role_color(Role::FastDamage);
     keys(
         ui,
         &[
@@ -284,7 +284,7 @@ fn per_turn(ui: &mut Ui, salt: &str, sim: &DeckSim) {
         ui.add_space(crate::style::space::l());
         stat(ui, &format!("Block, turn {}", sim.turns.len()), format!("{:.0}", last.block.mean), text());
     });
-    let (red, blue) = (style::role_color(Role::FrontloadDamage), style::role_color(Role::FrontloadDefense));
+    let (red, blue) = (style::role_color(Role::FastDamage), style::role_color(Role::Mitigation));
     keys(
         ui,
         &[

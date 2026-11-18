@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use spire_core::playbook::Role;
 use spire_core::{Catalog, DataPack, Playbook, Run};
 
 use crate::fetch::Source;
@@ -116,11 +117,23 @@ impl Store {
             None => bundled_playbook(),
         };
         let mut playbook = playbook;
-        match self
-            .read(MY_ROLES)
-            .map(|r| r.and_then(|s| serde_json::from_str(&s).map_err(|e| DataError::Parse(e.to_string()))))
-        {
-            Some(Ok(roles)) => playbook.personal_roles = roles,
+        // Saved by name, so roles from before the role change still load:
+        // old names map onto the new roles, and "consistency" is dropped.
+        let parse = |s: String| {
+            serde_json::from_str::<std::collections::BTreeMap<spire_core::CardId, Vec<String>>>(&s)
+                .map_err(|e| DataError::Parse(e.to_string()))
+        };
+        match self.read(MY_ROLES).map(|r| r.and_then(parse)) {
+            Some(Ok(saved)) => {
+                playbook.personal_roles = saved
+                    .into_iter()
+                    .map(|(card, names)| {
+                        let roles: Vec<Role> = names.iter().filter_map(|n| Role::from_name(n)).collect();
+                        (card, roles)
+                    })
+                    .filter(|(_, roles)| !roles.is_empty())
+                    .collect();
+            }
             Some(Err(e)) => warnings.push(format!("Ignored {MY_ROLES}: {e}")),
             None => {}
         }
@@ -402,16 +415,35 @@ mod tests {
     }
 
     #[test]
+    fn personal_roles_saved_before_the_role_change_migrate() {
+        let store = temp_store("old-roles");
+        store
+            .write(
+                MY_ROLES,
+                r#"{"STRIKE_IRONCLAD": ["frontload_damage", "consistency"], "DEFEND_IRONCLAD": ["consistency"],
+                   "BASH": ["scaling_defense"]}"#,
+            )
+            .unwrap();
+        let loaded = store.load();
+        assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
+        let roles = &loaded.playbook.personal_roles;
+        use spire_core::playbook::Role;
+        assert_eq!(roles[&spire_core::CardId::new("STRIKE_IRONCLAD")], vec![Role::FastDamage]);
+        assert_eq!(roles[&spire_core::CardId::new("BASH")], vec![Role::Mitigation]);
+        assert!(!roles.contains_key(&spire_core::CardId::new("DEFEND_IRONCLAD")), "consistency alone: no override");
+    }
+
+    #[test]
     fn personal_roles_layer_over_the_playbook() {
         use spire_core::playbook::{Role, RoleSource};
         let store = temp_store("roles");
         let cat = Catalog::from_layers([bundled_pack()]);
         let strike = cat.cards.values().find(|c| c.name == "Strike").unwrap().clone();
         let mut roles = std::collections::BTreeMap::new();
-        roles.insert(strike.id.clone(), vec![Role::Consistency]);
+        roles.insert(strike.id.clone(), vec![Role::Chip]);
         store.save_personal_roles(&roles).unwrap();
         let loaded = store.load();
-        assert_eq!(loaded.playbook.roles_of(&strike), vec![Role::Consistency]);
+        assert_eq!(loaded.playbook.roles_of(&strike), vec![Role::Chip]);
         assert!(matches!(loaded.playbook.role_source(&strike), RoleSource::Personal(_)));
         // The shipped playbook file is untouched.
         assert!(bundled_playbook().personal_roles.is_empty());

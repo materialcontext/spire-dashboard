@@ -13,56 +13,66 @@ use serde::{Deserialize, Serialize};
 use crate::catalog::{Card, CardType, Target};
 use crate::ids::CardId;
 
-/// The five macro roles a card can play in a deck.
+/// The problems a deck solves: what the player sees, on the deck and on
+/// each card. Each is measured by a job (`analysis::jobs`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
-    FrontloadDamage,
+    /// Absorb steady pressure, turn after turn.
+    #[serde(alias = "frontload_defense", alias = "scaling_defense")]
+    Mitigation,
+    /// Take a spike turn.
+    Survival,
+    /// Do most of the work before the fight turns.
+    #[serde(alias = "frontload_damage")]
+    FastDamage,
+    /// Win a long fight.
     ScalingDamage,
-    FrontloadDefense,
-    ScalingDefense,
-    Consistency,
+    /// Handle a group.
+    Aoe,
+    /// Wear down an enemy that has to be hit many times.
+    Chip,
 }
 
 impl Role {
-    pub const ALL: [Role; 5] =
-        [Role::FrontloadDamage, Role::ScalingDamage, Role::FrontloadDefense, Role::ScalingDefense, Role::Consistency];
+    pub const ALL: [Role; 6] =
+        [Role::Mitigation, Role::Survival, Role::FastDamage, Role::ScalingDamage, Role::Aoe, Role::Chip];
 
     pub fn label(self) -> &'static str {
         match self {
-            Role::FrontloadDamage => "Frontloaded damage",
-            Role::ScalingDamage => "Scaling damage",
-            Role::FrontloadDefense => "Frontloaded defense",
-            Role::ScalingDefense => "Scaling defense",
-            Role::Consistency => "Consistency / acceleration",
+            Role::Mitigation => "Mitigation",
+            Role::Survival => "Survival",
+            Role::FastDamage => "Fast Damage",
+            Role::ScalingDamage => "Scaling Damage",
+            Role::Aoe => "AoE",
+            Role::Chip => "Chip",
         }
     }
 
     pub fn short(self) -> &'static str {
         match self {
-            Role::FrontloadDamage => "Front dmg",
-            Role::ScalingDamage => "Scale dmg",
-            Role::FrontloadDefense => "Front def",
-            Role::ScalingDefense => "Scale def",
-            Role::Consistency => "Consistency",
+            Role::Mitigation => "Mitigation",
+            Role::Survival => "Survival",
+            Role::FastDamage => "Fast dmg",
+            Role::ScalingDamage => "Scaling dmg",
+            Role::Aoe => "AoE",
+            Role::Chip => "Chip",
         }
     }
-}
 
-/// Something a fight can demand of a deck: one of the roles, or area damage.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Capability {
-    Role(Role),
-    Aoe,
-}
-
-impl Capability {
-    pub fn label(self) -> &'static str {
-        match self {
-            Capability::Role(r) => r.label(),
-            Capability::Aoe => "Area damage",
-        }
+    /// A role by its saved name, old names included: frontload damage is
+    /// Fast Damage, both defenses are Mitigation, and consistency is no
+    /// role any more (`None`).
+    pub fn from_name(name: &str) -> Option<Role> {
+        Some(match name {
+            "mitigation" | "frontload_defense" | "scaling_defense" => Role::Mitigation,
+            "survival" => Role::Survival,
+            "fast_damage" | "frontload_damage" => Role::FastDamage,
+            "scaling_damage" => Role::ScalingDamage,
+            "aoe" => Role::Aoe,
+            "chip" => Role::Chip,
+            _ => return None,
+        })
     }
 }
 
@@ -77,6 +87,14 @@ pub enum Condition {
     Draws,
     GainsEnergy,
     AppliesPower(String),
+    /// Gains at least this much Block.
+    BlockAtLeast(u32),
+    /// Deals at most this much damage per hit.
+    DamageAtMost(u32),
+    /// Hits at least this many times.
+    HitsAtLeast(u32),
+    /// Costs at most this much energy (X-cost and unplayable cards don't).
+    CostAtMost(u8),
     /// Case-insensitive substring match on the card text.
     TextContains(String),
     Keyword(String),
@@ -114,6 +132,10 @@ impl Condition {
             Condition::Draws => "draws cards".into(),
             Condition::GainsEnergy => "gains Energy".into(),
             Condition::AppliesPower(p) => format!("applies {p}"),
+            Condition::BlockAtLeast(n) => format!("gains {n}+ Block"),
+            Condition::DamageAtMost(n) => format!("deals at most {n} a hit"),
+            Condition::HitsAtLeast(n) => format!("hits {n}+ times"),
+            Condition::CostAtMost(n) => format!("costs {n} or less"),
             Condition::TextContains(t) => format!("mentions \"{t}\""),
             Condition::Keyword(k) => format!("has {k}"),
             Condition::CardType(t) => format!("is a {}", t.label()),
@@ -131,6 +153,10 @@ impl Condition {
             Condition::Draws => card.draw.is_some_and(|d| d > 0),
             Condition::GainsEnergy => card.energy.is_some_and(|e| e > 0),
             Condition::AppliesPower(p) => card.powers.iter().any(|x| x.power.eq_ignore_ascii_case(p)),
+            Condition::BlockAtLeast(n) => card.block.is_some_and(|b| b >= *n),
+            Condition::DamageAtMost(n) => card.damage.is_some_and(|d| d <= *n),
+            Condition::HitsAtLeast(n) => card.hits.unwrap_or(1) >= *n,
+            Condition::CostAtMost(n) => !card.x_cost && card.cost.is_some_and(|c| c <= *n),
             Condition::TextContains(s) => contains_ci(&card.text, s),
             Condition::Keyword(k) => card.keywords.iter().any(|x| x.eq_ignore_ascii_case(k)),
             Condition::CardType(t) => card.card_type == *t,
@@ -220,8 +246,6 @@ pub struct ActPlan {
     pub weak_fights: u32,
     #[serde(default)]
     pub targets: Vec<RoleTarget>,
-    #[serde(default)]
-    pub needs_aoe: u32,
     /// A single enemy turn at or above this much damage is a "big hit".
     pub big_hit: u32,
     /// Total enemy HP at or above this means a long fight (by room).
@@ -257,7 +281,6 @@ pub struct Playbook {
     /// playbook (stored in their data folder); they win over everything.
     #[serde(skip)]
     pub personal_roles: BTreeMap<CardId, Vec<Role>>,
-    pub aoe: Condition,
     /// Words in an encounter name that signal several enemies. Data sources
     /// list each distinct monster once, so `Many Corpse Slugs` looks like one.
     #[serde(default)]
@@ -391,10 +414,6 @@ impl Playbook {
         roles.sort();
         roles.dedup();
         roles
-    }
-
-    pub fn is_aoe(&self, card: &Card) -> bool {
-        self.aoe.matches(card)
     }
 
     pub fn sounds_like_group(&self, encounter_name: &str) -> bool {

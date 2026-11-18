@@ -53,7 +53,7 @@ fn main() {
             *by_color.entry(&c.color).or_default().entry(r).or_default() += 1;
         }
         if show_cards {
-            println!("{:<24} {:?} aoe={} | {}", c.name, pb.roles_of(c), pb.is_aoe(c), c.text.replace('\n', " "));
+            println!("{:<24} {:?} | {}", c.name, pb.roles_of(c), c.text.replace('\n', " "));
         }
     }
     for (color, roles) in &by_color {

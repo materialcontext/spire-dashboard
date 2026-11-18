@@ -287,8 +287,8 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser, out: &mut Vec<Actio
                 crate::widgets::chip(ui, k, if eternal { bad() } else { info() });
             }
             for t in card_tags {
-                crate::widgets::chip(ui, t.describe(), style::role_color(Role::Consistency))
-                    .on_hover_text("Usually counted as Consistency / acceleration; this says what it does.");
+                crate::widgets::chip(ui, t.describe(), style::tag_color())
+                    .on_hover_text("Not a role: draw and energy keep every role working on bad draws.");
             }
         });
     }

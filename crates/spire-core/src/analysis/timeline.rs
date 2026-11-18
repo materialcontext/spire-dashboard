@@ -20,7 +20,7 @@ pub struct FloorPoint {
     pub gold: i32,
     pub deck_size: u32,
     /// Cards added per role (starter Strikes and Defends excluded), in [`Role::ALL`] order.
-    pub roles: [u32; 5],
+    pub roles: [u32; Role::ALL.len()],
     /// Curses, statuses and unplayables in the deck.
     pub dead: u32,
     pub encounter: Option<EncounterId>,

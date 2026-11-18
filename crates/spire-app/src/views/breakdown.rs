@@ -45,18 +45,9 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
         for r in Role::ALL {
             bar(ui, r.label(), d.role(r), d.starter_role(r), max_role, target(r), style::role_color(r));
         }
-        bar(
-            ui,
-            "Area damage",
-            d.aoe,
-            0,
-            max_role,
-            plan.map(|p| p.needs_aoe).filter(|n| *n > 0),
-            style::role_color(Role::FrontloadDamage),
-        );
-        // What the acceleration cards actually do.
-        bar(ui, "Draw", d.draw, 0, max_role, None, style::role_color(Role::Consistency));
-        bar(ui, "Energy gain", d.energy, 0, max_role, None, style::role_color(Role::Consistency));
+        // Draw and energy aren't roles: they help every role on bad draws.
+        bar(ui, "Draw", d.draw, 0, max_role, None, style::tag_color());
+        bar(ui, "Energy gain", d.energy, 0, max_role, None, style::tag_color());
 
         ui.add_space(crate::style::space::xs());
         ui.label(caption(format!("{} upgraded · {} with no role · {} unknown", d.upgraded, d.no_role, d.unknown)));

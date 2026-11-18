@@ -2,17 +2,17 @@
   "version": 1,
   "role_rules": [
     {
-      "role": "frontload_damage",
+      "role": "fast_damage",
       "when": "has_damage"
     },
     {
-      "role": "frontload_damage",
+      "role": "fast_damage",
       "when": {
         "applies_power": "Vulnerable"
       }
     },
     {
-      "role": "frontload_damage",
+      "role": "fast_damage",
       "when": {
         "applies_power": "Vigor"
       }
@@ -95,47 +95,47 @@
       }
     },
     {
-      "role": "frontload_defense",
+      "role": "mitigation",
       "when": "has_block"
     },
     {
-      "role": "frontload_defense",
+      "role": "mitigation",
       "when": {
         "applies_power": "Weak"
       }
     },
     {
-      "role": "frontload_defense",
+      "role": "mitigation",
       "when": {
         "applies_power": "Intangible"
       }
     },
     {
-      "role": "frontload_defense",
+      "role": "mitigation",
       "when": {
         "applies_power": "Buffer"
       }
     },
     {
-      "role": "scaling_defense",
+      "role": "mitigation",
       "when": {
         "applies_power": "Dexterity"
       }
     },
     {
-      "role": "scaling_defense",
+      "role": "mitigation",
       "when": {
         "applies_power": "Plating"
       }
     },
     {
-      "role": "scaling_defense",
+      "role": "mitigation",
       "when": {
         "text_contains": "plating"
       }
     },
     {
-      "role": "scaling_defense",
+      "role": "mitigation",
       "when": {
         "all": [
           {
@@ -161,33 +161,7 @@
       }
     },
     {
-      "role": "consistency",
-      "when": "draws"
-    },
-    {
-      "role": "consistency",
-      "when": "gains_energy"
-    },
-    {
-      "role": "consistency",
-      "when": {
-        "keyword": "Retain"
-      }
-    },
-    {
-      "role": "consistency",
-      "when": {
-        "text_contains": "draw"
-      }
-    },
-    {
-      "role": "consistency",
-      "when": {
-        "text_contains": "energy"
-      }
-    },
-    {
-      "role": "frontload_damage",
+      "role": "fast_damage",
       "when": {
         "all": [
           {
@@ -200,7 +174,7 @@
       }
     },
     {
-      "role": "frontload_damage",
+      "role": "fast_damage",
       "when": {
         "all": [
           {
@@ -213,13 +187,13 @@
       }
     },
     {
-      "role": "frontload_damage",
+      "role": "fast_damage",
       "when": {
         "text_contains": "forge"
       }
     },
     {
-      "role": "frontload_damage",
+      "role": "fast_damage",
       "when": {
         "all": [
           {
@@ -257,7 +231,7 @@
       }
     },
     {
-      "role": "frontload_defense",
+      "role": "mitigation",
       "when": {
         "all": [
           {
@@ -270,7 +244,7 @@
       }
     },
     {
-      "role": "frontload_defense",
+      "role": "mitigation",
       "when": {
         "all": [
           {
@@ -283,57 +257,19 @@
       }
     },
     {
-      "role": "frontload_defense",
+      "role": "mitigation",
       "when": {
         "text_contains": "summon"
       }
     },
     {
-      "role": "consistency",
-      "when": {
-        "text_contains": "into your hand"
-      }
-    },
-    {
-      "role": "consistency",
-      "when": {
-        "all": [
-          {
-            "text_contains": "gain"
-          },
-          {
-            "text_contains": "star"
-          }
-        ]
-      }
-    },
-    {
-      "role": "consistency",
-      "when": {
-        "all": [
-          {
-            "text_contains": "channel"
-          },
-          {
-            "text_contains": "plasma"
-          }
-        ]
-      }
-    },
-    {
-      "role": "consistency",
-      "when": {
-        "text_contains": "cost"
-      }
-    },
-    {
-      "role": "frontload_damage",
+      "role": "fast_damage",
       "when": {
         "text_contains": "vulnerable"
       }
     },
     {
-      "role": "frontload_damage",
+      "role": "fast_damage",
       "when": {
         "all": [
           {
@@ -346,7 +282,7 @@
       }
     },
     {
-      "role": "frontload_damage",
+      "role": "fast_damage",
       "when": {
         "text_contains": "evoke"
       }
@@ -371,13 +307,13 @@
       }
     },
     {
-      "role": "frontload_defense",
+      "role": "mitigation",
       "when": {
         "text_contains": "weak"
       }
     },
     {
-      "role": "frontload_defense",
+      "role": "mitigation",
       "when": {
         "all": [
           {
@@ -390,105 +326,143 @@
       }
     },
     {
-      "role": "frontload_defense",
+      "role": "mitigation",
       "when": {
         "text_contains": "heal"
       }
     },
     {
-      "role": "consistency",
+      "role": "survival",
       "when": {
-        "text_contains": "retain"
+        "block_at_least": 10
       }
     },
     {
-      "role": "consistency",
+      "role": "survival",
       "when": {
-        "text_contains": "free to play"
+        "applies_power": "Weak"
+      }
+    },
+    {
+      "role": "survival",
+      "when": {
+        "applies_power": "Intangible"
+      }
+    },
+    {
+      "role": "survival",
+      "when": {
+        "applies_power": "Buffer"
+      }
+    },
+    {
+      "role": "survival",
+      "when": {
+        "text_contains": "intangible"
+      }
+    },
+    {
+      "role": "survival",
+      "when": {
+        "all": [
+          {
+            "text_contains": "lose"
+          },
+          {
+            "text_contains": "strength"
+          }
+        ]
+      }
+    },
+    {
+      "role": "survival",
+      "when": {
+        "text_contains": "stretch"
+      }
+    },
+    {
+      "role": "aoe",
+      "when": {
+        "any": [
+          {
+            "all": [
+              "has_damage",
+              {
+                "target": "all_enemies"
+              }
+            ]
+          },
+          {
+            "text_contains": "to all enemies"
+          }
+        ]
+      }
+    },
+    {
+      "role": "chip",
+      "when": {
+        "all": [
+          "has_damage",
+          {
+            "hits_at_least": 2
+          }
+        ]
+      }
+    },
+    {
+      "role": "chip",
+      "when": {
+        "all": [
+          "has_damage",
+          {
+            "cost_at_most": 1
+          },
+          {
+            "damage_at_most": 4
+          }
+        ]
+      }
+    },
+    {
+      "role": "chip",
+      "when": {
+        "text_contains": "shiv"
       }
     }
   ],
   "card_roles": {
-    "ALCHEMIZE": [
-      "consistency"
-    ],
-    "APOTHEOSIS": [
-      "consistency"
-    ],
     "BEGONE": [
       "scaling_damage"
     ],
     "BRACE": [
-      "scaling_damage"
-    ],
-    "BRIGHTEN_UP": [
-      "consistency"
+      "fast_damage"
     ],
     "CHAOS": [
       "scaling_damage"
     ],
     "EIDOLON": [
-      "frontload_defense"
-    ],
-    "FLANKING": [
-      "consistency"
-    ],
-    "FLORESCENCE": [
-      "consistency"
-    ],
-    "FORBIDDEN_GRIMOIRE": [
-      "consistency"
+      "mitigation"
     ],
     "GROWTH": [
-      "scaling_defense"
+      "survival"
     ],
     "GUARDS": [
-      "frontload_defense"
-    ],
-    "IMITATION_LEARNING": [
-      "consistency"
+      "mitigation"
     ],
     "JUDGEMENT": [
-      "frontload_damage"
-    ],
-    "KI_VERSE": [
-      "consistency"
+      "fast_damage"
     ],
     "KNIFE_TRAP": [
       "scaling_damage"
     ],
-    "LARGESSE": [
-      "consistency"
-    ],
-    "LOOP": [
-      "consistency"
-    ],
-    "MASTER_PLANNER": [
-      "consistency"
-    ],
     "NOCK": [
-      "scaling_damage"
+      "fast_damage"
     ],
     "PRIMAL_FORCE": [
       "scaling_damage"
     ],
-    "QUIVER": [
-      "consistency"
-    ],
-    "ROYALTIES": [
-      "consistency"
-    ],
-    "SELF_DEPRECATE": [
-      "consistency"
-    ],
     "SHOW_OFF": [
-      "scaling_damage"
-    ],
-    "SIGNAL_BOOST": [
-      "consistency"
-    ],
-    "SIMPLETON": [
-      "consistency"
+      "fast_damage"
     ],
     "STAMPEDE": [
       "scaling_damage"
@@ -496,35 +470,11 @@
     "SYNCHRONIZE": [
       "scaling_damage"
     ],
-    "THE_HANGED_MAN": [
-      "consistency"
-    ],
-    "THE_LOVERS": [
-      "consistency"
-    ],
     "THE_MOON": [
-      "frontload_damage"
-    ],
-    "WELL_LAID_PLANS": [
-      "consistency"
+      "fast_damage"
     ],
     "YOGA": [
-      "consistency"
-    ]
-  },
-  "aoe": {
-    "any": [
-      {
-        "all": [
-          "has_damage",
-          {
-            "target": "all_enemies"
-          }
-        ]
-      },
-      {
-        "text_contains": "to all enemies"
-      }
+      "survival"
     ]
   },
   "multi_enemy_names": [
@@ -638,19 +588,26 @@
       "weak_fights": 3,
       "targets": [
         {
-          "role": "frontload_damage",
-          "min": 3
+          "role": "mitigation",
+          "min": 1
         },
         {
-          "role": "frontload_defense",
+          "role": "survival",
           "min": 1
+        },
+        {
+          "role": "fast_damage",
+          "min": 3
         },
         {
           "role": "scaling_damage",
           "min": 1
+        },
+        {
+          "role": "aoe",
+          "min": 1
         }
       ],
-      "needs_aoe": 1,
       "big_hit": 25,
       "long_fight_hp": {
         "monster": 90,
@@ -663,7 +620,15 @@
       "weak_fights": 2,
       "targets": [
         {
-          "role": "frontload_damage",
+          "role": "mitigation",
+          "min": 4
+        },
+        {
+          "role": "survival",
+          "min": 2
+        },
+        {
+          "role": "fast_damage",
           "min": 4
         },
         {
@@ -671,19 +636,14 @@
           "min": 2
         },
         {
-          "role": "frontload_defense",
-          "min": 3
-        },
-        {
-          "role": "scaling_defense",
-          "min": 1
-        },
-        {
-          "role": "consistency",
+          "role": "aoe",
           "min": 2
+        },
+        {
+          "role": "chip",
+          "min": 1
         }
       ],
-      "needs_aoe": 2,
       "big_hit": 30,
       "long_fight_hp": {
         "monster": 130,
@@ -696,7 +656,15 @@
       "weak_fights": 2,
       "targets": [
         {
-          "role": "frontload_damage",
+          "role": "mitigation",
+          "min": 6
+        },
+        {
+          "role": "survival",
+          "min": 3
+        },
+        {
+          "role": "fast_damage",
           "min": 4
         },
         {
@@ -704,19 +672,14 @@
           "min": 3
         },
         {
-          "role": "frontload_defense",
-          "min": 4
-        },
-        {
-          "role": "scaling_defense",
+          "role": "aoe",
           "min": 2
         },
         {
-          "role": "consistency",
-          "min": 3
+          "role": "chip",
+          "min": 1
         }
       ],
-      "needs_aoe": 2,
       "big_hit": 35,
       "long_fight_hp": {
         "monster": 180,
@@ -748,7 +711,7 @@
     {
       "effect": "damage",
       "recurring": false,
-      "role": "frontload_damage"
+      "role": "fast_damage"
     },
     {
       "effect": "damage",
@@ -758,7 +721,7 @@
     {
       "effect": "damage_all",
       "recurring": false,
-      "role": "frontload_damage"
+      "role": "fast_damage"
     },
     {
       "effect": "damage_all",
@@ -767,27 +730,27 @@
     },
     {
       "effect": "vulnerable",
-      "role": "frontload_damage"
+      "role": "fast_damage"
     },
     {
       "effect": "vigor",
-      "role": "frontload_damage"
+      "role": "fast_damage"
     },
     {
       "effect": "extra_damage",
-      "role": "frontload_damage"
+      "role": "fast_damage"
     },
     {
       "effect": "first_attack_bonus",
-      "role": "frontload_damage"
+      "role": "fast_damage"
     },
     {
       "effect": "vulnerable_bonus",
-      "role": "frontload_damage"
+      "role": "fast_damage"
     },
     {
       "effect": "extra_hit",
-      "role": "frontload_damage"
+      "role": "fast_damage"
     },
     {
       "effect": "strength",
@@ -811,57 +774,33 @@
     },
     {
       "effect": "aim",
-      "role": "scaling_damage"
+      "role": "fast_damage"
     },
     {
       "effect": "block",
       "recurring": false,
-      "role": "frontload_defense"
+      "role": "mitigation"
     },
     {
       "effect": "block",
       "recurring": true,
-      "role": "scaling_defense"
+      "role": "mitigation"
     },
     {
       "effect": "extra_block",
-      "role": "frontload_defense"
+      "role": "mitigation"
     },
     {
       "effect": "stretch",
-      "role": "frontload_defense"
+      "role": "survival"
     },
     {
       "effect": "dexterity",
-      "role": "scaling_defense"
+      "role": "mitigation"
     },
     {
       "effect": "plating",
-      "role": "scaling_defense"
-    },
-    {
-      "effect": "energy",
-      "role": "consistency"
-    },
-    {
-      "effect": "draw",
-      "role": "consistency"
-    },
-    {
-      "effect": "retain_hand",
-      "role": "consistency"
-    },
-    {
-      "effect": "conserve_energy",
-      "role": "consistency"
-    },
-    {
-      "effect": "echo",
-      "role": "consistency"
-    },
-    {
-      "effect": "free_skills",
-      "role": "consistency"
+      "role": "mitigation"
     }
   ]
 }

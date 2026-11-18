@@ -86,7 +86,7 @@ pub fn preview_body(
     }
     ui.horizontal_wrapped(|ui| {
         for c in &t.checks {
-            chip(ui, format!("{} · {}", c.demand.capability.label(), c.coverage.label()), coverage_color(c.coverage))
+            chip(ui, format!("{} · {}", c.demand.role.label(), c.coverage.label()), coverage_color(c.coverage))
                 .on_hover_ui(|ui| {
                     ui.label(format!("{}. You have {}.", c.demand.reason, c.have));
                 });

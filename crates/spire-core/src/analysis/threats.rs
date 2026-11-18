@@ -4,7 +4,7 @@ use crate::analysis::deck::{Coverage, DeckProfile, coverage};
 use crate::analysis::pattern;
 use crate::catalog::{Catalog, Encounter, Monster, RoomType};
 use crate::ids::EncounterId;
-use crate::playbook::{ActPlan, Capability, Playbook, Role};
+use crate::playbook::{ActPlan, Playbook, Role};
 use crate::run::{NodeKind, RunState};
 
 /// Numbers that describe how an encounter pressures a deck.
@@ -25,6 +25,9 @@ pub struct ThreatProfile {
     pub summons: bool,
     /// Phases a monster revives into, counting the first (0 or 1: none).
     pub phases: u32,
+    /// A fight rule that wants many hits or damage spread over turns
+    /// (Slippery, Intangible, Skittish, Hardened Shell), as its reason.
+    pub chip: Option<String>,
     pub debuffs: bool,
     pub statuses: bool,
 }
@@ -70,6 +73,13 @@ fn lineup_profile(monsters: &[&Monster], scaling: Scaling, vulnerable_pct: u32, 
         if !m.phases.is_empty() {
             t.phases = t.phases.max(m.phases.len() as u32 + 1);
         }
+        if t.chip.is_none() {
+            use crate::analysis::rules::{self, Ask};
+            t.chip = rules::of(m)
+                .into_iter()
+                .find(|r| r.kind.asks().iter().any(|a| matches!(a, Ask::ManyHits | Ask::SpreadDamage)))
+                .map(|r| format!("{}: wants many hits", crate::analysis::pattern::power_words(&r.power.power)));
+        }
         let biggest = m.moves.iter().map(|mv| mv.total_damage_at(scaling.deadly)).max().unwrap_or(0);
         t.max_hit = t.max_hit.max(biggest);
         t.buffs |= m.moves.iter().any(|mv| mv.intent_has("buff"));
@@ -110,6 +120,7 @@ pub fn threat_profile(enc: &Encounter, catalog: &Catalog, playbook: &Playbook, s
             buffs: acc.buffs || p.buffs,
             summons: acc.summons || p.summons,
             phases: acc.phases.max(p.phases),
+            chip: acc.chip.or(p.chip.clone()),
             debuffs: acc.debuffs || p.debuffs,
             statuses: acc.statuses || p.statuses,
         })
@@ -269,14 +280,14 @@ pub fn lineup_incoming(plans: &[MonsterPlan], turns: usize) -> Vec<(u32, f32, u3
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Demand {
-    pub capability: Capability,
+    pub role: Role,
     pub reason: String,
 }
 
 /// What an encounter asks of a deck, given the act's thresholds.
 pub fn demands(t: &ThreatProfile, room: RoomType, plan: Option<&ActPlan>) -> Vec<Demand> {
     let mut out = Vec::new();
-    let mut push = |capability, reason: String| out.push(Demand { capability, reason });
+    let mut push = |role, reason: String| out.push(Demand { role, reason });
 
     if t.enemies >= 2 || t.group || t.summons {
         let why = match (t.summons, t.enemies) {
@@ -284,11 +295,11 @@ pub fn demands(t: &ThreatProfile, room: RoomType, plan: Option<&ActPlan>) -> Vec
             (true, _) => "adds join mid-fight".to_string(),
             _ => "several enemies".to_string(),
         };
-        push(Capability::Aoe, why);
+        push(Role::Aoe, why);
     }
     if let Some(plan) = plan {
         if t.peak_turn >= plan.big_hit {
-            push(Capability::Role(Role::FrontloadDefense), format!("up to {} damage in one turn", t.peak_turn));
+            push(Role::Survival, format!("up to {} damage in one turn", t.peak_turn));
         }
         let long = match room {
             RoomType::Monster => plan.long_fight_hp.monster,
@@ -296,15 +307,15 @@ pub fn demands(t: &ThreatProfile, room: RoomType, plan: Option<&ActPlan>) -> Vec
             RoomType::Boss => plan.long_fight_hp.boss,
         };
         if t.hp_min >= long {
-            push(Capability::Role(Role::ScalingDamage), format!("{} total HP", t.hp_min));
-            push(Capability::Role(Role::ScalingDefense), "long fight".into());
+            push(Role::ScalingDamage, format!("{} total HP", t.hp_min));
+            push(Role::Mitigation, "long fight".into());
         }
     }
     if t.buffs {
-        push(Capability::Role(Role::FrontloadDamage), "buffs itself: end it early".into());
+        push(Role::FastDamage, "buffs itself: end it early".into());
     }
-    if t.statuses {
-        push(Capability::Role(Role::Consistency), "adds status cards".into());
+    if let Some(why) = &t.chip {
+        push(Role::Chip, why.clone());
     }
     out
 }
@@ -355,8 +366,8 @@ pub fn preview(
     let checks = demands(&profile, enc.room, plan)
         .into_iter()
         .map(|d| DemandCheck {
-            have: deck.capability(d.capability),
-            coverage: coverage(deck, d.capability, plan),
+            have: deck.role(d.role),
+            coverage: coverage(deck, d.role, plan),
             demand: d,
         })
         .collect();
