@@ -5,6 +5,7 @@ pub mod deck;
 pub mod events;
 pub mod floors;
 pub mod healing;
+pub mod jobs;
 pub mod pattern;
 pub mod rules;
 pub mod shape;

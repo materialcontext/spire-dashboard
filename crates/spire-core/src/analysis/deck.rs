@@ -212,10 +212,8 @@ impl Coverage {
 /// Without a target, two cards count as covered.
 pub fn coverage(profile: &DeckProfile, role: Role, plan: Option<&ActPlan>) -> Coverage {
     let have = profile.role(role);
-    let want = plan
-        .and_then(|p| p.targets.iter().find(|t| t.role == role).map(|t| t.min))
-        .filter(|w| *w > 0)
-        .unwrap_or(2);
+    let want =
+        plan.and_then(|p| p.targets.iter().find(|t| t.role == role).map(|t| t.min)).filter(|w| *w > 0).unwrap_or(2);
     match have {
         0 => Coverage::Missing,
         h if h < want => Coverage::Thin,
