@@ -20,7 +20,14 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
     ui.add_space(crate::style::space::s());
     let native = style::current().native;
     let toolbar = native == Some(style::Native::Mac);
-    ui.horizontal(|ui| {
+    // The row is as tall as the vitals (measured last frame): they're drawn
+    // in a child of their own, so the row wouldn't grow for them, and they'd
+    // spill under the panels when nothing else in it is as tall (the system
+    // title bar takes the tall window buttons away).
+    let row = ui.ctx().data(|d| d.get_temp::<f32>(row_height_id())).unwrap_or(0.0).max(ui.spacing().interact_size.y);
+    let width = ui.available_width();
+    ui.allocate_ui_with_layout(egui::vec2(width, row), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+        ui.set_min_height(row);
         let full = ui.max_rect();
         // macOS's unified title bar: the traffic lights sit at the left
         // (in the sidebar, with the System look).
@@ -229,6 +236,10 @@ fn potions(ui: &mut Ui, v: &ViewCtx) {
     });
 }
 
+fn row_height_id() -> egui::Id {
+    egui::Id::unique("header-row-height")
+}
+
 /// Draws `vitals` centred on the whole header (`full`), kept clear of the
 /// tabs and buttons (`free`). egui lays out in one pass, so the width is
 /// measured each frame and used for the next; a change triggers one repaint.
@@ -258,6 +269,12 @@ fn centred_vitals(ui: &mut Ui, v: &ViewCtx, full: egui::Rect, free: egui::Rect) 
     }
     if (measured - width).abs() > 0.5 {
         ui.ctx().data_mut(|d| d.insert_temp(id, measured));
+        ui.ctx().request_repaint();
+    }
+    let height = child.min_rect().height();
+    let row: f32 = ui.ctx().data(|d| d.get_temp(row_height_id())).unwrap_or(0.0);
+    if (height - row).abs() > 0.5 {
+        ui.ctx().data_mut(|d| d.insert_temp(row_height_id(), height));
         ui.ctx().request_repaint();
     }
 }

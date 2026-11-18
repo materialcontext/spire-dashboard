@@ -663,6 +663,7 @@ impl SpireApp {
         }
         crate::chrome::window_edges(&ctx);
         crate::chrome::focus_ring(&ctx);
+        crate::chrome::keep_tooltips_inside(&ctx);
         for action in actions {
             self.apply(action, &ctx);
         }
