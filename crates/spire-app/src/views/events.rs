@@ -5,12 +5,12 @@ use spire_core::analysis::EventWatch;
 
 use crate::app::ViewCtx;
 use crate::style::color::*;
-use crate::widgets::{chip, culled, eyebrow, opportunity_color, panel};
+use crate::widgets::{chip, culled, eyebrow, opportunity_color};
 
 pub fn show(ui: &mut Ui, v: &ViewCtx) {
     let (fresh, seen): (Vec<_>, Vec<_>) = v.dash.events.iter().partition(|e| !e.seen);
     let note = format!("{} possible this act", fresh.len());
-    panel(ui, "Event watchlist", Some(&note), |ui| {
+    crate::widgets::section(ui, "Event watchlist", Some(&note), |ui| {
         let wants: Vec<_> = v.dash.needs.iter().filter(|n| n.weight >= 2).collect();
         if !wants.is_empty() {
             ui.horizontal_wrapped(|ui| {
@@ -19,7 +19,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
                     chip(ui, n.opportunity.label(), opportunity_color(n.opportunity)).on_hover_text(&n.reason);
                 }
             });
-            ui.add_space(4.0);
+            ui.add_space(crate::style::space::xs());
         }
         for e in &fresh {
             // The watchlist is long and mostly below the fold: skip layout
@@ -29,7 +29,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
             culled(ui, ("event", e), |ui| event_entry(ui, v, e));
         }
         if !seen.is_empty() {
-            ui.add_space(6.0);
+            ui.add_space(crate::style::space::s());
             egui::CollapsingHeader::new(eyebrow(&format!("Already seen · {}", seen.len())))
                 .id_salt("seen-events")
                 .show(ui, |ui| {
@@ -42,7 +42,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
 }
 
 fn event_entry(ui: &mut Ui, v: &ViewCtx, e: &EventWatch) {
-    ui.add_space(6.0);
+    ui.add_space(crate::style::space::s());
     ui.horizontal(|ui| {
         // Options are only laid out while hovered.
         ui.label(RichText::new(&e.name).family(crate::style::strong_family()).color(text())).on_hover_ui(|ui| {
@@ -53,7 +53,7 @@ fn event_entry(ui: &mut Ui, v: &ViewCtx, e: &EventWatch) {
         });
         if e.score > 0 {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(RichText::new(format!("fit {}", e.score)).small().strong().color(accent()));
+                ui.label(RichText::new(format!("fit {}", e.score)).small().strong().color(text_dim()));
             });
         }
     });

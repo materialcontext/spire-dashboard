@@ -27,6 +27,10 @@ pub struct Settings {
     pub large_text: bool,
     /// Use the operating system's title bar instead of the app's own.
     pub system_title_bar: bool,
+    /// Follow the system's light/dark mode with `light_look` and `dark_look`.
+    pub match_system: bool,
+    pub light_look: Option<String>,
+    pub dark_look: Option<String>,
 }
 
 /// The app's data directory. All reads tolerate missing files.
@@ -148,6 +152,11 @@ impl Store {
             self.write_json(PLAYBOOK, &bundled_playbook())?;
         }
         Ok(path)
+    }
+
+    /// Whether settings were ever saved (false on a first run).
+    pub fn has_settings(&self) -> bool {
+        self.path(SETTINGS).exists()
     }
 
     pub fn settings(&self) -> Settings {

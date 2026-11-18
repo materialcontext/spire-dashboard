@@ -2342,9 +2342,11 @@ version = "0.1.0"
 dependencies = [
  "eframe",
  "egui_plot",
+ "objc2-app-kit 0.3.2",
  "serde_json",
  "spire-core",
  "spire-data",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

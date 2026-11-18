@@ -8,7 +8,7 @@ use crate::style::{self, color::*};
 use crate::widgets::{eyebrow, primary_button, segmented};
 
 pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
-    ui.add_space(28.0);
+    ui.add_space(crate::style::space::xl());
     // A centred column with left-aligned content, like a form.
     let width = ui.available_width().min(760.0);
     ui.horizontal(|ui| {
@@ -22,10 +22,10 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
                 )
                 .color(text_dim()),
             );
-            ui.add_space(18.0);
+            ui.add_space(crate::style::space::l());
 
             ui.label(eyebrow("Character"));
-            ui.add_space(4.0);
+            ui.add_space(crate::style::space::xs());
             let characters: Vec<_> = v.catalog.characters.values().collect();
             let cols = 3;
             let gap = 10.0;
@@ -43,28 +43,24 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
                 ui.add_space(gap);
             }
 
-            ui.add_space(8.0);
+            ui.add_space(crate::style::space::s());
             ui.label(eyebrow("Ascension"));
-            ui.add_space(4.0);
+            ui.add_space(crate::style::space::xs());
             let max = v.catalog.rules.max_ascension;
             st.new_ascension = st.new_ascension.min(max);
             let labels: Vec<(u32, String)> = (0..=max).map(|n| (n, n.to_string())).collect();
             let options: Vec<(u32, &str)> = labels.iter().map(|(n, s)| (*n, s.as_str())).collect();
             segmented(ui, &mut st.new_ascension, &options);
             if let Some(level) = v.catalog.ascensions.get(&st.new_ascension) {
-                ui.add_space(4.0);
-                ui.label(RichText::new(&level.name).strong().color(if st.new_ascension > 0 {
-                    accent()
-                } else {
-                    text()
-                }));
+                ui.add_space(crate::style::space::xs());
+                ui.label(RichText::new(&level.name).strong().color(text()));
                 ui.label(RichText::new(&level.text).small().color(text_dim()));
                 if st.new_ascension > 1 {
                     ui.label(RichText::new("Includes every lower level.").small().color(text_faint()));
                 }
             }
 
-            ui.add_space(18.0);
+            ui.add_space(crate::style::space::l());
             ui.allocate_ui(vec2(260.0, 36.0), |ui| {
                 if primary_button(ui, "Start run", st.new_character.is_some()).clicked()
                     && let Some(character) = st.new_character.clone()
@@ -134,14 +130,14 @@ pub fn enter_act(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
 pub fn act_picker(ui: &mut Ui, v: &ViewCtx, index: u8, out: &mut Vec<Action>) {
     let acts: Vec<_> = v.catalog.acts_at(index).collect();
     let title = format!("Enter Act {}", index + 1);
-    let note = "Pick the act, and its boss once the map shows it. The floor log unlocks after.";
+    let note = "Pick the act, then its boss once the map shows it.";
     crate::widgets::callout(ui, &title, Some(note), |ui| {
         if acts.is_empty() {
             ui.label(RichText::new("No act data for this act. Update data from the Data window.").color(text_dim()));
             return;
         }
         for act in acts {
-            ui.add_space(4.0);
+            ui.add_space(crate::style::space::xs());
             ui.label(RichText::new(&act.name).heading().color(text()));
             ui.horizontal_wrapped(|ui| {
                 for boss in &act.bosses {
@@ -153,7 +149,7 @@ pub fn act_picker(ui: &mut Ui, v: &ViewCtx, index: u8, out: &mut Vec<Action>) {
                     out.push(Action::EnterAct { act: act.id.clone(), index, boss: None });
                 }
             });
-            ui.add_space(6.0);
+            ui.add_space(crate::style::space::s());
         }
     });
 }

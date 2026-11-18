@@ -13,7 +13,7 @@ pub fn panel<R>(ui: &mut Ui, title: &str, note: Option<&str>, add: impl FnOnce(&
     let look = crate::style::current();
     let shown = egui::Frame::new()
         .stroke(Stroke::new(look.border, border()))
-        .inner_margin(egui::Margin { left: 14, right: 14, top: 10, bottom: 12 })
+        .inner_margin(egui::Margin { left: 16, right: 16, top: 12, bottom: 12 })
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
@@ -41,14 +41,14 @@ pub fn panel<R>(ui: &mut Ui, title: &str, note: Option<&str>, add: impl FnOnce(&
 pub fn callout<R>(ui: &mut Ui, title: &str, note: Option<&str>, add: impl FnOnce(&mut Ui) -> R) -> R {
     egui::Frame::new()
         .stroke(Stroke::new(2.0, accent()))
-        .inner_margin(egui::Margin { left: 16, right: 16, top: 12, bottom: 14 })
+        .inner_margin(egui::Margin { left: 16, right: 16, top: 12, bottom: 16 })
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(RichText::new(title).heading().family(crate::style::strong_family()).color(accent()));
+            ui.label(self::title(title).family(crate::style::strong_family()).color(accent()));
             if let Some(note) = note {
                 ui.label(RichText::new(note).color(text_dim()));
             }
-            ui.add_space(6.0);
+            ui.add_space(crate::style::space::s());
             add(ui)
         })
         .inner
@@ -58,6 +58,13 @@ pub fn callout<R>(ui: &mut Ui, title: &str, note: Option<&str>, add: impl FnOnce
 pub fn choice_button(ui: &mut Ui, label: impl Into<String>) -> egui::Response {
     let text = RichText::new(label.into()).color(text());
     ui.add(egui::Button::new(text).stroke(Stroke::new(1.0, accent())).min_size(vec2(0.0, 30.0)))
+}
+
+/// A page or pane title (Subtitle in the ramp), with the slight negative
+/// tracking large sizes need.
+pub fn title(text: impl Into<String>) -> RichText {
+    let size = egui::TextStyle::Heading;
+    RichText::new(text).text_style(size).extra_letter_spacing(-0.3).color(crate::style::color::text())
 }
 
 /// A label that links somewhere: pointer cursor and underline on hover.
@@ -73,14 +80,20 @@ pub fn link(ui: &mut Ui, text: RichText) -> egui::Response {
 
 /// Uppercase, small, dimmed label used for section titles.
 pub fn eyebrow(text: &str) -> RichText {
-    RichText::new(text.to_uppercase()).small().family(crate::style::strong_family()).color(text_dim())
+    // Sentence-case Body Strong headings read faster than small capitals;
+    // the Terminal look keeps capitals as part of its style.
+    if crate::style::current().caps_headings {
+        RichText::new(text.to_uppercase()).small().family(crate::style::strong_family()).color(text_dim())
+    } else {
+        RichText::new(text).family(crate::style::strong_family()).color(crate::style::color::text())
+    }
 }
 
 /// A horizontal 1px rule across the available width.
 pub fn hairline(ui: &mut Ui) {
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
     ui.painter().hline(rect.x_range(), rect.center().y, Stroke::new(1.0, border()));
-    ui.add_space(4.0);
+    ui.add_space(crate::style::space::xs());
 }
 
 /// A small outlined label. Painted directly (one galley, one rect) rather
@@ -105,7 +118,8 @@ pub fn chip(ui: &mut Ui, text: impl Into<String>, color: Color32) -> egui::Respo
 pub fn stat(ui: &mut Ui, caption: &str, value: impl Into<String>, value_color: Color32) -> egui::Response {
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 0.0;
-        ui.label(RichText::new(caption.to_uppercase()).small().color(text_faint()));
+        let caption = if crate::style::current().caps_headings { caption.to_uppercase() } else { caption.to_string() };
+        ui.label(RichText::new(caption).small().color(text_faint()));
         ui.label(RichText::new(value).family(crate::style::strong_family()).color(value_color));
     })
     .response
@@ -131,7 +145,7 @@ pub fn keys(ui: &mut Ui, keys: &[Key<'_>]) {
                 ui.painter().line_segment([a, b], stroke);
             }
             ui.label(RichText::new(k.name).small().color(text_dim()));
-            ui.add_space(8.0);
+            ui.add_space(crate::style::space::s());
         }
     });
 }
@@ -223,6 +237,69 @@ pub fn primary_button(ui: &mut Ui, text: &str, enabled: bool) -> egui::Response 
         .stroke(if enabled { Stroke::NONE } else { Stroke::new(1.0, border()) })
         .min_size(vec2(ui.available_width(), 32.0));
     ui.add_enabled(enabled, button)
+}
+
+/// A button for an action that can't be taken back: outlined and labelled
+/// in the danger colour, never filled, so it never looks like the
+/// recommended choice.
+pub fn destructive_button(ui: &mut Ui, text: &str) -> egui::Response {
+    let label = RichText::new(text).family(crate::style::strong_family()).color(bad());
+    ui.add(
+        egui::Button::new(label).fill(Color32::TRANSPARENT).stroke(Stroke::new(1.0, bad())).min_size(vec2(0.0, 32.0)),
+    )
+}
+
+/// A standard dialog button.
+pub fn dialog_button(ui: &mut Ui, label: &str) -> egui::Response {
+    ui.add(egui::Button::new(RichText::new(label).color(text())).min_size(vec2(0.0, 32.0)))
+}
+
+/// Lays out a "do it" button and a safe button in the platform's order:
+/// on macOS the safe (Cancel) button leads and the action trails; on
+/// Windows and Linux the action leads and the safe button trails. Returns
+/// (do it clicked, safe clicked).
+pub fn dialog_row(
+    ui: &mut Ui,
+    action: impl FnOnce(&mut Ui) -> egui::Response,
+    safe: impl FnOnce(&mut Ui) -> egui::Response,
+) -> (bool, bool) {
+    ui.horizontal(|ui| {
+        if cfg!(target_os = "macos") {
+            let s = safe(ui).clicked();
+            (action(ui).clicked(), s)
+        } else {
+            let a = action(ui).clicked();
+            (a, safe(ui).clicked())
+        }
+    })
+    .inner
+}
+
+/// The keyboard shortcut prefix for this platform ("Ctrl+" or "Cmd+").
+pub fn shortcut(key: &str) -> String {
+    if cfg!(target_os = "macos") { format!("Cmd+{key}") } else { format!("Ctrl+{key}") }
+}
+
+/// A heading and content with no box around it: for sub-sections, so only
+/// the few top-level groups carry outlines. Same margins as [`panel`], so
+/// text lines up.
+pub fn section<R>(ui: &mut Ui, title: &str, note: Option<&str>, add: impl FnOnce(&mut Ui) -> R) -> R {
+    egui::Frame::new()
+        .inner_margin(egui::Margin { left: 16, right: 16, top: 4, bottom: 4 })
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.label(eyebrow(title));
+                if let Some(note) = note {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(RichText::new(note).small().color(text_faint()));
+                    });
+                }
+            });
+            hairline(ui);
+            add(ui)
+        })
+        .inner
 }
 
 /// A labelled horizontal bar: `value` out of `max`, a faded `extra`

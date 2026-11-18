@@ -42,7 +42,26 @@ pub fn window(
                 }
             });
             ui.label(RichText::new(crate::style::current().blurb).small().color(text_dim()));
-            ui.add_space(4.0);
+            let mut follow = settings.match_system;
+            if ui.checkbox(&mut follow, "Match system light/dark").changed() {
+                out.push(Action::SetMatchSystem(follow));
+            }
+            if settings.match_system {
+                let name = |n: Option<&str>, d: &str| {
+                    let n = n.unwrap_or(d);
+                    crate::style::find_look(n).map_or(n.to_string(), |l| l.label.to_string())
+                };
+                ui.label(
+                    RichText::new(format!(
+                        "Light: {} · Dark: {}. Pick a look above to change the one for its mode.",
+                        name(settings.light_look.as_deref(), "grimoire"),
+                        name(settings.dark_look.as_deref(), crate::style::DEFAULT_LOOK)
+                    ))
+                    .small()
+                    .color(text_faint()),
+                );
+            }
+            ui.add_space(crate::style::space::xs());
             let mut large = crate::style::large();
             if ui.checkbox(&mut large, "Larger text").changed() {
                 out.push(Action::SetLargeText(large));
@@ -63,7 +82,7 @@ pub fn window(
                     .small()
                     .color(text_faint()),
             );
-            ui.add_space(10.0);
+            ui.add_space(crate::style::space::s());
 
             ui.label(eyebrow("Game data"));
             hairline(ui);
@@ -78,17 +97,17 @@ pub fn window(
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(role).strong().color(text()));
                     if let Some(g) = &l.game_version {
-                        ui.label(RichText::new(g).small().color(accent()));
+                        ui.label(RichText::new(g).small().color(text_dim()));
                     }
                     if let Some(t) = &l.fetched_at {
                         ui.label(RichText::new(t).small().color(text_faint()));
                     }
                 });
                 ui.label(RichText::new(&l.summary).small().color(text_dim()));
-                ui.add_space(4.0);
+                ui.add_space(crate::style::space::xs());
             }
 
-            ui.add_space(8.0);
+            ui.add_space(crate::style::space::s());
             ui.label(eyebrow("Update"));
             hairline(ui);
             if let Source::SpireCodex { channel, .. } = &settings.source {
@@ -112,7 +131,7 @@ pub fn window(
                     .small()
                     .color(text_faint()),
             );
-            ui.add_space(6.0);
+            ui.add_space(crate::style::space::s());
             let label = if st.updating { "Updating…" } else { "Update data now" };
             if primary_button(ui, label, !st.updating).clicked() {
                 out.push(Action::UpdateData);
@@ -124,7 +143,7 @@ pub fn window(
                 ui.label(RichText::new("Nothing updates unless you press Update.").small().color(text_faint()));
             });
 
-            ui.add_space(8.0);
+            ui.add_space(crate::style::space::s());
             ui.label(eyebrow("Playbook"));
             hairline(ui);
             ui.label(
@@ -143,10 +162,10 @@ pub fn window(
                 }
             });
 
-            ui.add_space(8.0);
+            ui.add_space(crate::style::space::s());
             ui.label(RichText::new(format!("Data folder: {}", store.dir().display())).small().color(text_faint()));
             if !st.messages.is_empty() {
-                ui.add_space(4.0);
+                ui.add_space(crate::style::space::xs());
                 for m in st.messages.iter().rev() {
                     ui.label(RichText::new(m).small().color(text_dim()));
                 }

@@ -16,7 +16,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
 
     if s.nodes.last() == Some(&NodeKind::Boss) && s.act_index < v.catalog.max_act_index() {
         start::act_picker(ui, v, s.act_index + 1, out);
-        ui.add_space(12.0);
+        ui.add_space(crate::style::space::m());
     }
 
     let double = v.catalog.rules.double_boss(s.ascension, s.act_index);
@@ -33,9 +33,9 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
             });
         };
         if s.boss.is_none() {
-            let note = format!("Pick the boss the map shows for {}. The floor log unlocks once it's set.", act.name);
+            let note = format!("Pick the boss the map shows for {}. The log unlocks after.", act.name);
             crate::widgets::callout(ui, "Choose the boss", Some(&note), |ui| pick(ui, false, out));
-            ui.add_space(12.0);
+            ui.add_space(crate::style::space::m());
         } else if double && s.second_boss.is_none() {
             crate::widgets::callout(
                 ui,
@@ -43,7 +43,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
                 Some("This ascension fights two bosses here."),
                 |ui| pick(ui, true, out),
             );
-            ui.add_space(12.0);
+            ui.add_space(crate::style::space::m());
         }
     }
     let title = format!("Act {} · {}", s.act_index + 1, act.map_or("?", |a| a.name.as_str()));
@@ -57,12 +57,12 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
                 out.push(Action::Open(crate::actions::Link::Encounter(boss.encounter.clone())));
             }
             threats::preview_body(ui, boss);
-            ui.add_space(6.0);
+            ui.add_space(crate::style::space::s());
         }
     });
 
-    ui.add_space(12.0);
-    panel(ui, "Priorities", None, |ui| {
+    ui.add_space(crate::style::space::m());
+    crate::widgets::section(ui, "Priorities", None, |ui| {
         if v.dash.advice.is_empty() {
             ui.label(RichText::new("Nothing pressing.").color(text_dim()));
         }
@@ -78,7 +78,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
             });
         }
         if !s.encounters_seen.is_empty() {
-            ui.add_space(6.0);
+            ui.add_space(crate::style::space::s());
             egui::CollapsingHeader::new(eyebrow(&format!("Fought this run · {}", s.encounters_seen.len())))
                 .id_salt("fought")
                 .default_open(false)

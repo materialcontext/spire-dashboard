@@ -115,7 +115,7 @@ fn date(s: &RunSummary) -> &str {
 
 /// Left panel: filters, totals and the run list.
 pub fn list(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser) {
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Run history"));
     hairline(ui);
     if h.runs.is_empty() {
@@ -139,7 +139,7 @@ pub fn list(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser) {
     }));
     let options: Vec<(Option<CharacterId>, &str)> = options.iter().map(|(c, n)| (c.clone(), n.as_str())).collect();
     segmented(ui, &mut h.character, &options);
-    ui.add_space(4.0);
+    ui.add_space(crate::style::space::xs());
     segmented(
         ui,
         &mut h.outcome,
@@ -158,13 +158,13 @@ pub fn list(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser) {
     } else {
         shown.iter().map(|r| r.summary.floor as f32).sum::<f32>() / shown.len() as f32
     };
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.horizontal(|ui| {
         stat(ui, "Runs", shown.len().to_string(), text());
-        ui.add_space(12.0);
+        ui.add_space(crate::style::space::m());
         let rate = if shown.is_empty() { 0.0 } else { wins as f32 * 100.0 / shown.len() as f32 };
         stat(ui, "Wins", format!("{wins} ({rate:.0}%)"), text());
-        ui.add_space(12.0);
+        ui.add_space(crate::style::space::m());
         stat(ui, "Avg floor", format!("{avg_floor:.1}"), text());
     });
     hairline(ui);
@@ -207,7 +207,7 @@ pub fn list(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser) {
             if resp.clicked() {
                 pick = Some(r.id.clone());
             }
-            ui.add_space(4.0);
+            ui.add_space(crate::style::space::xs());
         }
     });
     if let Some(id) = pick {
@@ -232,7 +232,7 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser) {
     let s = &archived.summary;
     let name = character_name(v, s);
     ui.horizontal(|ui| {
-        ui.label(RichText::new(format!("{name} · Ascension {}", s.ascension)).heading().color(text()));
+        ui.label(crate::widgets::title(format!("{name} · Ascension {}", s.ascension)));
         let outcome = s.outcome.as_ref();
         let mut word = outcome.map_or("Ongoing", Outcome::label).to_string();
         if let Some(Outcome::Died { encounter: Some(e) }) = outcome {
@@ -297,21 +297,21 @@ fn replay(ui: &mut Ui, v: &ViewCtx, run: &Run, d: &mut Detail) {
             d.at = Some((d.floor, state, sim));
         }
         let Some((_, state, _)) = &d.at else { return };
-        ui.add_space(6.0);
+        ui.add_space(crate::style::space::s());
         ui.horizontal(|ui| {
             stat(ui, "HP", format!("{}/{}", state.hp, state.max_hp), style::hp_color(state.hp_fraction()));
-            ui.add_space(16.0);
+            ui.add_space(crate::style::space::l());
             stat(ui, "Gold", state.gold.to_string(), text());
-            ui.add_space(16.0);
+            ui.add_space(crate::style::space::l());
             stat(ui, "Deck", state.deck.len().to_string(), text());
-            ui.add_space(16.0);
+            ui.add_space(crate::style::space::l());
             stat(ui, "Act", (state.act_index + 1).to_string(), text());
         });
         if let Some(e) = &point.encounter {
             let lost = if point.hp_lost > 0 { format!(", lost {} HP", point.hp_lost) } else { String::new() };
             ui.label(RichText::new(format!("Fought {}{lost}", v.catalog.encounter_name(e))).color(text_dim()));
         }
-        ui.add_space(6.0);
+        ui.add_space(crate::style::space::s());
         ui.label(eyebrow("Deck"));
         let rows = deck::deck_rows(&deck::classify(&state.deck, v.catalog, v.playbook));
         ui.horizontal_wrapped(|ui| {
@@ -322,7 +322,7 @@ fn replay(ui: &mut Ui, v: &ViewCtx, run: &Run, d: &mut Detail) {
             }
         });
         if !state.relics.is_empty() {
-            ui.add_space(6.0);
+            ui.add_space(crate::style::space::s());
             ui.label(eyebrow("Relics"));
             let relics: Vec<String> = state.relics.iter().map(|r| v.catalog.relic_name(r)).collect();
             ui.label(RichText::new(relics.join(", ")).color(text_dim()));

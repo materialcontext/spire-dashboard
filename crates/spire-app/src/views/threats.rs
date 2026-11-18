@@ -94,7 +94,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
     panel(ui, "Next fight", Some(note), |ui| {
         let tabs = [(NodeKind::Monster, "Enemy"), (NodeKind::Elite, "Elite"), (NodeKind::Boss, "Boss")];
         segmented(ui, &mut st.threat_tab, &tabs);
-        ui.add_space(4.0);
+        ui.add_space(crate::style::space::xs());
         let list =
             v.dash.threats.iter().find(|(k, _)| *k == st.threat_tab).map(|(_, l)| l.as_slice()).unwrap_or_default();
         if list.is_empty() {
@@ -102,7 +102,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
         }
         for t in list {
             culled(ui, ("threat", v.generation, st.threat_tab, &t.encounter), |ui| {
-                ui.add_space(6.0);
+                ui.add_space(crate::style::space::s());
                 ui.horizontal(|ui| {
                     let name = RichText::new(&t.name).family(crate::style::strong_family()).color(if t.seen {
                         text_dim()

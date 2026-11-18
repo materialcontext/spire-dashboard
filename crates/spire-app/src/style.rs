@@ -76,10 +76,44 @@ pub struct LookDef {
     /// Accent follows the current character's colour.
     pub character_accent: bool,
     pub tinted_chips: bool,
+    /// Section headings and stat captions in capitals. Only the Terminal
+    /// look, where it is the style; elsewhere headings are sentence case.
+    pub caps_headings: bool,
+    /// Brief fades and slides (83 to 167 ms) where something changes.
+    pub motion: bool,
 }
 
 const fn rgb(r: u8, g: u8, b: u8) -> Color32 {
     Color32::from_rgb(r, g, b)
+}
+
+/// Spacing tokens on a 4px grid (Fluent's rhythm). Larger text scales
+/// them with the type, so the layout keeps its proportions.
+pub mod space {
+    fn k() -> f32 {
+        if super::large() { 1.25 } else { 1.0 }
+    }
+    pub fn xs() -> f32 {
+        4.0 * k()
+    }
+    pub fn s() -> f32 {
+        8.0 * k()
+    }
+    pub fn m() -> f32 {
+        12.0 * k()
+    }
+    pub fn l() -> f32 {
+        16.0 * k()
+    }
+    pub fn xl() -> f32 {
+        24.0 * k()
+    }
+}
+
+/// `a` moved `t` of the way towards `b`.
+fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
+    let m = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+    Color32::from_rgb(m(a.r(), b.r()), m(a.g(), b.g()), m(a.b(), b.b()))
 }
 
 /// High-contrast dark base (Spirebound, and the template for new looks).
@@ -112,13 +146,15 @@ const BASE: LookDef = LookDef {
     glow: false,
     character_accent: false,
     tinted_chips: false,
+    caps_headings: false,
+    motion: true,
 };
 
 pub const LOOKS: &[LookDef] = &[
     LookDef {
         name: "spirebound",
         label: "Spirebound",
-        blurb: "Accent follows your character.",
+        blurb: "Your character's colour marks the header; gold marks what you can act on.",
         character_accent: true,
         tinted_chips: true,
         ..BASE
@@ -176,18 +212,21 @@ pub const LOOKS: &[LookDef] = &[
         label: "Grimoire",
         blurb: "Parchment, ink and crimson rubrics. Light.",
         palette: Palette {
+            // Light looks layer the other way round from dark ones: raised
+            // surfaces (windows, menus) are lighter than the page, and hover
+            // darkens. Faint text and warnings stay above 4.5:1 on the page.
             bg: rgb(238, 228, 206),
-            surface: rgb(228, 214, 186),
-            surface_hi: rgb(214, 196, 162),
-            input: rgb(248, 242, 228),
+            surface: rgb(248, 243, 231),
+            surface_hi: rgb(222, 209, 182),
+            input: rgb(252, 249, 241),
             border: rgb(170, 146, 108),
             border_hi: rgb(118, 94, 62),
             text: rgb(36, 25, 16),
             text_dim: rgb(86, 66, 46),
-            text_faint: rgb(124, 102, 78),
+            text_faint: rgb(104, 82, 60),
             accent: rgb(150, 26, 34),
             good: rgb(36, 108, 48),
-            warn: rgb(156, 92, 6),
+            warn: rgb(138, 80, 0),
             bad: rgb(166, 28, 28),
             info: rgb(28, 76, 148),
         },
@@ -216,6 +255,8 @@ pub const LOOKS: &[LookDef] = &[
         },
         typeface: Typeface::Mono,
         sizes: (18.0, 14.0, 12.0),
+        caps_headings: true,
+        motion: false,
         ..BASE
     },
 ];
@@ -228,6 +269,24 @@ static LOOK: AtomicUsize = AtomicUsize::new(0);
 static CHARACTER: AtomicU32 = AtomicU32::new(0);
 /// The "Larger text" readability option, applied on top of any look.
 static LARGE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// The system asked for less motion.
+static REDUCE_MOTION: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Follows the system's reduced-motion preference.
+pub fn set_reduce_motion(ctx: &egui::Context, on: bool) {
+    REDUCE_MOTION.store(on, Ordering::Relaxed);
+    configure(ctx);
+}
+
+/// Whether brief animations play: the look allows them and the system
+/// hasn't asked for less motion.
+pub fn motion() -> bool {
+    current().motion && !REDUCE_MOTION.load(Ordering::Relaxed)
+}
+
+/// Fluent's timings: fades 83 ms, moves 167 ms.
+pub const FADE: f32 = 0.083;
+pub const MOVE: f32 = 0.167;
 
 /// Whether "Larger text" is on.
 pub fn large() -> bool {
@@ -276,10 +335,19 @@ pub mod color {
         if super::large() { p.text_dim } else { p.text_faint }
     }
 
-    /// The look's accent, or the current character's colour on looks that
-    /// follow the character.
+    /// The look's accent. It means one thing: you can act on this, or it
+    /// is selected (primary buttons, selected tabs, focus, links, callouts
+    /// that need a choice). Data emphasis uses weight, not this colour.
     #[inline]
     pub fn accent() -> Color32 {
+        super::current().palette.accent
+    }
+
+    /// The identity colour: the current character's on looks that follow
+    /// the character (the header band), else the accent. Never used to
+    /// mean "interactive".
+    #[inline]
+    pub fn identity() -> Color32 {
         let look = super::current();
         match super::CHARACTER.load(std::sync::atomic::Ordering::Relaxed) {
             c if look.character_accent && c != 0 => {
@@ -308,6 +376,11 @@ pub fn card_type_color(t: CardType) -> Color32 {
         CardType::Quest => rgb(110, 205, 140),
         CardType::Other => rgb(170, 178, 192),
     })
+}
+
+/// Gold's own colour (the in-game coin), for gold amounts.
+pub fn gold() -> Color32 {
+    adapt(rgb(232, 186, 72))
 }
 
 pub fn role_color(r: Role) -> Color32 {
@@ -431,9 +504,12 @@ pub fn configure(ctx: &egui::Context) {
         style.spacing.item_spacing = if roomy { egui::vec2(10.0, 8.0) } else { egui::vec2(8.0, 6.0) };
         style.spacing.button_padding = egui::vec2(10.0, if roomy { 5.0 } else { 4.0 });
         style.spacing.interact_size.y = if roomy { 28.0 } else { 24.0 };
-        style.animation_time = 0.0;
+        // Popups and collapsing sections fade briefly; nothing animates while idle.
+        style.animation_time = if motion() { FADE } else { 0.0 };
 
         let strong_fg = if look.light { Color32::BLACK } else { Color32::WHITE };
+        // Pressed is one step past hover: lighter on dark looks, darker on light ones.
+        let pressed = mix(surface_hi(), strong_fg, 0.1);
         let line = look.border;
         let v = &mut style.visuals;
         v.dark_mode = !look.light;
@@ -461,17 +537,22 @@ pub fn configure(ctx: &egui::Context) {
         w.noninteractive.fg_stroke = Stroke::new(1.0, text());
         w.inactive.bg_fill = surface();
         w.inactive.weak_bg_fill = surface();
-        w.inactive.bg_stroke = Stroke::new(line, border());
+        // Controls are outlined at 3:1 or better (WCAG non-text contrast);
+        // decorative panel outlines keep the softer border.
+        w.inactive.bg_stroke = Stroke::new(line, border_hi());
         w.inactive.fg_stroke = Stroke::new(1.0, text());
         w.hovered.bg_fill = surface_hi();
         w.hovered.weak_bg_fill = surface_hi();
-        w.hovered.bg_stroke = Stroke::new(line, border_hi());
+        w.hovered.bg_stroke = Stroke::new(line, text_dim());
         w.hovered.fg_stroke = Stroke::new(1.0, strong_fg);
-        w.active.bg_fill = surface_hi();
-        w.active.weak_bg_fill = surface_hi();
+        w.active.bg_fill = pressed;
+        w.active.weak_bg_fill = pressed;
         w.active.bg_stroke = Stroke::new(line, accent());
-        w.active.fg_stroke = Stroke::new(1.0, strong_fg);
+        w.active.fg_stroke = Stroke::new(1.0, text_dim());
         w.open = w.hovered;
+        // Disabled controls fade to about 40%, a tier of their own (Fluent
+        // uses 36%), so they no longer look like faint hint text.
+        v.disabled_alpha = 0.4;
         for s in [&mut w.noninteractive, &mut w.inactive, &mut w.hovered, &mut w.active, &mut w.open] {
             s.corner_radius = CornerRadius::ZERO;
             s.expansion = 0.0;

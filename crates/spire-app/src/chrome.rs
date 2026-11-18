@@ -139,6 +139,48 @@ fn button(ui: &mut Ui, glyph: Glyph, tip: &str) -> egui::Response {
     r.on_hover_text(tip)
 }
 
+/// Draws a ring around the focused widget, but only while the keyboard is
+/// driving (after Tab or an arrow key, until the next click), as Windows
+/// and macOS do: 2px outer ring in the text colour, 1px inner ring in the
+/// background colour, 2px clear of the widget.
+pub fn focus_ring(ctx: &egui::Context) {
+    let id = egui::Id::unique("keyboard-driving");
+    let (keys, clicked) = ctx.input(|i| {
+        let keys = i.events.iter().any(|e| {
+            matches!(
+                e,
+                egui::Event::Key {
+                    key: egui::Key::Tab
+                        | egui::Key::ArrowDown
+                        | egui::Key::ArrowUp
+                        | egui::Key::ArrowLeft
+                        | egui::Key::ArrowRight,
+                    pressed: true,
+                    ..
+                }
+            )
+        });
+        (keys, i.pointer.any_pressed())
+    });
+    let mut driving: bool = ctx.data(|d| d.get_temp(id)).unwrap_or(false);
+    if keys {
+        driving = true;
+    }
+    if clicked {
+        driving = false;
+    }
+    ctx.data_mut(|d| d.insert_temp(id, driving));
+    if !driving {
+        return;
+    }
+    let Some(focused) = ctx.memory(|m| m.focused()) else { return };
+    let Some(r) = ctx.read_response(focused) else { return };
+    let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::unique("focus-ring")));
+    let outer = r.rect.expand(2.0);
+    painter.rect_stroke(outer, 0.0, Stroke::new(2.0, text()), egui::StrokeKind::Outside);
+    painter.rect_stroke(outer, 0.0, Stroke::new(1.0, bg()), egui::StrokeKind::Inside);
+}
+
 /// Edge and corner resizing, and a hairline round the window so its edge
 /// shows against the desktop. Call after the views, so the resize cursor
 /// wins over whatever widget sits under the edge.

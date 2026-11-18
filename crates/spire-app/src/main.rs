@@ -31,7 +31,13 @@ fn main() -> eframe::Result {
         Box::new(move |cc| {
             // SPIRE_LOOK overrides the saved appearance (for reviews and screenshots).
             // SPIRE_LARGE=1 forces Larger text on (screenshots); else the saved choice.
-            let large = std::env::var("SPIRE_LARGE").map_or(settings.large_text, |v| v == "1");
+            // The system's own preferences: reduced motion always; text size
+            // only as the first-run default for Larger text.
+            let prefs = spire_app::platform::prefs();
+            spire_app::style::set_reduce_motion(&cc.egui_ctx, prefs.reduce_motion);
+            let first_run = !spire_data::store::Store::default_location().has_settings();
+            let default_large = if first_run { prefs.text_scale > 1.0 } else { settings.large_text };
+            let large = std::env::var("SPIRE_LARGE").map_or(default_large, |v| v == "1");
             spire_app::style::set_large(&cc.egui_ctx, large);
             let look = std::env::var("SPIRE_LOOK").ok().or(settings.look);
             spire_app::style::set_look(&cc.egui_ctx, look.as_deref().unwrap_or(spire_app::style::DEFAULT_LOOK));

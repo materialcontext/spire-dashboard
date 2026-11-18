@@ -93,6 +93,18 @@ reads archived runs from disk when its tab opens.
 
 ## App
 
+`platform.rs` reads the person's system preferences once at startup: Windows
+text size and animation settings (`windows-sys`), and macOS Reduce Motion
+(`objc2-app-kit`). Light and dark mode come live from eframe. The style layer
+(`style.rs`) has these parts:
+
+- **Palette accessors.** `accent` is for interactive or selected items only;
+  `identity` is the character colour.
+- **Spacing tokens:** `style::space`.
+- **Motion constants:** `FADE` 83 ms and `MOVE` 167 ms.
+- **Per-look flags:** `caps_headings`, `motion`.
+
+
 Views are functions: `fn show(ui, &ViewCtx, …, &mut Vec<Action>)`. They read
 immutable data and push `Action`s. `SpireApp::apply` is the only place state
 changes. Data updates run on a background thread and report back over a

@@ -23,7 +23,7 @@ fn describe(v: &ViewCtx, c: &Change) -> (String, egui::Color32) {
             (format!("Enchant {} with {}", card(d), v.catalog.enchantment_name(enchantment)), info())
         }
         Change::Transform { from, to } => (format!("Transform {} into {}", card(from), card(to)), info()),
-        Change::AddRelic(r) => (format!("Gain {}", v.catalog.relic_name(r)), accent()),
+        Change::AddRelic(r) => (format!("Gain {}", v.catalog.relic_name(r)), text()),
         Change::RemoveRelic(r) => (format!("Lose {}", v.catalog.relic_name(r)), bad()),
         Change::AddPotion(p) => (format!("Gain {}", v.catalog.potion_name(p)), info()),
         Change::RemovePotion(p) => (format!("Use {}", v.catalog.potion_name(p)), text_dim()),
@@ -36,17 +36,17 @@ fn describe(v: &ViewCtx, c: &Change) -> (String, egui::Color32) {
 }
 
 fn step(ui: &mut Ui, n: u32, title: &str) {
-    ui.add_space(10.0);
+    ui.add_space(crate::style::space::s());
     ui.horizontal(|ui| {
-        ui.label(RichText::new(n.to_string()).small().strong().color(accent()));
+        ui.label(RichText::new(n.to_string()).small().strong().color(text_dim()));
         ui.label(eyebrow(title));
     });
 }
 
 pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) {
     let s = v.state;
-    ui.add_space(8.0);
-    ui.label(RichText::new(format!("Log floor {}", s.floor + 1)).heading().color(text()));
+    ui.add_space(crate::style::space::s());
+    ui.label(crate::widgets::title(format!("Log floor {}", s.floor + 1)));
     ui.label(RichText::new("After finishing a floor, record what happened.").small().color(text_faint()));
     hairline(ui);
 
@@ -63,7 +63,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
         Some(k) => format!("{position} · always {}", k.label()),
         None => position,
     };
-    ui.label(RichText::new(hint).small().color(if d.expected.is_some() { accent() } else { text_faint() }));
+    ui.label(RichText::new(hint).small().color(if d.expected.is_some() { text_dim() } else { text_faint() }));
 
     if let Some(act) = &s.act {
         let room = match d.kind {
@@ -188,7 +188,14 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
             let (text, color) = describe(v, c);
             ui.label(RichText::new(text).color(color));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.add(egui::Button::new(RichText::new("x").small()).frame_when_inactive(false)).clicked() {
+                if ui
+                    .add(
+                        egui::Button::new(RichText::new("x").small())
+                            .frame_when_inactive(false)
+                            .min_size(egui::vec2(24.0, 24.0)),
+                    )
+                    .clicked()
+                {
                     remove = Some(i);
                 }
             });
@@ -198,11 +205,14 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
         d.changes.remove(i);
     }
 
-    ui.add_space(12.0);
-    if primary_button(ui, &format!("Commit floor {}", s.floor + 1), true).clicked() {
+    ui.add_space(crate::style::space::m());
+    if primary_button(ui, &format!("Commit floor {}", s.floor + 1), true)
+        .on_hover_text(format!("Commit floor ({})", crate::widgets::shortcut("Enter")))
+        .clicked()
+    {
         out.push(Action::Record(d.to_node(s)));
     }
-    ui.add_space(4.0);
+    ui.add_space(crate::style::space::xs());
     ui.horizontal(|ui| {
         let has_changes = !d.is_empty_against(s);
         if ui
@@ -216,5 +226,5 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
             *d = NodeDraft::for_next(s, v.catalog);
         }
     });
-    ui.add_space(12.0);
+    ui.add_space(crate::style::space::m());
 }

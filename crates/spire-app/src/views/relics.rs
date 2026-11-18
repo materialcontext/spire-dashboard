@@ -86,12 +86,12 @@ fn pool_color(pool: &str) -> egui::Color32 {
 }
 
 pub fn filters(ui: &mut Ui, v: &ViewCtx, b: &mut RelicBrowser) {
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Find relics"));
     hairline(ui);
     ui.add(egui::TextEdit::singleline(&mut b.query).hint_text("Name or text").desired_width(f32::INFINITY));
 
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Pool"));
     let mut pools: Vec<&str> = v.catalog.relics.values().map(|r| r.pool.as_str()).collect();
     pools.sort();
@@ -106,7 +106,7 @@ pub fn filters(ui: &mut Ui, v: &ViewCtx, b: &mut RelicBrowser) {
             }
         });
 
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Rarity"));
     let rarities = [
         (None, "All"),
@@ -120,7 +120,7 @@ pub fn filters(ui: &mut Ui, v: &ViewCtx, b: &mut RelicBrowser) {
     ];
     segmented(ui, &mut b.rarity, &rarities);
 
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Deck simulator"));
     segmented(
         ui,
@@ -128,10 +128,10 @@ pub fn filters(ui: &mut Ui, v: &ViewCtx, b: &mut RelicBrowser) {
         &[(SimFilter::Any, "Any"), (SimFilter::Simulated, "Simulated"), (SimFilter::NotSimulated, "Not simulated")],
     );
 
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.checkbox(&mut b.in_run, "Only relics in this run");
 
-    ui.add_space(10.0);
+    ui.add_space(crate::style::space::s());
     if ui.add(egui::Button::new(RichText::new("Clear filters").color(text_dim())).frame_when_inactive(false)).clicked()
     {
         *b = RelicBrowser { selected: b.selected.take(), ..RelicBrowser::default() };
@@ -166,8 +166,9 @@ pub fn list(ui: &mut Ui, v: &ViewCtx, b: &mut RelicBrowser) {
                 let small = egui::TextStyle::Small.resolve(ui.style());
                 let mid = rect.center().y;
                 let owned = v.state.relics.contains(id);
-                let color = if owned { accent() } else { text() };
-                painter.text(egui::pos2(rect.min.x + 12.0, mid), egui::Align2::LEFT_CENTER, &relic.name, font, color);
+                // Owned relics read stronger, not in the interactive accent.
+                let font = if owned { egui::FontId::new(font.size, style::strong_family()) } else { font };
+                painter.text(egui::pos2(rect.min.x + 12.0, mid), egui::Align2::LEFT_CENTER, &relic.name, font, text());
                 let right = format!("{} · {:?}", label(&relic.pool), relic.rarity);
                 painter.text(egui::pos2(rect.max.x - 6.0, mid), egui::Align2::RIGHT_CENTER, right, small, text_faint());
             }
@@ -179,7 +180,7 @@ pub fn list(ui: &mut Ui, v: &ViewCtx, b: &mut RelicBrowser) {
 }
 
 pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut RelicBrowser) {
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     let Some(relic) = b.selected.as_ref().and_then(|id| v.catalog.relics.get(id)) else {
         ui.label(
             RichText::new("Select a relic to see its text and what the deck simulator does with it.").color(text_dim()),
@@ -191,18 +192,18 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut RelicBrowser) {
     }
     ui.horizontal(|ui| {
         stripe(ui, pool_color(&relic.pool), 26.0);
-        ui.label(RichText::new(&relic.name).heading());
+        ui.label(crate::widgets::title(&relic.name));
     });
     ui.label(RichText::new(format!("{} · {:?}", label(&relic.pool), relic.rarity)).color(text_dim()));
     if v.state.relics.contains(&relic.id) {
-        ui.label(RichText::new("In your run").small().color(accent()));
+        ui.label(RichText::new("In your run").small().strong().color(text()));
     }
-    ui.add_space(8.0);
+    ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Text"));
     hairline(ui);
     ui.label(&relic.text);
     if let Some((_, m)) = &b.reading {
-        ui.add_space(10.0);
+        ui.add_space(crate::style::space::s());
         simulator_reading(ui, m);
     }
 }
@@ -218,7 +219,7 @@ pub fn simulator_reading(ui: &mut Ui, m: &Mechanics) {
         ui.label(RichText::new(line).color(good()));
     }
     if !m.unread.is_empty() {
-        ui.add_space(4.0);
+        ui.add_space(crate::style::space::xs());
         ui.label(RichText::new("Not simulated:").small().color(text_faint()));
         for s in &m.unread {
             ui.label(RichText::new(s).small().color(text_faint()));

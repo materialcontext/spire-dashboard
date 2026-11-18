@@ -13,14 +13,14 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
     if st.end_run_open {
         let modal = egui::Modal::new(egui::Id::unique("end-run")).show(&ctx, |ui| {
             ui.set_width(380.0);
-            ui.label(RichText::new("End run").heading());
+            ui.label(crate::widgets::title("End run"));
             ui.label(RichText::new("The run is filed in history with this result.").small().color(text_dim()));
             hairline(ui);
             if primary_button(ui, "Victory", true).clicked() {
                 out.push(Action::EndRun(Outcome::Victory));
                 st.end_run_open = false;
             }
-            ui.add_space(8.0);
+            ui.add_space(crate::style::space::s());
             ui.label(eyebrow("Died to"));
             let label = st.end_encounter.as_ref().map_or("Unknown".to_string(), |e| v.catalog.encounter_name(e));
             egui::ComboBox::from_id_salt("death").selected_text(label).width(ui.available_width()).show_ui(ui, |ui| {
@@ -41,7 +41,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
                 out.push(Action::EndRun(Outcome::Died { encounter: st.end_encounter.clone() }));
                 st.end_run_open = false;
             }
-            ui.add_space(8.0);
+            ui.add_space(crate::style::space::s());
             ui.horizontal(|ui| {
                 if ui.button("Abandoned").clicked() {
                     out.push(Action::EndRun(Outcome::Abandoned));
@@ -60,17 +60,23 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
     if st.confirm_abandon {
         let modal = egui::Modal::new(egui::Id::unique("abandon")).show(&ctx, |ui| {
             ui.set_width(360.0);
-            ui.label(RichText::new("Start a new run?").heading());
+            ui.label(crate::widgets::title("Start a new run?"));
             ui.label(
                 RichText::new("The current run is still in progress. It will be saved to history as Abandoned.")
                     .color(text_dim()),
             );
-            ui.add_space(8.0);
-            if primary_button(ui, "Abandon and start a new run", true).clicked() {
+            ui.add_space(crate::style::space::m());
+            // The safe choice is the default: Enter and Esc keep playing.
+            let enter = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
+            let (abandon, keep) = crate::widgets::dialog_row(
+                ui,
+                |ui| crate::widgets::destructive_button(ui, "Abandon run"),
+                |ui| crate::widgets::dialog_button(ui, "Keep playing"),
+            );
+            if abandon {
                 out.push(Action::AbandonRun);
                 st.confirm_abandon = false;
-            }
-            if ui.button(RichText::new("Keep playing").color(text_dim())).clicked() {
+            } else if keep || enter {
                 st.confirm_abandon = false;
             }
         });

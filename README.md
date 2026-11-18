@@ -96,7 +96,7 @@ system title bar** brings back the operating system's own.
 
 | Look | Style |
 |---|---|
-| **Spirebound** (default) | High contrast in Inter. The accent follows your character. |
+| **Spirebound** (default) | High contrast in Inter. Your character's colour marks the header; gold marks what you can act on. |
 | **Forge** | Charcoal and embers. |
 | **Neon Spire** | Synthwave with glowing edges. |
 | **Grimoire** | A light theme: parchment, ink and crimson. |
@@ -108,6 +108,24 @@ system title bar** brings back the operating system's own.
 - roomier spacing
 - filled chips
 - brighter secondary text
+
+On a first run it starts on if Windows' text size is above 100%.
+
+**Match system light/dark** follows the operating system: Grimoire in light
+mode, Spirebound in dark. Picking a look while it's on sets the look for that
+mode.
+
+Every look shares the same rules, from the Windows and macOS design guidance
+(see `docs/DESIGN_PRACTICES.md`):
+
+- **The accent** marks only what you can act on or what's selected.
+- **Headings** are sentence case, except in Terminal.
+- **Spacing** sits on a 4px grid.
+- **Controls** have 3:1 outlines and 24px click targets.
+- **Keyboard focus** shows a ring after Tab or the arrow keys.
+- **Motion** is brief (83–167 ms fades and slides) and off in Terminal or when
+  the system asks for reduced motion.
+- **An inactive window** dims its header.
 
 ## Game data
 
