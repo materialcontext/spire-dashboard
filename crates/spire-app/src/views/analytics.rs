@@ -12,7 +12,7 @@ use spire_core::playbook::{Playbook, Role};
 
 use crate::app::{Analytics, UiState, ViewCtx};
 use crate::style::{self, color::*};
-use crate::widgets::{Key, keys, panel, sparkline, stat};
+use crate::widgets::{Key, caption, keys, panel, secondary, sparkline, stat};
 
 const GAP: f32 = 12.0;
 /// Draw-odds rows shown before "Show all".
@@ -212,11 +212,7 @@ fn roles(ui: &mut Ui, playbook: &Playbook, t: &Timeline, act: u8) {
             ui.end_row();
         }
     });
-    ui.label(
-        RichText::new("Cards added for each role (starter Strikes and Defends not counted). Dashed: the act target.")
-            .small()
-            .color(text_faint()),
-    );
+    ui.label(caption("Cards added for each role (starter Strikes and Defends not counted). Dashed: the act target."));
 }
 
 fn dead_and_elites(ui: &mut Ui, salt: &str, t: &Timeline) {
@@ -241,7 +237,7 @@ fn dead_and_elites(ui: &mut Ui, salt: &str, t: &Timeline) {
             }
             p.line(Line::new("", share).color(style::card_type_color(CardType::Curse)).width(2.0));
         });
-    ui.label(RichText::new("Share of the deck that is curses, statuses or unplayable.").small().color(text_faint()));
+    ui.label(caption("Share of the deck that is curses, statuses or unplayable."));
 }
 
 // ---------------------------------------------------------------- deck
@@ -311,15 +307,11 @@ fn per_turn(ui: &mut Ui, salt: &str, sim: &DeckSim) {
             p.line(Line::new("Damage", dmg).color(red).width(2.0));
             p.line(Line::new("Block", blk).color(blue).width(2.0));
         });
-    ui.label(
-        RichText::new(format!(
-            "Shaded: the middle half of fights. {} cards and {} energy a turn; potions, enchantments and enemy \
+    ui.label(caption(format!(
+        "Shaded: the middle half of fights. {} cards and {} energy a turn; potions, enchantments and enemy \
              actions aren't simulated.",
-            sim.hand_size, sim.energy
-        ))
-        .small()
-        .color(text_faint()),
-    );
+        sim.hand_size, sim.energy
+    )));
 }
 
 /// Which of the run's relics the simulation includes, with the rest on hover.
@@ -329,14 +321,14 @@ fn relics_line(ui: &mut Ui, sim: &DeckSim) {
         return;
     }
     let text = format!("Relics simulated: {} of {}", yes.len(), yes.len() + no.len());
-    ui.label(RichText::new(text).small().color(text_dim())).on_hover_ui(|ui| {
+    ui.label(secondary(text)).on_hover_ui(|ui| {
         if !yes.is_empty() {
             ui.label(RichText::new(format!("Simulated: {}", yes.join(", "))).small());
         }
         if !no.is_empty() {
-            ui.label(RichText::new(format!("Not simulated: {}", no.join(", "))).small().color(text_dim()));
+            ui.label(secondary(format!("Not simulated: {}", no.join(", "))));
         }
-        ui.label(RichText::new("See each relic in the Relics tab for what is read.").small().color(text_faint()));
+        ui.label(caption("See each relic in the Relics tab for what is read."));
     });
 }
 
@@ -370,10 +362,10 @@ fn draw_and_energy(ui: &mut Ui, sim: &DeckSim) {
 fn odds(ui: &mut Ui, sim: &DeckSim, show_all: &mut bool) {
     let rows = if *show_all { sim.odds.len() } else { sim.odds.len().min(ODDS_SHOWN) };
     egui::Grid::new("draw-odds").num_columns(5).striped(false).spacing([14.0, 4.0]).show(ui, |ui| {
-        ui.label(RichText::new("Card").small().color(text_faint()));
-        ui.label(RichText::new("Copies").small().color(text_faint()));
+        ui.label(caption("Card"));
+        ui.label(caption("Copies"));
         for t in 1..=3 {
-            ui.label(RichText::new(format!("Turn {t}")).small().color(text_faint()));
+            ui.label(caption(format!("Turn {t}")));
         }
         ui.end_row();
         for o in &sim.odds[..rows] {

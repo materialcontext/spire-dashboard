@@ -9,7 +9,7 @@ use spire_core::run::NodeKind;
 use crate::actions::{Action, Link};
 use crate::app::{UiState, ViewCtx};
 use crate::style::color::*;
-use crate::widgets::{chip, coverage_color, culled, link, panel, segmented};
+use crate::widgets::{caption, chip, coverage_color, culled, link, panel, secondary, segmented};
 
 /// Lineups shown before collapsing the rest into "+N more".
 const LINEUPS_SHOWN: usize = 3;
@@ -32,18 +32,17 @@ pub fn preview_body(
         }
         many => {
             for (label, share) in many.iter().take(LINEUPS_SHOWN) {
-                ui.label(RichText::new(format!("{:>3.0}%  {label}", share * 100.0)).small().color(text_dim()));
+                ui.label(secondary(format!("{:>3.0}%  {label}", share * 100.0)));
             }
             if many.len() > LINEUPS_SHOWN {
                 let rest: Vec<String> =
                     many[LINEUPS_SHOWN..].iter().map(|(l, s)| format!("{:.0}%  {l}", s * 100.0)).collect();
-                ui.label(RichText::new(format!("+{} more lineups", rest.len())).small().color(text_faint()))
-                    .on_hover_text(rest.join("\n"));
+                ui.label(caption(format!("+{} more lineups", rest.len()))).on_hover_text(rest.join("\n"));
             }
         }
     }
     if !t.spawns.is_empty() {
-        ui.label(RichText::new(format!("Joins mid-fight: {}", t.spawns.join(", "))).small().color(text_dim()));
+        ui.label(secondary(format!("Joins mid-fight: {}", t.spawns.join(", "))));
     }
 
     let p = &t.profile;
@@ -59,7 +58,7 @@ pub fn preview_body(
             facts.push(word.into());
         }
     }
-    ui.label(RichText::new(facts.join("  ·  ")).small().color(text_dim()));
+    ui.label(secondary(facts.join("  ·  ")));
     // Turns where runs end are marked for elites and bosses only.
     let boss_or_elite = t.room != RoomType::Monster;
     crate::views::turns::strip(ui, (key, &t.encounter), &t.plans, t.stats.as_ref().filter(|_| boss_or_elite));
@@ -74,14 +73,10 @@ pub fn preview_body(
         }
     }
     if let Some(s) = &t.stats {
-        ui.label(
-            RichText::new(format!(
-                "Players lose {:.1} HP over {:.1} turns on average",
-                s.avg_damage_taken, s.avg_turns
-            ))
-            .small()
-            .color(text_faint()),
-        )
+        ui.label(caption(format!(
+            "Players lose {:.1} HP over {:.1} turns on average",
+            s.avg_damage_taken, s.avg_turns
+        )))
         .on_hover_ui(|ui| {
             ui.label(format!("From {} community-submitted fights (Spire Codex).", s.fights));
         });
@@ -135,7 +130,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
                         out.push(Action::Open(Link::Encounter(t.encounter.clone())));
                     }
                     if t.seen {
-                        ui.label(RichText::new("fought").small().color(text_faint()));
+                        ui.label(caption("fought"));
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let (word, color) = status_word(t.worst());

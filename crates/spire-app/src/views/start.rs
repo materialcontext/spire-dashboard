@@ -5,7 +5,7 @@ use eframe::egui::{self, RichText, Sense, Stroke, StrokeKind, Ui, vec2};
 use crate::actions::Action;
 use crate::app::{UiState, ViewCtx};
 use crate::style::{self, color::*};
-use crate::widgets::{eyebrow, primary_button, segmented};
+use crate::widgets::{caption, eyebrow, primary_button, secondary, segmented};
 
 pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
     ui.add_space(crate::style::space::xl());
@@ -55,14 +55,14 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
                 Some((a, level)) => {
                     ui.add_space(crate::style::space::xs());
                     ui.label(RichText::new(&level.name).strong().color(text()));
-                    ui.label(RichText::new(&level.text).small().color(text_dim()));
+                    ui.label(secondary(&level.text));
                     if a > 1 {
-                        ui.label(RichText::new("Includes every lower level.").small().color(text_faint()));
+                        ui.label(caption("Includes every lower level."));
                     }
                 }
                 None if st.new_ascension.is_none() => {
                     ui.add_space(crate::style::space::xs());
-                    ui.label(RichText::new("Pick the ascension you're playing.").small().color(text_dim()));
+                    ui.label(secondary("Pick the ascension you're playing."));
                 }
                 None => {}
             }

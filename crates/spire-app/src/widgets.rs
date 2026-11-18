@@ -35,7 +35,7 @@ pub fn panel<R>(ui: &mut Ui, title: &str, note: Option<&str>, add: impl FnOnce(&
             ui.label(eyebrow(title));
             if let Some(note) = note {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(RichText::new(note).small().color(text_faint()));
+                    ui.label(caption(note));
                 });
             }
         });
@@ -96,6 +96,16 @@ pub fn link(ui: &mut Ui, text: RichText) -> egui::Response {
     r
 }
 
+/// Small, dimmed text: secondary lines that still carry information.
+pub fn secondary(text: impl Into<String>) -> RichText {
+    RichText::new(text).small().color(text_dim())
+}
+
+/// Small, faint text: hints, notes and asides.
+pub fn caption(text: impl Into<String>) -> RichText {
+    RichText::new(text).small().color(text_faint())
+}
+
 /// Uppercase, small, dimmed label used for section titles.
 pub fn eyebrow(text: &str) -> RichText {
     // Sentence-case Body Strong headings read faster than small capitals;
@@ -134,11 +144,11 @@ pub fn chip(ui: &mut Ui, text: impl Into<String>, color: Color32) -> egui::Respo
 }
 
 /// A number with a small caption, for header stats ("FLOOR 12").
-pub fn stat(ui: &mut Ui, caption: &str, value: impl Into<String>, value_color: Color32) -> egui::Response {
+pub fn stat(ui: &mut Ui, title: &str, value: impl Into<String>, value_color: Color32) -> egui::Response {
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 0.0;
-        let caption = if crate::style::current().caps_headings { caption.to_uppercase() } else { caption.to_string() };
-        ui.label(RichText::new(caption).small().color(text_faint()));
+        let title = if crate::style::current().caps_headings { title.to_uppercase() } else { title.to_string() };
+        ui.label(caption(title));
         ui.label(RichText::new(value).family(crate::style::strong_family()).color(value_color));
     })
     .response
@@ -163,7 +173,7 @@ pub fn keys(ui: &mut Ui, keys: &[Key<'_>]) {
             } else {
                 ui.painter().line_segment([a, b], stroke);
             }
-            ui.label(RichText::new(k.name).small().color(text_dim()));
+            ui.label(secondary(k.name));
             ui.add_space(crate::style::space::s());
         }
     });
@@ -311,7 +321,7 @@ pub fn section<R>(ui: &mut Ui, title: &str, note: Option<&str>, add: impl FnOnce
                 ui.label(eyebrow(title));
                 if let Some(note) = note {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(RichText::new(note).small().color(text_faint()));
+                        ui.label(caption(note));
                     });
                 }
             });
@@ -429,7 +439,7 @@ pub fn search_pick<'a>(
     egui::Frame::new().stroke(Stroke::new(1.0, border())).inner_margin(4).show(ui, |ui| {
         ui.set_width(ui.available_width());
         if matches.is_empty() {
-            ui.label(RichText::new("No matches").small().color(text_faint()));
+            ui.label(caption("No matches"));
             return;
         }
         egui::ScrollArea::vertical().id_salt(state_id).max_height(220.0).show(ui, |ui| {

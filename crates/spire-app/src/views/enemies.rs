@@ -10,7 +10,7 @@ use spire_core::playbook::contains_ci;
 
 use crate::app::ViewCtx;
 use crate::style::color::*;
-use crate::widgets::{eyebrow, hairline, panel, segmented};
+use crate::widgets::{caption, eyebrow, hairline, panel, secondary, segmented};
 
 #[derive(Default)]
 pub struct EnemyBrowser {
@@ -91,7 +91,7 @@ pub fn filters(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
         (true, false) => "Ascension HP, normal damage",
         _ => "Normal HP and damage",
     };
-    ui.label(RichText::new(note).small().color(text_faint()));
+    ui.label(caption(note));
 }
 
 pub fn list(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
@@ -112,7 +112,7 @@ pub fn list(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
 
     ui.horizontal(|ui| {
         ui.label(eyebrow("Encounters"));
-        ui.label(RichText::new(list.len().to_string()).small().color(text_faint()));
+        ui.label(caption(list.len().to_string()));
     });
     hairline(ui);
     egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
@@ -121,7 +121,7 @@ pub fn list(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
             let group = (act_order(v, e).1, e.room);
             if heading.as_ref() != Some(&group) {
                 ui.add_space(crate::style::space::s());
-                ui.label(RichText::new(format!("{} · {}", group.0, group.1.label())).small().color(text_faint()));
+                ui.label(caption(format!("{} · {}", group.0, group.1.label())));
                 heading = Some(group);
             }
             let selected = b.selected.as_ref() == Some(&e.id);
@@ -244,7 +244,7 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
                 ui.label(RichText::new("joins mid-fight").small().color(warn()));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(RichText::new(hp).small().color(text_dim()));
+                ui.label(secondary(hp));
             });
         });
         if let Some(b) = &m.death_blow {
@@ -256,12 +256,12 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
         }
         if !m.innate_powers.is_empty() {
             let powers: Vec<String> = m.innate_powers.iter().map(|p| format!("{} {}", p.power, p.amount)).collect();
-            ui.label(RichText::new(format!("Starts with {}", powers.join(", "))).small().color(text_faint()));
+            ui.label(caption(format!("Starts with {}", powers.join(", "))));
         }
         egui::Grid::new(("moves", id)).num_columns(3).spacing([14.0, 2.0]).striped(false).show(ui, |ui| {
             for mv in &m.moves {
                 ui.label(RichText::new(&mv.name).small().color(text()));
-                ui.label(RichText::new(&mv.intent).small().color(text_faint()));
+                ui.label(caption(&mv.intent));
                 let per = if scaling.deadly { mv.damage_asc.or(mv.damage) } else { mv.damage };
                 let mut parts = Vec::new();
                 if let Some(d) = per {

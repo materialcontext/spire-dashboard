@@ -11,7 +11,7 @@ use spire_core::playbook::{Role, RoleSource, contains_ci};
 use crate::actions::Action;
 use crate::app::ViewCtx;
 use crate::style::{self, color::*};
-use crate::widgets::{eyebrow, hairline, segmented, stripe};
+use crate::widgets::{caption, eyebrow, hairline, secondary, segmented, stripe};
 
 /// Keywords worth filtering by.
 const KEYWORDS: [&str; 10] =
@@ -207,7 +207,7 @@ pub fn list(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser) {
     let ids = b.matches(v).to_vec();
     ui.horizontal(|ui| {
         ui.label(eyebrow("Cards"));
-        ui.label(RichText::new(format!("{} of {}", ids.len(), v.catalog.cards.len())).small().color(text_faint()));
+        ui.label(caption(format!("{} of {}", ids.len(), v.catalog.cards.len())));
     });
     hairline(ui);
     if ids.is_empty() {
@@ -305,7 +305,7 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser, out: &mut Vec<Actio
         ui.add_space(crate::style::space::xs());
         ui.label(RichText::new(format!("Upgrade: {}", changes.join(" · "))).small().color(good()));
     } else if !can_upgrade {
-        ui.label(RichText::new("No upgrade").small().color(text_faint()));
+        ui.label(caption("No upgrade"));
     }
 
     if card.card_type == CardType::Power {
@@ -324,13 +324,13 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser, out: &mut Vec<Actio
             ui.label(RichText::new("Your override").small().strong().color(text()));
         }
         RoleSource::Playbook(_) => {
-            ui.label(RichText::new("Set in the playbook").small().color(text_dim()));
+            ui.label(secondary("Set in the playbook"));
         }
         RoleSource::Rules(matched) if matched.is_empty() => {
-            ui.label(RichText::new("No rule matches this card").small().color(text_dim()));
+            ui.label(secondary("No rule matches this card"));
         }
         RoleSource::Rules(matched) => {
-            ui.label(RichText::new("From the role rules:").small().color(text_dim()));
+            ui.label(secondary("From the role rules:"));
             for (role, why) in matched {
                 ui.label(RichText::new(format!("{}: {why}", role.short())).small().color(style::role_color(*role)));
             }
@@ -360,11 +360,7 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser, out: &mut Vec<Actio
     {
         out.push(Action::SetPersonalRoles { card: card.id.clone(), roles: None });
     }
-    ui.label(
-        RichText::new("Changes are saved as your own overrides, separate from the shipped rules.")
-            .small()
-            .color(text_faint()),
-    );
+    ui.label(caption("Changes are saved as your own overrides, separate from the shipped rules."));
 
     ui.add_space(crate::style::space::s());
     ui.label(eyebrow("Enchantments that fit"));

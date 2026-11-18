@@ -5,8 +5,8 @@ use spire_core::catalog::CardType;
 use spire_core::playbook::Role;
 
 use crate::app::ViewCtx;
-use crate::style::{self, color::*};
-use crate::widgets::{bar, panel};
+use crate::style;
+use crate::widgets::{bar, caption, panel};
 
 pub fn show(ui: &mut Ui, v: &ViewCtx) {
     let d = &v.dash.deck;
@@ -38,11 +38,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
         });
 
         ui.add_space(crate::style::space::s());
-        ui.label(
-            RichText::new("Roles · bright: cards you added · faded: starter Strikes/Defends · tick: target this act")
-                .small()
-                .color(text_faint()),
-        );
+        ui.label(caption("Roles · bright: cards you added · faded: starter Strikes/Defends · tick: target this act"));
         let target = |r: Role| plan.and_then(|p| p.targets.iter().find(|t| t.role == r)).map(|t| t.min);
         let max_role =
             Role::ALL.iter().map(|r| (d.role(*r) + d.starter_role(*r)).max(target(*r).unwrap_or(0))).max().unwrap_or(1);
@@ -63,10 +59,6 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
         bar(ui, "Energy gain", d.energy, 0, max_role, None, style::role_color(Role::Consistency));
 
         ui.add_space(crate::style::space::xs());
-        ui.label(
-            RichText::new(format!("{} upgraded · {} with no role · {} unknown", d.upgraded, d.no_role, d.unknown))
-                .small()
-                .color(text_faint()),
-        );
+        ui.label(caption(format!("{} upgraded · {} with no role · {} unknown", d.upgraded, d.no_role, d.unknown)));
     });
 }

@@ -5,7 +5,7 @@ use eframe::egui::{self, RichText, Ui};
 use crate::actions::Action;
 use crate::app::{UiState, ViewCtx};
 use crate::style::{self, color::*};
-use crate::widgets::{hp_bar, slots, stat};
+use crate::widgets::{caption, hp_bar, slots, stat};
 
 pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
     let s = v.state;
@@ -92,7 +92,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
     }
     match st.messages.last() {
         Some(msg) => {
-            ui.label(RichText::new(msg).small().color(text_faint()));
+            ui.label(caption(msg));
         }
         None => ui.add_space(crate::style::space::xs()),
     }
@@ -202,7 +202,7 @@ fn vitals(ui: &mut Ui, v: &ViewCtx, tight: bool, minimal: bool) {
     ui.add_space(gap);
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 2.0;
-        ui.label(RichText::new("HP").small().color(text_faint()));
+        ui.label(caption("HP"));
         hp_bar(ui, s.hp, s.max_hp, if tight { 110.0 } else { 140.0 });
     });
     ui.add_space(gap);
@@ -220,8 +220,8 @@ fn potions(ui: &mut Ui, v: &ViewCtx) {
     let s = v.state;
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 4.0;
-        let caption = if style::current().caps_headings { "POTIONS" } else { "Potions" };
-        ui.label(RichText::new(caption).small().color(text_faint()));
+        let title = if style::current().caps_headings { "POTIONS" } else { "Potions" };
+        ui.label(caption(title));
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 3.0;
             slots(ui, s.potions.len(), s.potion_slots);

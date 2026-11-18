@@ -9,17 +9,17 @@ use spire_core::run::Change;
 use crate::actions::Action;
 use crate::app::ViewCtx;
 use crate::style::{self, color::*};
-use crate::widgets::{culled, eyebrow, hairline, stripe};
+use crate::widgets::{caption, culled, eyebrow, hairline, secondary, stripe};
 
 pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
     let s = v.state;
     ui.add_space(crate::style::space::s());
     ui.horizontal(|ui| {
         ui.label(eyebrow("Deck"));
-        ui.label(RichText::new(s.deck.len().to_string()).small().color(text_faint()));
+        ui.label(caption(s.deck.len().to_string()));
     });
     hairline(ui);
-    ui.label(RichText::new("Right-click a card to upgrade, enchant or remove it.").small().color(text_faint()));
+    ui.label(caption("Right-click a card to upgrade, enchant or remove it."));
 
     // Rows are grouped once per run change (Dashboard::rows), not per frame.
     let mut current = None;
@@ -58,7 +58,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
 
     section(ui, "Potions", s.potions.len());
     if s.potions.is_empty() {
-        ui.label(RichText::new(format!("{} empty slots", s.potion_slots)).small().color(text_faint()));
+        ui.label(caption(format!("{} empty slots", s.potion_slots)));
     }
     for p in &s.potions {
         ui.horizontal(|ui| {
@@ -78,7 +78,7 @@ fn section(ui: &mut Ui, title: &str, count: usize) {
     ui.add_space(crate::style::space::l());
     ui.horizontal(|ui| {
         ui.label(eyebrow(title));
-        ui.label(RichText::new(count.to_string()).small().color(text_faint()));
+        ui.label(caption(count.to_string()));
     });
     hairline(ui);
 }
@@ -100,7 +100,7 @@ fn card_row(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
         ui.spacing_mut().item_spacing.x = 6.0;
         stripe(ui, style::card_type_color(row.card_type), 18.0);
         let cost = v.catalog.cards.get(&row.card.card).map_or("?".to_string(), |c| c.cost_label_at(row.card.upgraded));
-        ui.add_sized([14.0, 18.0], egui::Label::new(RichText::new(cost).small().color(text_dim())));
+        ui.add_sized([14.0, 18.0], egui::Label::new(secondary(cost)));
         let name = if row.count > 1 { format!("{}× {}", row.count, row.name) } else { row.name.clone() };
         let color = if row.card.upgraded { good() } else { text() };
         // Tooltip text is only built while hovered.
@@ -126,8 +126,7 @@ fn card_row(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
             // filled rects per frame for little visual value.
             if row.eternal {
                 // Eternal: can't be removed or transformed.
-                ui.label(RichText::new("Eternal").small().color(text_faint()))
-                    .on_hover_text("Can't be removed or transformed");
+                ui.label(caption("Eternal")).on_hover_text("Can't be removed or transformed");
             } else if ui.add(row_button("x")).on_hover_text("Remove from deck").clicked() {
                 out.push(Action::Draft(Change::RemoveCard(row.card.clone())));
             }
@@ -145,7 +144,7 @@ fn card_row(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
 fn tag_marks(ui: &mut Ui, tags: &[spire_core::analysis::deck::CardTag]) {
     for t in tags.iter().rev() {
         let letter = &t.label()[..1];
-        ui.label(RichText::new(letter).small().color(text_dim())).on_hover_text(t.describe());
+        ui.label(secondary(letter)).on_hover_text(t.describe());
     }
 }
 
@@ -217,12 +216,12 @@ fn card_menu(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
     match (&row.card.enchantment, card) {
         (Some(e), _) => {
             // Enchantments are permanent: one per card, never removed.
-            ui.label(RichText::new(format!("Enchanted: {}", v.catalog.enchantment_name(e))).small().color(text_dim()));
+            ui.label(secondary(format!("Enchanted: {}", v.catalog.enchantment_name(e))));
         }
         (None, Some(card)) => {
             let fits: Vec<_> = v.catalog.enchantments.values().filter(|e| e.fits(card)).collect();
             if fits.is_empty() {
-                ui.label(RichText::new("No enchantment fits").small().color(text_faint()));
+                ui.label(caption("No enchantment fits"));
             } else {
                 ui.menu_button("Enchant", |ui| {
                     for e in fits {
@@ -240,7 +239,7 @@ fn card_menu(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
         (None, None) => {}
     }
     if row.eternal {
-        ui.label(RichText::new("Eternal: can't be removed").small().color(text_faint()));
+        ui.label(caption("Eternal: can't be removed"));
     } else if ui.button("Remove from deck").clicked() {
         out.push(Action::Draft(Change::RemoveCard(row.card.clone())));
         ui.close();
@@ -255,25 +254,19 @@ fn card_menu(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
 /// A small frameless row action. The glyph stays small, but the target is
 /// at least 24 x 24 (WCAG 2.2 target size), so it's easy to hit.
 fn row_button(text: &str) -> egui::Button<'_> {
-    egui::Button::new(RichText::new(text).small().color(text_faint()))
-        .frame_when_inactive(false)
-        .min_size(vec2(24.0, 24.0))
+    egui::Button::new(caption(text)).frame_when_inactive(false).min_size(vec2(24.0, 24.0))
 }
 
 fn card_tooltip(ui: &mut Ui, v: &ViewCtx, row: &DeckRow) {
     match v.catalog.cards.get(&row.card.card) {
         Some(card) => {
             ui.label(RichText::new(&row.name).strong());
-            ui.label(
-                RichText::new(format!(
-                    "{} · {:?} · cost {}",
-                    card.card_type.label(),
-                    card.rarity,
-                    card.cost_label_at(row.card.upgraded)
-                ))
-                .small()
-                .color(text_dim()),
-            );
+            ui.label(secondary(format!(
+                "{} · {:?} · cost {}",
+                card.card_type.label(),
+                card.rarity,
+                card.cost_label_at(row.card.upgraded)
+            )));
             ui.label(card.text_at(row.card.upgraded));
             let keywords = card.keywords_at(row.card.upgraded);
             if !keywords.is_empty() {

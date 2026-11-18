@@ -12,7 +12,7 @@ use spire_core::playbook::{Role, contains_ci};
 
 use crate::app::ViewCtx;
 use crate::style::{self, color::*};
-use crate::widgets::{eyebrow, hairline, segmented, stripe};
+use crate::widgets::{caption, eyebrow, hairline, segmented, stripe};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum SimFilter {
@@ -176,7 +176,7 @@ pub fn list(ui: &mut Ui, v: &ViewCtx, b: &mut RelicBrowser) {
     let roles = b.roles(v);
     ui.horizontal(|ui| {
         ui.label(eyebrow("Relics"));
-        ui.label(RichText::new(format!("{} of {}", ids.len(), v.catalog.relics.len())).small().color(text_faint()));
+        ui.label(caption(format!("{} of {}", ids.len(), v.catalog.relics.len())));
     });
     hairline(ui);
     if ids.is_empty() {
@@ -275,9 +275,9 @@ pub fn simulator_reading(ui: &mut Ui, m: &Mechanics) {
     }
     if !m.unread.is_empty() {
         ui.add_space(crate::style::space::xs());
-        ui.label(RichText::new("Not simulated:").small().color(text_faint()));
+        ui.label(caption("Not simulated:"));
         for s in &m.unread {
-            ui.label(RichText::new(s).small().color(text_faint()));
+            ui.label(caption(s));
         }
     }
 }

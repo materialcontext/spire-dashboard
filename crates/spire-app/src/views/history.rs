@@ -14,7 +14,7 @@ use crate::actions::Action;
 use crate::app::ViewCtx;
 use crate::style::{self, color::*};
 use crate::views::analytics;
-use crate::widgets::{eyebrow, hairline, panel, segmented, stat};
+use crate::widgets::{caption, eyebrow, hairline, panel, secondary, segmented, stat};
 
 const GAP: f32 = 12.0;
 
@@ -208,11 +208,7 @@ pub fn list(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser) {
                                     );
                                 });
                             });
-                            ui.label(
-                                RichText::new(format!("{} · floor {} · {} cards", date(s), s.floor, s.deck_size))
-                                    .small()
-                                    .color(text_faint()),
-                            );
+                            ui.label(caption(format!("{} · floor {} · {} cards", date(s), s.floor, s.deck_size)));
                         });
                     });
                 })
@@ -269,11 +265,7 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser, out: &mut Vec<Ac
     if let Some(notes) = archived.run.notes.as_deref().filter(|n| !n.trim().is_empty()) {
         ui.label(RichText::new(notes).color(text_dim()));
     }
-    ui.label(
-        RichText::new(format!("{} · reached floor {} · act {}", date(s), s.floor, s.act_index + 1))
-            .small()
-            .color(text_faint()),
-    );
+    ui.label(caption(format!("{} · reached floor {} · act {}", date(s), s.floor, s.act_index + 1)));
     ui.add_space(GAP);
 
     if d.timeline.points.is_empty() {
@@ -403,7 +395,7 @@ fn edit_dialog(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser, out: &mut Vec<A
         ui.set_width(460.0);
         ui.label(crate::widgets::title("Edit run"));
         let s = e.draft.summary();
-        ui.label(RichText::new(format!("{} · started {}", character_name(v, &s), date(&s))).small().color(text_dim()));
+        ui.label(secondary(format!("{} · started {}", character_name(v, &s), date(&s))));
         hairline(ui);
 
         // Ascension: the start is resolved again for the new level.
@@ -421,11 +413,7 @@ fn edit_dialog(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser, out: &mut Vec<A
                 e.draft = run;
             }
         });
-        ui.label(
-            RichText::new("Starting HP, potion slots and the ascension curse follow the new level.")
-                .small()
-                .color(text_faint()),
-        );
+        ui.label(caption("Starting HP, potion slots and the ascension curse follow the new level."));
 
         // Result.
         ui.add_space(crate::style::space::s());
@@ -492,11 +480,11 @@ fn edit_dialog(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser, out: &mut Vec<A
         let mut refight = None;
         egui::ScrollArea::vertical().max_height(240.0).show(ui, |ui| {
             if floors.is_empty() {
-                ui.label(RichText::new("No floors were logged.").small().color(text_dim()));
+                ui.label(secondary("No floors were logged."));
             }
             for (i, f, kind, encounter, what) in &floors {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("{f:>2}  {}", kind.label())).small().color(text_dim()));
+                    ui.label(secondary(format!("{f:>2}  {}", kind.label())));
                     match kind.room() {
                         Some(room) => {
                             let mut pick = encounter.clone();

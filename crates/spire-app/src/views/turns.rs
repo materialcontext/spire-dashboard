@@ -8,7 +8,7 @@ use spire_core::analysis::threats::MonsterPlan;
 use spire_core::catalog::EncounterStats;
 
 use crate::style::color::*;
-use crate::widgets::chip;
+use crate::widgets::{caption, chip, secondary};
 
 /// A turn with at least this share of an encounter's deaths is marked.
 const DEADLY_SHARE: f32 = 0.15;
@@ -184,10 +184,10 @@ pub fn strip(
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
             if let Some(name) = &line.name {
-                ui.label(RichText::new(name).small().color(text_dim()));
+                ui.label(secondary(name));
             }
             if let Some(any) = &line.any {
-                ui.label(RichText::new(any).small().color(text_dim()));
+                ui.label(secondary(any));
             }
             for c in &line.chips {
                 let color = if c.marked { bad() } else { text_dim() };
@@ -199,7 +199,7 @@ pub fn strip(
                 }
             }
             if let Some(tail) = &line.tail {
-                ui.label(RichText::new(tail).small().color(text_faint()));
+                ui.label(caption(tail));
             }
         });
     }
@@ -297,7 +297,7 @@ pub fn outlook(ui: &mut Ui, o: &Outlook, stats: Option<&EncounterStats>) {
             (Some(t), None) => format!("win in about {t} turns, losing about {} of your {} HP", o.best.hp_loss, o.hp),
             (None, _) => format!("no win within 20 turns; about {} HP lost by then", o.best.hp_loss),
         };
-        ui.label(RichText::new(text).small().color(text_dim()));
+        ui.label(secondary(text));
     })
     .response
     .on_hover_ui(|ui| {
@@ -340,14 +340,10 @@ pub fn outlook(ui: &mut Ui, o: &Outlook, stats: Option<&EncounterStats>) {
         if let Some((median, p90)) = stats.and_then(|s| s.win_damage) {
             ui.label(format!("Players who won lost {median} HP (median); 1 in 10 lost {p90} or more."));
         }
-        ui.label(
-            RichText::new(
-                "From the deck simulator's average damage and block per turn against the enemies' \
+        ui.label(caption(
+            "From the deck simulator's average damage and block per turn against the enemies' \
                  expected moves. Leaves out debuffs on you, enemies dying early, overkill, and potions.",
-            )
-            .small()
-            .color(text_faint()),
-        );
+        ));
     });
 }
 
@@ -355,7 +351,7 @@ pub fn outlook(ui: &mut Ui, o: &Outlook, stats: Option<&EncounterStats>) {
 pub fn table(ui: &mut Ui, mp: &MonsterPlan, stats: Option<&EncounterStats>, single: bool) {
     let p = &mp.plan;
     if p.unknown || p.turns.is_empty() {
-        ui.label(RichText::new("Move order unknown: any of its moves, any turn.").small().color(text_faint()));
+        ui.label(caption("Move order unknown: any of its moves, any turn."));
         return;
     }
     let deadly = if single { deadly(stats) } else { Vec::new() };
@@ -397,6 +393,6 @@ pub fn table(ui: &mut Ui, mp: &MonsterPlan, stats: Option<&EncounterStats>, sing
     });
     if let Some(t) = tail(p).filter(|t| t != "…") {
         let t = t.strip_prefix("then ").unwrap_or(&t);
-        ui.label(RichText::new(format!("Then {t}.")).small().color(text_faint()));
+        ui.label(caption(format!("Then {t}.")));
     }
 }
