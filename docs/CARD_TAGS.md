@@ -139,16 +139,19 @@ improve it.
 ### 4. Setup cards: Aim, Stretch, Vigor
 
 - **Simulator scoring.** Value setup by what can consume it:
-  - Aim is worth `Aim × multiplier` of the best Shoot card in hand, or the
-    chance of drawing one this turn. It's worth 0 with no Arrow to shoot.
+  - Aim is worth `Aim × multiplier` of the best Shoot card in hand, or, since
+    it lasts until used, of the next Shoot card likely to be drawn. It's
+    worth 0 in a deck with no Arrow to shoot.
   - Stretch works the same way against Block cards, and Vigor against
     Attacks.
   - The play order already spends them. Only the score that decides when
     to play the setup card changes.
 - **The deck view.**
   - The Setup chip names its consumer ("Aim → Arrow").
-  - The composition flags setup without consumers: "3 Aim cards, 2 Shoot
-    cards: Aim will often be wasted".
+  - The composition flags setup without consumers. Setup carries over, so
+    Aim isn't lost at a turn's end. But with many Aim cards and few Shoot
+    cards, it stacks onto one shot and its value drops: "3 Aim cards, 2
+    Shoot cards: Aim piles up between shots".
   - Recurring setup also counts as Scaling: Archery (4 Aim each turn) and
     Hidden Roots (3 Stretch each turn).
 - **Checking it.** A simulator test: the Fool's starter deck plus Nock,
@@ -185,10 +188,10 @@ Each one ships as its own PR.
 - **D4 Starter cards.** Count Strikes and Defends in the shares?
   - **Recommended:** count them, since they are your actual draws, but
     show starter and added cards in different shades.
-- **D5 Aim and Stretch between turns.** The data's text doesn't say
-  whether unspent Aim or Stretch carries into the next turn. Can you check
-  in game? Gain Aim, end the turn without shooting, and see whether it's
-  still there next turn. Same for Stretch. Until we know, the simulator
-  treats them as lasting until spent, as it does now.
+- **D5 Aim and Stretch between turns. Answered:** like Vigor, they last
+  until first used, across turns. The simulator already treats them that
+  way. So setup is wasted only if nothing ever consumes it, not when a
+  turn ends without a consumer. T6 values setup by the consumers in the
+  deck, not just those in hand.
 - **D6 "Etc."** Besides Aim, Stretch and Vigor, are there effects you think
   are undervalued, such as Fool's Arrows (slots and returns), or Stars?
