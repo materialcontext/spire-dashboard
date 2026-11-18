@@ -218,6 +218,27 @@ mod tests {
     }
 
     #[test]
+    fn follows_the_account_being_played() {
+        // Two Steam accounts on one PC; the one being played writes its run
+        // save last.
+        let game = std::env::temp_dir().join(format!("spire-accounts-{}", std::process::id()));
+        let steam = game.join("steam");
+        let idle = steam.join("76561197960287930").join("profile1").join("saves");
+        let played = steam.join("76561198030202747").join("profile1").join("saves");
+        for d in [&idle, &played] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        std::fs::write(idle.join(RUN_SAVE), "{}").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(played.join(RUN_SAVE), "{}").unwrap();
+        let mut link = Link { in_progress: true, profile_id: Some(1), ..Link::default() };
+        link.locate(&game);
+        assert_eq!(link.save_dir, Some(played.clone()));
+        assert_eq!(link.run_save, Some(played.join(RUN_SAVE)));
+        let _ = std::fs::remove_dir_all(game);
+    }
+
+    #[test]
     fn finds_the_saves_the_mod_left_out() {
         let game = std::env::temp_dir().join(format!("spire-game-{}", std::process::id()));
         let account = game.join("steam").join("76561197960287930");
