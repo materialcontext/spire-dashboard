@@ -656,13 +656,7 @@
         "monster": 90,
         "elite": 120,
         "boss": 200
-      },
-      "notes": [
-        "Hallway fights are the cheapest card rewards in the run: take them while the deck can win them.",
-        "Frontloaded damage wins Act 1. Elites punish decks that need more than ~4 turns to kill.",
-        "Starter Strikes are the first removal target; Defends hold value longer.",
-        "Save gold for a shop removal or a key relic rather than spending it all early."
-      ]
+      }
     },
     {
       "index": 1,
@@ -695,12 +689,7 @@
         "monster": 130,
         "elite": 140,
         "boss": 300
-      },
-      "notes": [
-        "Multi-enemy fights get common: secure area damage.",
-        "Commit to one scaling plan for the Act 2 boss and upgrade its key cards.",
-        "Upgrades on key cards often beat taking another common."
-      ]
+      }
     },
     {
       "index": 2,
@@ -733,12 +722,7 @@
         "monster": 180,
         "elite": 250,
         "boss": 450
-      },
-      "notes": [
-        "The deck must now win long fights: scaling damage and scaling defense.",
-        "Skip marginal card rewards; dilution costs consistency.",
-        "Hold potions for elites and the boss."
-      ]
+      }
     }
   ],
   "needs": {

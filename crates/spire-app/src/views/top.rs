@@ -84,7 +84,8 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
 }
 
 /// Character, act, floor, HP, gold, potions and deck: the run at a glance.
-fn vitals(ui: &mut Ui, v: &ViewCtx) {
+fn vitals(ui: &mut Ui, v: &ViewCtx, tight: bool) {
+    let gap = if tight { 6.0 } else { 10.0 };
     let s = v.state;
     let Some(c) = s.character.as_ref().and_then(|c| v.catalog.characters.get(c)) else { return };
     let accent = style::character_color(c.id.as_str());
@@ -96,21 +97,21 @@ fn vitals(ui: &mut Ui, v: &ViewCtx) {
         text_dim()
     }))
     .on_hover_text(asc);
-    ui.add_space(18.0);
+    ui.add_space(gap + 6.0);
 
     let act = s.act.as_ref().and_then(|a| v.catalog.acts.get(a));
     stat(ui, &format!("Act {}", s.act_index + 1), act.map_or("Not started", |a| a.name.as_str()), text());
-    ui.add_space(10.0);
+    ui.add_space(gap);
     stat(ui, "Floor", s.floor.to_string(), text());
-    ui.add_space(10.0);
+    ui.add_space(gap);
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 2.0;
         ui.label(RichText::new("HP").small().color(text_faint()));
-        hp_bar(ui, s.hp, s.max_hp, 140.0);
+        hp_bar(ui, s.hp, s.max_hp, if tight { 110.0 } else { 140.0 });
     });
-    ui.add_space(10.0);
+    ui.add_space(gap);
     stat(ui, "Gold", s.gold.to_string(), crate::style::color::accent());
-    ui.add_space(10.0);
+    ui.add_space(gap);
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 4.0;
         ui.label(RichText::new("POTIONS").small().color(text_faint()));
@@ -119,7 +120,7 @@ fn vitals(ui: &mut Ui, v: &ViewCtx) {
             slots(ui, s.potions.len(), s.potion_slots);
         });
     });
-    ui.add_space(10.0);
+    ui.add_space(gap);
     stat(ui, "Deck", s.deck.len().to_string(), text());
 }
 
@@ -133,7 +134,12 @@ fn centred_vitals(ui: &mut Ui, v: &ViewCtx, full: egui::Rect, free: egui::Rect) 
     let rect = egui::Rect::from_min_max(egui::pos2(left, free.top()), egui::pos2(free.right(), free.bottom()));
     let mut child =
         ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(egui::Layout::left_to_right(egui::Align::Center)));
-    vitals(&mut child, v);
+    // Labels never wrap: a squeezed header would otherwise stack "DECK" letter by letter.
+    child.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+    // Tighter spacing when the space between tabs and buttons is short.
+    let tight = free.width() < 700.0;
+    child.spacing_mut().item_spacing.x = if tight { 6.0 } else { 8.0 };
+    vitals(&mut child, v, tight);
     let measured = child.min_rect().width();
     if (measured - width).abs() > 0.5 {
         ui.ctx().data_mut(|d| d.insert_temp(id, measured));

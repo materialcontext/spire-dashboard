@@ -729,6 +729,25 @@ pub struct GameRules {
     /// percent, read from the power's description. `None` if unknown.
     #[serde(default)]
     pub vulnerable_pct: Option<u32>,
+    /// Ascension from which Ancients heal only `weary_heal_pct` of missing
+    /// HP ("Weary Traveler"). Every run starts at 0 HP and is healed by the
+    /// first Ancient, so this also lowers starting HP.
+    #[serde(default)]
+    pub weary_from: Option<u32>,
+    #[serde(default = "full_heal")]
+    pub weary_heal_pct: u32,
+    /// A rest heals this percent of max HP (Spire Codex, campfire options;
+    /// matches community runs).
+    #[serde(default = "rest_heal")]
+    pub rest_heal_pct: u32,
+}
+
+fn full_heal() -> u32 {
+    100
+}
+
+fn rest_heal() -> u32 {
+    30
 }
 
 impl Default for GameRules {
@@ -744,6 +763,9 @@ impl Default for GameRules {
             double_boss_from: Some(10),
             double_boss_act: 2,
             vulnerable_pct: None,
+            weary_from: Some(2),
+            weary_heal_pct: 80,
+            rest_heal_pct: 30,
         }
     }
 }
@@ -751,6 +773,22 @@ impl Default for GameRules {
 impl GameRules {
     fn at(from: Option<u32>, ascension: u32) -> bool {
         from.is_some_and(|f| ascension >= f)
+    }
+
+    /// Percent of missing HP an Ancient heals at this ascension.
+    pub fn ancient_heal_pct(&self, ascension: u32) -> u32 {
+        if Self::at(self.weary_from, ascension) { self.weary_heal_pct } else { 100 }
+    }
+
+    /// HP after an Ancient's heal, rounded down (as in community runs).
+    pub fn ancient_heal(&self, hp: i32, max_hp: i32, ascension: u32) -> i32 {
+        let missing = (max_hp - hp).max(0);
+        hp + missing * self.ancient_heal_pct(ascension) as i32 / 100
+    }
+
+    /// Starting HP: runs begin at 0 and Neow heals them.
+    pub fn start_hp(&self, max_hp: i32, ascension: u32) -> i32 {
+        self.ancient_heal(0, max_hp, ascension)
     }
 
     pub fn potion_slots(&self, ascension: u32) -> u32 {

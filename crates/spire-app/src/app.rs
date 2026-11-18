@@ -161,6 +161,18 @@ impl SpireApp {
         self.run_changed();
     }
 
+    /// From act 2 on, the act's Ancient heals once the boss is known, by the
+    /// game's rules (Weary Traveler lowers it). Recorded as its own event, so
+    /// Undo can take it back.
+    fn ancient_heal(&mut self) {
+        let Some(percent) = self.state.ancient_heal_due(&self.catalog.rules) else { return };
+        let before = self.state.hp;
+        self.run.push(RunEvent::AncientHeal { percent });
+        self.run_changed();
+        let healed = self.state.hp - before;
+        self.note(format!("The Ancient healed {healed} HP ({percent}% of missing HP)."));
+    }
+
     /// Re-derives everything from the run log and saves it.
     fn run_changed(&mut self) {
         self.state = self.run.state();
@@ -295,11 +307,16 @@ impl SpireApp {
             Action::EnterAct { act, index, boss } => {
                 self.run.push(RunEvent::EnterAct { act, index, boss });
                 self.run_changed();
+                self.ancient_heal();
             }
             Action::Record(event) => {
                 let node = matches!(event, RunEvent::Node(_));
+                let boss = matches!(event, RunEvent::SetBoss(_));
                 self.run.push(event);
                 self.run_changed();
+                if boss {
+                    self.ancient_heal();
+                }
                 if node {
                     let now = ctx.input(|i| i.time);
                     let text = format!("Floor {} logged", self.state.floor);
@@ -484,7 +501,8 @@ impl SpireApp {
                     self.ui.tab = tabs[n];
                 }
             }
-            if self.ui.tab == crate::views::Tab::Run && self.state.started() {
+            let locked = self.state.act.is_none() || self.state.boss.is_none();
+            if self.ui.tab == crate::views::Tab::Run && self.state.started() && !locked {
                 for (n, key) in digits.iter().enumerate() {
                     if i.consume_key(Modifiers::NONE, *key) {
                         self.draft.kind = spire_core::run::NodeKind::ALL[n];

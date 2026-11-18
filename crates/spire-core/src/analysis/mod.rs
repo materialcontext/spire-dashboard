@@ -4,6 +4,7 @@ pub mod advice;
 pub mod deck;
 pub mod events;
 pub mod floors;
+pub mod healing;
 pub mod sim;
 pub mod threats;
 pub mod timeline;

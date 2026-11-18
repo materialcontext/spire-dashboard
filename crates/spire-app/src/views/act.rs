@@ -20,6 +20,32 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
     }
 
     let double = v.catalog.rules.double_boss(s.ascension, s.act_index);
+    // The boss gates the floor log: ask for it first, and plainly.
+    if let Some(act) = act {
+        let pick = |ui: &mut Ui, second: bool, out: &mut Vec<Action>| {
+            ui.horizontal_wrapped(|ui| {
+                for b in act.bosses.iter().filter(|b| Some(*b) != s.boss.as_ref()) {
+                    if crate::widgets::choice_button(ui, v.catalog.encounter_name(b)).clicked() {
+                        let e = if second { RunEvent::SetSecondBoss(b.clone()) } else { RunEvent::SetBoss(b.clone()) };
+                        out.push(Action::Record(e));
+                    }
+                }
+            });
+        };
+        if s.boss.is_none() {
+            let note = format!("Pick the boss the map shows for {}. The floor log unlocks once it's set.", act.name);
+            crate::widgets::callout(ui, "Choose the boss", Some(&note), |ui| pick(ui, false, out));
+            ui.add_space(12.0);
+        } else if double && s.second_boss.is_none() {
+            crate::widgets::callout(
+                ui,
+                "Choose the second boss",
+                Some("This ascension fights two bosses here."),
+                |ui| pick(ui, true, out),
+            );
+            ui.add_space(12.0);
+        }
+    }
     let title = format!("Act {} · {}", s.act_index + 1, act.map_or("?", |a| a.name.as_str()));
     let note = if double { Some("Two bosses at this ascension") } else { None };
     panel(ui, &title, note, |ui| {
@@ -32,25 +58,6 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
             }
             threats::preview_body(ui, boss);
             ui.add_space(6.0);
-        }
-        if let Some(act) = act {
-            let pick = |ui: &mut Ui, label: &str, second: bool, out: &mut Vec<Action>| {
-                ui.label(RichText::new(label).color(text_dim()));
-                ui.horizontal_wrapped(|ui| {
-                    for b in act.bosses.iter().filter(|b| Some(*b) != s.boss.as_ref()) {
-                        if ui.button(v.catalog.encounter_name(b)).clicked() {
-                            let e =
-                                if second { RunEvent::SetSecondBoss(b.clone()) } else { RunEvent::SetBoss(b.clone()) };
-                            out.push(Action::Record(e));
-                        }
-                    }
-                });
-            };
-            if s.boss.is_none() {
-                pick(ui, "Boss not set. Pick it once the map shows it:", false, out);
-            } else if double && s.second_boss.is_none() {
-                pick(ui, "Second boss:", true, out);
-            }
         }
     });
 

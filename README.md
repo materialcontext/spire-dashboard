@@ -14,7 +14,8 @@ the card you took, HP and gold after. Then it re-analyses the run.
 - **Deck breakdown** by card type (attack, skill, power, curse…) and by role:
   frontloaded damage, scaling damage, frontloaded defense, scaling defense,
   and consistency/acceleration, against per-act targets. Area damage is
-  tracked too. Starter Strikes/Defends are shown separately: targets count
+  tracked too, and so are cards that draw or gain energy (tagged D and E in
+  the deck). Starter Strikes/Defends are shown separately: targets count
   what you've *added*.
 - **Act and boss**: the boss's HP, worst turn, and what it demands, each
   marked covered, thin or missing for your deck.
@@ -23,7 +24,8 @@ the card you took, HP and gold after. Then it re-analyses the run.
   come first, and each is checked against your deck.
 - **`?` event watchlist**: events possible in this act, ranked by how well
   they answer what the run needs (removal for curses, healing when low…).
-- **Macro advice**: role gaps for this act, boss gaps, and act notes.
+- **Macro advice** about your run only: role gaps for this act, boss gaps,
+  missing area damage and removable curses. There are no general tips.
 - **Enemies seen** this run.
 - **Analytics** for the current run:
   - HP, max HP and gold by floor.
@@ -68,6 +70,15 @@ Linux needs the usual X11/Wayland runtime libraries (e.g. `libxkbcommon-x11-0`).
 
 Keys are optional shortcuts: 1–8 pick the room, Ctrl+Enter commits, Ctrl+Z
 undoes, Ctrl+1–6 switch tabs and Esc closes dialogs.
+
+The floor log stays locked until the act and its boss are chosen.
+
+Healing follows the game's rules:
+- Runs start at full HP, or 80% of max from A2 (Weary Traveler).
+- From Act 2, the Ancient heal is applied once the boss is chosen: all missing HP, or 80% of it from A2.
+- At a Rest Site, **Rest +N** beside HP fills in the heal: 30% of max HP, plus relics like Regal Pillow.
+
+Dropdowns and search results in the log follow the arrow keys, and Enter picks.
 
 The run saves after every change and reloads on start.
 

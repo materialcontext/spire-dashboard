@@ -35,6 +35,31 @@ pub fn panel<R>(ui: &mut Ui, title: &str, note: Option<&str>, add: impl FnOnce(&
     shown.inner
 }
 
+/// A panel that asks for attention: a heavier outline and title in the
+/// accent colour. For a step the player must take before anything else
+/// (choosing the act or its boss). Still outlined, not filled.
+pub fn callout<R>(ui: &mut Ui, title: &str, note: Option<&str>, add: impl FnOnce(&mut Ui) -> R) -> R {
+    egui::Frame::new()
+        .stroke(Stroke::new(2.0, accent()))
+        .inner_margin(egui::Margin { left: 16, right: 16, top: 12, bottom: 14 })
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(RichText::new(title).heading().family(crate::style::strong_family()).color(accent()));
+            if let Some(note) = note {
+                ui.label(RichText::new(note).color(text_dim()));
+            }
+            ui.add_space(6.0);
+            add(ui)
+        })
+        .inner
+}
+
+/// A choice button for a callout: larger, outlined in the accent colour.
+pub fn choice_button(ui: &mut Ui, label: impl Into<String>) -> egui::Response {
+    let text = RichText::new(label.into()).color(text());
+    ui.add(egui::Button::new(text).stroke(Stroke::new(1.0, accent())).min_size(vec2(0.0, 30.0)))
+}
+
 /// A label that links somewhere: pointer cursor and underline on hover.
 pub fn link(ui: &mut Ui, text: RichText) -> egui::Response {
     let r = ui.add(egui::Label::new(text).sense(Sense::click()));
@@ -254,37 +279,149 @@ pub fn opportunity_color(o: Opportunity) -> Color32 {
 }
 
 /// A search box with a short list of matches. Returns the picked id.
+/// Most results a search box lists; the list scrolls past a few rows.
+const SEARCH_RESULTS: usize = 40;
+
+/// Search box with a result list. Arrow keys move through the results
+/// (the list scrolls to follow), Enter picks, and a click picks too. Focus
+/// stays in the box after a pick, so several items can be added in a row.
 pub fn search_pick<'a>(
     ui: &mut Ui,
     query: &mut String,
     hint: &str,
     items: impl Iterator<Item = (&'a str, &'a str, &'a str)>,
 ) -> Option<String> {
-    ui.add(egui::TextEdit::singleline(query).hint_text(hint).desired_width(f32::INFINITY));
-    let q = query.trim();
+    let edit_id = egui::Id::unique(("search-pick", hint));
+    let state_id = edit_id.with("highlight");
+    let focused = ui.ctx().memory(|m| m.has_focus(edit_id));
+    // Keys are taken before the text field sees them, and only while it has focus.
+    let (down, up, enter) = if focused && !query.trim().is_empty() {
+        ui.input_mut(|i| {
+            (
+                i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
+                i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp),
+                i.consume_key(egui::Modifiers::NONE, egui::Key::Enter),
+            )
+        })
+    } else {
+        (false, false, false)
+    };
+    ui.add(egui::TextEdit::singleline(query).id(edit_id).hint_text(hint).desired_width(f32::INFINITY));
+    let q = query.trim().to_string();
     if q.is_empty() {
         return None;
     }
+    let q = q.as_str();
+    // (query, highlighted row): the highlight resets when the query changes.
+    let (last, mut highlight): (String, usize) =
+        ui.ctx().data(|d| d.get_temp(state_id)).unwrap_or_else(|| (String::new(), 0));
+    if last != q {
+        highlight = 0;
+    }
+    let matches: Vec<(&str, &str, &str)> =
+        items.filter(|(_, name, _)| contains_ci(name, q)).take(SEARCH_RESULTS).collect();
+    if !matches.is_empty() {
+        if down {
+            highlight = (highlight + 1).min(matches.len() - 1);
+        }
+        if up {
+            highlight = highlight.saturating_sub(1);
+        }
+        highlight = highlight.min(matches.len() - 1);
+    }
     let mut picked = None;
-    // Allocation-free match; stops scanning after the eighth hit.
-    let matches = items.filter(|(_, name, _)| contains_ci(name, q)).take(8);
     egui::Frame::new().stroke(Stroke::new(1.0, border())).inner_margin(4).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        let mut any = false;
-        for (id, name, detail) in matches {
-            any = true;
-            if ui.selectable_label(false, name).on_hover_text(detail).clicked() {
-                picked = Some(id.to_string());
-            }
-        }
-        if !any {
+        if matches.is_empty() {
             ui.label(RichText::new("No matches").small().color(text_faint()));
+            return;
         }
+        egui::ScrollArea::vertical().id_salt(state_id).max_height(220.0).show(ui, |ui| {
+            for (i, (id, name, detail)) in matches.iter().enumerate() {
+                let r = ui.selectable_label(i == highlight, *name).on_hover_text(*detail);
+                if i == highlight && (down || up) {
+                    r.scroll_to_me(Some(egui::Align::Center));
+                }
+                if r.clicked() {
+                    picked = Some(id.to_string());
+                }
+            }
+        });
     });
+    if enter && let Some((id, _, _)) = matches.get(highlight) {
+        picked = Some(id.to_string());
+    }
+    ui.ctx().data_mut(|d| d.insert_temp(state_id, (q.to_string(), highlight)));
     if picked.is_some() {
         query.clear();
+        ui.ctx().memory_mut(|m| m.request_focus(edit_id));
     }
     picked
+}
+
+/// A dropdown whose list follows the arrow keys: Up and Down move the
+/// highlight (the list scrolls to keep it in view), Enter picks it, and a
+/// click picks too. Returns true when the value changed. `options` is
+/// only called while the list is open, so closed dropdowns cost nothing.
+pub fn combo_pick<T: Clone + PartialEq>(
+    ui: &mut Ui,
+    id_salt: &str,
+    selected_text: impl Into<egui::WidgetText>,
+    width: f32,
+    value: &mut T,
+    options: impl FnOnce() -> Vec<(T, String)>,
+) -> bool {
+    let state_id = egui::Id::unique(("combo-pick", id_salt));
+    let before = value.clone();
+    let shown = egui::ComboBox::from_id_salt(id_salt).selected_text(selected_text).width(width).height(280.0).show_ui(
+        ui,
+        |ui| {
+            let options = options();
+            if options.is_empty() {
+                return 0;
+            }
+            // Opening starts the highlight on the current value.
+            let mut h: usize = ui
+                .ctx()
+                .data(|d| d.get_temp(state_id))
+                .unwrap_or_else(|| options.iter().position(|(v, _)| v == value).unwrap_or(0));
+            let (down, up, enter) = ui.input_mut(|i| {
+                (
+                    i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
+                    i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp),
+                    i.consume_key(egui::Modifiers::NONE, egui::Key::Enter),
+                )
+            });
+            if down {
+                h = (h + 1).min(options.len() - 1);
+            }
+            if up {
+                h = h.saturating_sub(1);
+            }
+            for (i, (v, label)) in options.iter().enumerate() {
+                let r = ui.selectable_label(i == h, label);
+                if i == h && (down || up) {
+                    r.scroll_to_me(Some(egui::Align::Center));
+                }
+                if r.clicked() {
+                    *value = v.clone();
+                    ui.close();
+                }
+            }
+            if enter {
+                *value = options[h].0.clone();
+                ui.close();
+            }
+            h
+        },
+    );
+    match shown.inner {
+        Some(h) => ui.ctx().data_mut(|d| {
+            d.insert_temp(state_id, h);
+        }),
+        None => ui.ctx().data_mut(|d| d.remove::<usize>(state_id)),
+    }
+    *value != before
 }
 
 /// Lays out `add` only when it is (or may be) visible. Content scrolled out

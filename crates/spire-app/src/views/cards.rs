@@ -3,6 +3,7 @@
 use std::hash::{Hash, Hasher};
 
 use eframe::egui::{self, RichText, Sense, Ui, vec2};
+use spire_core::analysis::deck::{CardTag, tags};
 use spire_core::catalog::{Card, CardType, Rarity};
 use spire_core::ids::CardId;
 use spire_core::playbook::{Role, RoleSource, contains_ci};
@@ -13,7 +14,8 @@ use crate::style::{self, color::*};
 use crate::widgets::{eyebrow, hairline, segmented, stripe};
 
 /// Keywords worth filtering by.
-const KEYWORDS: [&str; 8] = ["Eternal", "Exhaust", "Ethereal", "Retain", "Innate", "Unplayable", "Sly", "X cost"];
+const KEYWORDS: [&str; 10] =
+    ["Draw", "Energy gain", "Eternal", "Exhaust", "Ethereal", "Retain", "Innate", "Unplayable", "Sly", "X cost"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CostFilter {
@@ -92,6 +94,8 @@ impl CardBrowser {
             && match self.keyword {
                 None => true,
                 Some("X cost") => c.x_cost,
+                Some("Draw") => tags(c, false).contains(&CardTag::Draw),
+                Some("Energy gain") => tags(c, false).contains(&CardTag::Energy),
                 Some(k) => c.keywords.iter().any(|x| x.eq_ignore_ascii_case(k)),
             }
             && match self.role {
@@ -277,11 +281,16 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser, out: &mut Vec<Actio
         .color(text_dim()),
     );
     let keywords = card.keywords_at(up);
-    if !keywords.is_empty() {
+    let card_tags = tags(card, up);
+    if !keywords.is_empty() || !card_tags.is_empty() {
         ui.horizontal_wrapped(|ui| {
             for k in keywords {
                 let eternal = k.eq_ignore_ascii_case("Eternal");
                 crate::widgets::chip(ui, k, if eternal { bad() } else { info() });
+            }
+            for t in card_tags {
+                crate::widgets::chip(ui, t.describe(), style::role_color(Role::Consistency))
+                    .on_hover_text("Usually counted as Consistency / acceleration; this says what it does.");
             }
         });
     }

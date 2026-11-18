@@ -5,7 +5,7 @@ use eframe::egui::{self, RichText, Sense, Stroke, StrokeKind, Ui, vec2};
 use crate::actions::Action;
 use crate::app::{UiState, ViewCtx};
 use crate::style::{self, color::*};
-use crate::widgets::{eyebrow, panel, primary_button, segmented};
+use crate::widgets::{eyebrow, primary_button, segmented};
 
 pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
     ui.add_space(28.0);
@@ -133,7 +133,9 @@ pub fn enter_act(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
 
 pub fn act_picker(ui: &mut Ui, v: &ViewCtx, index: u8, out: &mut Vec<Action>) {
     let acts: Vec<_> = v.catalog.acts_at(index).collect();
-    panel(ui, &format!("Enter Act {}", index + 1), Some("Pick the act, then its boss from the map"), |ui| {
+    let title = format!("Enter Act {}", index + 1);
+    let note = "Pick the act, and its boss once the map shows it. The floor log unlocks after.";
+    crate::widgets::callout(ui, &title, Some(note), |ui| {
         if acts.is_empty() {
             ui.label(RichText::new("No act data for this act. Update data from the Data window.").color(text_dim()));
             return;
@@ -143,7 +145,7 @@ pub fn act_picker(ui: &mut Ui, v: &ViewCtx, index: u8, out: &mut Vec<Action>) {
             ui.label(RichText::new(&act.name).heading().color(text()));
             ui.horizontal_wrapped(|ui| {
                 for boss in &act.bosses {
-                    if ui.button(v.catalog.encounter_name(boss)).clicked() {
+                    if crate::widgets::choice_button(ui, v.catalog.encounter_name(boss)).clicked() {
                         out.push(Action::EnterAct { act: act.id.clone(), index, boss: Some(boss.clone()) });
                     }
                 }
