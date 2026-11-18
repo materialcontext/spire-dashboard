@@ -1,6 +1,6 @@
 # Fight shapes, winning lines and card tags: plan
 
-Status: **decided**. F1 (shapes and rules), F1b (curated gaps), F2 (roles and jobs), F3 (ways to win), F4 (tags) and F5 (benchmarks) are built; F6 (setup value) is next. Nothing here
+Status: **decided**. F1 (shapes and rules), F1b (curated gaps), F2 (roles and jobs), F3 (ways to win), F4 (tags), F5 (benchmarks) and F6 (setup value and resource balance) are built. Nothing here
 is built yet.
 
 ## The idea
@@ -336,6 +336,14 @@ A fight rule maps to what answers it, as roles and tags:
 
 ### 4b. Resource balance: Arrows and Stars
 
+As built (F6): `analysis::balance`, from the simulator's per-turn flows
+(`DeckSim::stores`: made, used, and cards left waiting in hand). A Shoot
+card left in hand with no Arrow, or a Star card with too few Stars, waits;
+when 1 in 5 of those wants waits (the playbook's `balance.waiting`), the
+deck panel says so with the counts: Shoot cards, Arrow slots, attack hits a
+turn and the 3-hit return. Stars also warn when they're made and nothing in
+the deck spends them.
+
 Some characters have resources that some cards make and others spend. The
 deck view checks the balance per turn and counts it in the bad-draws note:
 
@@ -386,6 +394,16 @@ Fool had no runs in that export, so it uses every character's decks.
 ### 6. Setup value
 
 Aim, Stretch and Vigor last until first used, across turns (confirmed).
+
+As built (F6): the simulator values a point of Aim at the deck's Shoot
+cards' mean Aim multiplier, Vigor at 1 when the deck has an attack, and
+Stretch at 1 when it has a Block card; 0 when nothing in the deck uses it,
+so Nock sits in hand in a deck with no Shoot card. Setup already waiting
+counts toward the card that cashes it in. The deck panel warns when setup
+piles up: under half of what's made is used, more than two setup cards
+share each card that uses them (it waits turns to be cashed in), or nothing
+uses it. The lines are the playbook's (`balance`). Fast Damage and Survival
+already include setup cashed in, since they're measured by the simulator.
 
 - **Scoring.** The simulator values setup by its consumers in the deck, not
   only those in hand.

@@ -63,6 +63,14 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
                 j.floor * 100.0
             )));
         }
+        // Setup piling up and resources running short hold every role back.
+        for w in v.combat.map(|c| c.balance.as_slice()).unwrap_or_default() {
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing.x = 6.0;
+                ui.label(RichText::new(w.store.label()).small().strong().color(style::color::warn()));
+                ui.label(RichText::new(&w.text).small());
+            });
+        }
         // Draw and energy aren't roles: they help every role on bad draws.
         bar(ui, "Draw", d.tag(Tag::Draw), 0, max_role, None, style::tag_color());
         bar(ui, "Energy gain", d.tag(Tag::Energy), 0, max_role, None, style::tag_color());

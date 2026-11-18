@@ -25,6 +25,9 @@ the card you took, HP and gold after. Then it re-analyses the run.
   (same character, or every character's when there are too few): each
   job, each tag's share and the share of starter cards, with the shortfalls
   first and the tags to look for.
+  Setup that piles up (Aim, Vigor or Stretch made faster than the deck uses
+  it), and the Fool's Arrows or the Regent's Stars running short, are noted
+  beside the bad-draw line.
 - **Act and boss**: the boss's HP, what it does turn by turn, and what it
   demands, each marked covered, thin or missing for your deck.
 - **Enemy turns**: every monster's move order from the game data (fixed
