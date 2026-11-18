@@ -1,6 +1,6 @@
 # Fight shapes, winning lines and card tags: plan
 
-Status: **decided**. F1 (shapes and rules) and F1b (curated gaps) are built; F2 (roles and jobs) is next. Nothing here
+Status: **decided**. F1 (shapes and rules), F1b (curated gaps) and F2 (roles and jobs) are built; F3 (lines) is next. Nothing here
 is built yet.
 
 ## The idea

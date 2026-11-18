@@ -107,7 +107,8 @@ fn starter_sims(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
             sim.resources,
         );
         let jobs = spire_core::analysis::jobs::measure(&sim);
-        let described: Vec<String> = Role::ALL.iter().map(|r| format!("{}: {}", r.short(), jobs.describe(*r))).collect();
+        let described: Vec<String> =
+            Role::ALL.iter().map(|r| format!("{}: {}", r.short(), jobs.describe(*r))).collect();
         println!("{:<12} {} · bad draws {:.0}%", "", described.join(" · "), jobs.floor * 100.0);
         let p = sim.play;
         println!(

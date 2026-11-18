@@ -38,12 +38,28 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
         });
 
         ui.add_space(crate::style::space::s());
-        ui.label(caption("Roles · bright: cards you added · faded: starter Strikes/Defends · tick: target this act"));
+        ui.label(caption(
+            "Roles · bright: cards you added · faded: starter Strikes/Defends · tick: target this act · \
+             under each, how well the deck does it (simulated)",
+        ));
         let target = |r: Role| plan.and_then(|p| p.targets.iter().find(|t| t.role == r)).map(|t| t.min);
         let max_role =
             Role::ALL.iter().map(|r| (d.role(*r) + d.starter_role(*r)).max(target(*r).unwrap_or(0))).max().unwrap_or(1);
+        let jobs = v.combat.map(|c| &c.jobs);
         for r in Role::ALL {
             bar(ui, r.label(), d.role(r), d.starter_role(r), max_role, target(r), style::role_color(r));
+            if let Some(j) = jobs {
+                ui.horizontal(|ui| {
+                    ui.add_space(crate::widgets::BAR_LABEL_WIDTH);
+                    ui.label(caption(j.describe(r)));
+                });
+            }
+        }
+        if let Some(j) = jobs {
+            ui.label(caption(format!(
+                "On a bad draw (1 hand in 4) the deck deals {:.0}% of its usual damage.",
+                j.floor * 100.0
+            )));
         }
         // Draw and energy aren't roles: they help every role on bad draws.
         bar(ui, "Draw", d.draw, 0, max_role, None, style::tag_color());

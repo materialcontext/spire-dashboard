@@ -59,8 +59,13 @@ kit, so old runs replay even after a data update.
 
 `analysis/` holds pure functions over (state, catalog, playbook):
 
-- `deck`: classify cards into roles; `DeckProfile` (by type and by role, with
-  starter cards counted separately); `coverage` against act targets.
+- `deck`: classify cards into roles (Mitigation, Survival, Fast Damage,
+  Scaling Damage, AoE, Chip: the problems a deck solves); `DeckProfile` (by
+  type and by role, with starter cards counted separately); `coverage`
+  against act targets.
+- `jobs`: how well the deck does each role, measured from the simulator's
+  spreads (Block on an ordinary and a defending turn, damage over turns
+  1–3, growth, area share, hits a turn), plus a bad-draw note.
 - `threats`: `ThreatProfile` per encounter (HP, peak turn, buffs, groups),
   the `demands` it places on a deck, `next_threats` for a node type, and the
   most common lineup's turn plans.

@@ -199,7 +199,7 @@ pub fn root(
                 ui.columns(2, |cols| {
                     culled(&mut cols[0], ("act", g, v.combat.map(|c| c.generation)), |ui| act::show(ui, v, out));
                     cols[0].add_space(GAP);
-                    culled(&mut cols[0], ("breakdown", g), |ui| breakdown::show(ui, v));
+                    culled(&mut cols[0], ("breakdown", g, v.combat.map(|c| c.generation)), |ui| breakdown::show(ui, v));
                     culled(&mut cols[1], ("threats", g, st.threat_tab), |ui| threats::show(ui, v, st, out));
                     cols[1].add_space(GAP);
                     events::show(&mut cols[1], v);

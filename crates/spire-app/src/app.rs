@@ -40,6 +40,8 @@ pub struct Combat {
     /// moment (see `prepare_tab`); keys layout caches.
     pub generation: u64,
     pub sim: DeckSim,
+    /// How well the deck does each role, from `sim`.
+    pub jobs: spire_core::analysis::jobs::Jobs,
     pub outlooks: Vec<(spire_core::EncounterId, Outlook)>,
 }
 
@@ -800,7 +802,8 @@ impl SpireApp {
                     outlooks.push((t.encounter.clone(), o));
                 }
             }
-            self.combat = Some(Combat { generation: self.generation, sim, outlooks });
+            let jobs = spire_core::analysis::jobs::measure(&sim);
+            self.combat = Some(Combat { generation: self.generation, sim, jobs, outlooks });
         }
         match self.ui.tab {
             Tab::Analytics if self.analytics.as_ref().is_none_or(|(g, _)| *g != self.generation) => {

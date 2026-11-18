@@ -333,9 +333,12 @@ pub fn section<R>(ui: &mut Ui, title: &str, note: Option<&str>, add: impl FnOnce
 
 /// A labelled horizontal bar: `value` out of `max`, a faded `extra`
 /// segment after it, and an optional target tick.
+/// Width of a [`bar`]'s label column, to line notes up under the bar.
+pub const BAR_LABEL_WIDTH: f32 = 150.0;
+
 pub fn bar(ui: &mut Ui, label: &str, value: u32, extra: u32, max: u32, target: Option<u32>, color: Color32) {
     ui.horizontal(|ui| {
-        ui.add_sized([150.0, 18.0], egui::Label::new(RichText::new(label).color(text_dim())).truncate());
+        ui.add_sized([BAR_LABEL_WIDTH, 18.0], egui::Label::new(RichText::new(label).color(text_dim())).truncate());
         let width = (ui.available_width() - 64.0).max(60.0);
         let (rect, _) = ui.allocate_exact_size(vec2(width, 10.0), Sense::hover());
         let painter = ui.painter_at(rect.expand(3.0));
