@@ -446,6 +446,15 @@ fn parse<T: serde::de::DeserializeOwned>(responses: &Responses, endpoint: &'stat
     serde_json::from_str(body).map_err(|e| DataError::Parse(format!("{endpoint}: {e}")))
 }
 
+/// An endpoint added after the others: saved responses from before it
+/// lack it, which reads as empty.
+fn parse_optional<T: serde::de::DeserializeOwned>(
+    responses: &Responses,
+    endpoint: &'static str,
+) -> Result<Vec<T>, DataError> {
+    if responses.contains_key(endpoint) { parse(responses, endpoint) } else { Ok(Vec::new()) }
+}
+
 // ---------------------------------------------------------------- mapping
 
 fn map_card(c: WCard) -> Card {
@@ -760,96 +769,28 @@ pub fn to_pack(
     fetched_at: Option<String>,
 ) -> Result<DataPack, DataError> {
     let acts: Vec<WAct> = parse(responses, "acts")?;
-    // Orbs arrived later than the other endpoints; older saved responses lack them.
-    let orbs: Vec<Orb> = if responses.contains_key("orbs") { parse::<WOrb>(responses, "orbs")? } else { Vec::new() }
-        .into_iter()
-        .map(map_orb)
-        .collect();
+    let orbs: Vec<Orb> = parse_optional::<WOrb>(responses, "orbs")?.into_iter().map(map_orb).collect();
     let cards: Vec<Card> = parse::<WCard>(responses, "cards")?
         .into_iter()
         .map(map_card)
         .map(|c| Card { channels: channels(&c.text, &orbs), ..c })
         .collect();
+    let relics: Vec<Relic> = parse::<WItem>(responses, "relics")?.into_iter().map(map_relic).collect();
     let card_ids: BTreeSet<String> = cards.iter().map(|c| c.id.0.clone()).collect();
-
-    let relics: Vec<Relic> = parse::<WItem>(responses, "relics")?
-        .into_iter()
-        .map(|r| Relic {
-            id: RelicId(r.id),
-            name: r.name,
-            rarity: rarity(r.rarity_key.as_deref()),
-            pool: r.pool.unwrap_or_else(|| "shared".into()),
-            text: strip_markup(&r.description),
-        })
-        .collect();
     let relic_ids: BTreeSet<String> = relics.iter().map(|r| r.id.0.clone()).collect();
-
     let characters = parse::<WCharacter>(responses, "characters")?
         .into_iter()
-        .map(|c| Character {
-            id: CharacterId(c.id),
-            name: c.name,
-            max_hp: c.starting_hp.unwrap_or(0),
-            gold: c.starting_gold.unwrap_or(0),
-            energy: c.max_energy.unwrap_or(3),
-            starting_deck: c
-                .starting_deck
-                .iter()
-                .map(|n| CardId(resolve(n, &card_ids).cloned().unwrap_or_else(|| camel_to_id(n))))
-                .collect(),
-            starting_relics: c
-                .starting_relics
-                .iter()
-                .map(|n| RelicId(resolve(n, &relic_ids).cloned().unwrap_or_else(|| camel_to_id(n))))
-                .collect(),
-            description: strip_markup(&c.description),
-            orb_slots: c.orb_slots,
-            arrow_slots: c.arrow_slots,
-        })
+        .map(|c| map_character(c, &card_ids, &relic_ids))
         .collect();
+    let potions = parse::<WItem>(responses, "potions")?.into_iter().map(map_potion).collect();
+    let enchantments = parse::<WEnchantment>(responses, "enchantments")?.into_iter().map(map_enchantment).collect();
 
-    let potions = parse::<WItem>(responses, "potions")?
-        .into_iter()
-        .map(|p| Potion {
-            id: PotionId(p.id),
-            name: p.name,
-            rarity: rarity(p.rarity_key.as_deref()),
-            pool: p.pool.unwrap_or_else(|| "shared".into()),
-            text: strip_markup(&p.description),
-        })
-        .collect();
-
-    let enchantments = parse::<WEnchantment>(responses, "enchantments")?
-        .into_iter()
-        .map(|e| Enchantment {
-            id: EnchantmentId(e.id),
-            name: e.name,
-            text: strip_markup(&e.description),
-            // "Attack, Skill" lists several types.
-            card_types: e
-                .card_type
-                .as_deref()
-                .map(|t| t.split(',').map(|x| card_type(Some(x.trim()))).collect())
-                .unwrap_or_default(),
-            applicable_to: e.applicable_to,
-            stackable: e.is_stackable.unwrap_or(false),
-        })
-        .collect();
-
-    let defs = match responses.get("powers") {
-        Some(_) => parse::<WPowerDef>(responses, "powers")?,
-        None => Vec::new(),
-    };
-    let blows = death_blow_powers(&defs);
-    let summons = death_summon_powers(&defs);
+    let powers = parse_optional::<WPowerDef>(responses, "powers")?;
+    let (blows, summons) = (death_blow_powers(&powers), death_summon_powers(&powers));
     let monsters = parse::<WMonster>(responses, "monsters")?
         .into_iter()
         .map(map_monster)
-        .map(|mut m| {
-            m.death_blow = death_power(&m, &blows);
-            m.death_summons = death_power(&m, &summons);
-            m
-        })
+        .map(|m| Monster { death_blow: death_power(&m, &blows), death_summons: death_power(&m, &summons), ..m })
         .collect();
 
     // Act membership comes from the acts endpoint: its lists are ids, while
@@ -860,79 +801,25 @@ pub fn to_pack(
         .collect();
     let encounters = parse::<WEncounter>(responses, "encounters")?
         .into_iter()
-        .filter_map(|e| {
-            Some(Encounter {
-                act: encounter_act.get(e.id.as_str()).map(|a| ActId::new(*a)),
-                room: room(&e.room_type)?,
-                weak: e.is_weak.unwrap_or(false),
-                monsters: e.monsters.into_iter().map(|m| MonsterId(m.id)).collect(),
-                tags: e.tags.unwrap_or_default(),
-                lineups: Vec::new(),
-                spawns: Vec::new(),
-                stats: None,
-                id: EncounterId(e.id),
-                name: e.name,
-            })
-        })
+        .filter_map(|e| map_encounter(e, &encounter_act))
         .collect();
-
     let mut event_acts: BTreeMap<&str, Vec<ActId>> = BTreeMap::new();
     for a in &acts {
         for e in a.events.iter().chain(&a.ancients) {
             event_acts.entry(e.as_str()).or_default().push(ActId::new(&a.id));
         }
     }
-    let events = parse::<WEvent>(responses, "events")?
-        .into_iter()
-        .map(|e| {
-            let kind = match e.kind.as_str() {
-                "Ancient" => EventKind::Ancient,
-                "Shared" => EventKind::Shared,
-                _ => EventKind::Act,
-            };
-            Event {
-                acts: event_acts.get(e.id.as_str()).cloned().unwrap_or_default(),
-                options: e
-                    .options
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|o| EventOption { title: strip_markup(&o.title), text: strip_markup(&o.description) })
-                    .collect(),
-                id: EventId(e.id),
-                name: e.name,
-                kind,
-            }
-        })
-        .collect();
+    let events = parse::<WEvent>(responses, "events")?.into_iter().map(|e| map_event(e, &event_acts)).collect();
 
-    let ascensions: Vec<AscensionLevel> = match responses.get("ascensions") {
-        Some(_) => parse::<WAscension>(responses, "ascensions")?
-            .into_iter()
-            .map(|a| AscensionLevel { level: a.level, name: a.name, text: strip_markup(&a.description) })
-            .collect(),
-        None => Vec::new(),
-    };
+    let ascensions: Vec<AscensionLevel> = parse_optional::<WAscension>(responses, "ascensions")?
+        .into_iter()
+        .map(|a| AscensionLevel { level: a.level, name: a.name, text: strip_markup(&a.description) })
+        .collect();
     let mut rules = rules_from(&ascensions);
-    if let (Some(r), true) = (rules.as_mut(), responses.contains_key("powers")) {
-        r.vulnerable_pct = vulnerable_pct(&parse::<WPowerDef>(responses, "powers")?);
+    if let Some(r) = rules.as_mut().filter(|_| !powers.is_empty()) {
+        r.vulnerable_pct = vulnerable_pct(&powers);
     }
-
-    let acts = acts
-        .into_iter()
-        .map(|a| Act {
-            id: ActId(a.id),
-            name: a.name,
-            index: a.index,
-            rooms: a.num_rooms.unwrap_or(0),
-            bosses: a.bosses.into_iter().map(EncounterId).collect(),
-            ancients: a.ancients.into_iter().map(EventId).collect(),
-            events: a.events.into_iter().map(EventId).collect(),
-            encounters: a.encounters.into_iter().map(EncounterId).collect(),
-            weak_fights: None,
-            length: None,
-            fixed_rooms: Vec::new(),
-        })
-        .collect();
+    let acts = acts.into_iter().map(map_act).collect();
 
     Ok(DataPack {
         format: DATA_PACK_FORMAT,
@@ -952,6 +839,120 @@ pub fn to_pack(
         orbs,
         rules,
     })
+}
+
+fn map_relic(r: WItem) -> Relic {
+    Relic {
+        id: RelicId(r.id),
+        name: r.name,
+        rarity: rarity(r.rarity_key.as_deref()),
+        pool: r.pool.unwrap_or_else(|| "shared".into()),
+        text: strip_markup(&r.description),
+    }
+}
+
+fn map_potion(p: WItem) -> Potion {
+    Potion {
+        id: PotionId(p.id),
+        name: p.name,
+        rarity: rarity(p.rarity_key.as_deref()),
+        pool: p.pool.unwrap_or_else(|| "shared".into()),
+        text: strip_markup(&p.description),
+    }
+}
+
+/// Starting decks and relics are named in the source's own casing; they
+/// resolve against the card and relic ids.
+fn map_character(c: WCharacter, card_ids: &BTreeSet<String>, relic_ids: &BTreeSet<String>) -> Character {
+    Character {
+        id: CharacterId(c.id),
+        name: c.name,
+        max_hp: c.starting_hp.unwrap_or(0),
+        gold: c.starting_gold.unwrap_or(0),
+        energy: c.max_energy.unwrap_or(3),
+        starting_deck: c
+            .starting_deck
+            .iter()
+            .map(|n| CardId(resolve(n, card_ids).cloned().unwrap_or_else(|| camel_to_id(n))))
+            .collect(),
+        starting_relics: c
+            .starting_relics
+            .iter()
+            .map(|n| RelicId(resolve(n, relic_ids).cloned().unwrap_or_else(|| camel_to_id(n))))
+            .collect(),
+        description: strip_markup(&c.description),
+        orb_slots: c.orb_slots,
+        arrow_slots: c.arrow_slots,
+    }
+}
+
+fn map_enchantment(e: WEnchantment) -> Enchantment {
+    Enchantment {
+        id: EnchantmentId(e.id),
+        name: e.name,
+        text: strip_markup(&e.description),
+        // "Attack, Skill" lists several types.
+        card_types: e
+            .card_type
+            .as_deref()
+            .map(|t| t.split(',').map(|x| card_type(Some(x.trim()))).collect())
+            .unwrap_or_default(),
+        applicable_to: e.applicable_to,
+        stackable: e.is_stackable.unwrap_or(false),
+    }
+}
+
+/// `None` for room types we don't track.
+fn map_encounter(e: WEncounter, act_of: &BTreeMap<&str, &str>) -> Option<Encounter> {
+    Some(Encounter {
+        act: act_of.get(e.id.as_str()).map(|a| ActId::new(*a)),
+        room: room(&e.room_type)?,
+        weak: e.is_weak.unwrap_or(false),
+        monsters: e.monsters.into_iter().map(|m| MonsterId(m.id)).collect(),
+        tags: e.tags.unwrap_or_default(),
+        lineups: Vec::new(),
+        spawns: Vec::new(),
+        stats: None,
+        id: EncounterId(e.id),
+        name: e.name,
+    })
+}
+
+fn map_event(e: WEvent, acts_of: &BTreeMap<&str, Vec<ActId>>) -> Event {
+    let kind = match e.kind.as_str() {
+        "Ancient" => EventKind::Ancient,
+        "Shared" => EventKind::Shared,
+        _ => EventKind::Act,
+    };
+    Event {
+        acts: acts_of.get(e.id.as_str()).cloned().unwrap_or_default(),
+        options: e
+            .options
+            .unwrap_or_default()
+            .into_iter()
+            .map(|o| EventOption { title: strip_markup(&o.title), text: strip_markup(&o.description) })
+            .collect(),
+        id: EventId(e.id),
+        name: e.name,
+        kind,
+    }
+}
+
+/// Room counts and layouts come later, from community runs.
+fn map_act(a: WAct) -> Act {
+    Act {
+        id: ActId(a.id),
+        name: a.name,
+        index: a.index,
+        rooms: a.num_rooms.unwrap_or(0),
+        bosses: a.bosses.into_iter().map(EncounterId).collect(),
+        ancients: a.ancients.into_iter().map(EventId).collect(),
+        events: a.events.into_iter().map(EventId).collect(),
+        encounters: a.encounters.into_iter().map(EncounterId).collect(),
+        weak_fights: None,
+        length: None,
+        fixed_rooms: Vec::new(),
+    }
 }
 
 /// Reads `beta_version` from the `/api/beta/version` body.
