@@ -37,13 +37,52 @@ pub struct Spread {
 }
 
 impl Spread {
-    fn of(mut values: Vec<f32>) -> Spread {
+    /// From values sorted lowest first.
+    fn of(values: &[f32]) -> Spread {
         if values.is_empty() {
             return Spread::default();
         }
-        values.sort_by(f32::total_cmp);
         let n = values.len();
         Spread { mean: values.iter().sum::<f32>() / n as f32, low: values[n / 4], high: values[(3 * n) / 4] }
+    }
+}
+
+/// The whole spread of an outcome over the simulated fights: its value at
+/// every 5% of them, lowest first. Unknown (all zero) unless simulated.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Steps {
+    pub values: [f32; 21],
+    pub known: bool,
+}
+
+impl Steps {
+    fn of(sorted: &[f32]) -> Steps {
+        if sorted.is_empty() {
+            return Steps::default();
+        }
+        let last = (sorted.len() - 1) as f32;
+        Steps { values: std::array::from_fn(|i| sorted[(last * i as f32 / 20.0).round() as usize]), known: true }
+    }
+
+    /// Every fight gives exactly `x` (for tests and fixed decks).
+    pub fn flat(x: f32) -> Steps {
+        Steps { values: [x; 21], known: true }
+    }
+
+    /// The 20 slices of fights, each by its middle value, scaled.
+    fn slices(&self, scale: f32) -> impl Iterator<Item = f32> + '_ {
+        self.values.windows(2).map(move |w| (w[0] + w[1]) / 2.0 * scale)
+    }
+
+    /// Share of fights where the outcome (times `scale`) reaches `x`.
+    pub fn reaching(&self, x: f32, scale: f32) -> f32 {
+        self.slices(scale).filter(|v| *v >= x).count() as f32 / 20.0
+    }
+
+    /// How far short of `x` the outcome (times `scale`) falls, on average
+    /// over the fights (0 where it reaches it).
+    pub fn short_of(&self, x: f32, scale: f32) -> f32 {
+        self.slices(scale).map(|v| (x - v).max(0.0)).sum::<f32>() / 20.0
     }
 }
 
@@ -106,6 +145,9 @@ pub struct TurnOutput {
     pub damage: Spread,
     /// Block this turn when playing for block.
     pub block: Spread,
+    /// That Block's whole spread: what a bad draw blocks, not only the
+    /// middle half.
+    pub block_steps: Steps,
 }
 
 /// Character resources a deck produces, averaged per turn.
@@ -1240,7 +1282,11 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
         turns: damage
             .into_iter()
             .zip(block)
-            .map(|(d, b)| TurnOutput { damage: Spread::of(d), block: Spread::of(b) })
+            .map(|(mut d, mut b)| {
+                d.sort_by(f32::total_cmp);
+                b.sort_by(f32::total_cmp);
+                TurnOutput { damage: Spread::of(&d), block: Spread::of(&b), block_steps: Steps::of(&b) }
+            })
             .collect(),
         turnover: turnover as f32 / n,
         odds,

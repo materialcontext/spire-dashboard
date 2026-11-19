@@ -996,6 +996,14 @@ fn roles_come_from_tags_and_overrides_replace_them() {
     defend.block = Some(5);
     assert_eq!(pb.roles_of(&defend), vec![Role::Mitigation], "5 Block is under the Survival line");
     assert_eq!(pb.tags_for(Role::Survival), vec![Tag::Block]);
+    // Costing more than 1 rules Mitigation out, whatever gives it.
+    pb.role_max_cost.insert(Role::Mitigation, 1);
+    let mut wall2 = card("WALL2", CardType::Skill, Rarity::Common, "Gain 12 Block.");
+    (wall2.block, wall2.cost) = (Some(12), Some(2));
+    assert_eq!(pb.roles_of(&wall2), vec![Role::Survival]);
+    wall2.x_cost = true;
+    assert_eq!(pb.roles_of(&wall2), vec![Role::Survival], "X costs count as over the cap");
+    assert_eq!(pb.roles_of(&defend), vec![Role::Mitigation], "1 energy is within it");
     pb.personal_tags.insert(wall.id.clone(), vec![Tag::Weak]);
     let (t, source) = of(&wall, false, &pb);
     assert_eq!((t.iter().map(|t| t.tag).collect::<Vec<_>>(), source), (vec![Tag::Weak], TagSource::Personal));
@@ -1136,4 +1144,35 @@ fn an_endless_combo_ends_and_next_turn_energy_waits() {
     let s = sim_state(&cat, &[("INVOKE_ISH", false), ("BIG", false)]);
     let sim = sim::simulate(&s, &cat, &quick());
     assert_eq!(sim.turns[0].damage.mean, 0.0, "3 energy: Invoke, then Big is out of reach this turn");
+}
+
+#[test]
+fn strikes_and_weak_attacks_are_excluded_from_roles() {
+    use spire_core::analysis::tags::Tag;
+    use spire_core::playbook::{RoleExclusion, TagRole};
+    let mut pb = playbook();
+    pb.role_rules.clear();
+    pb.tag_roles = vec![TagRole { role: Role::FastDamage, tag: Tag::Damage, min: 0 }];
+    pb.role_exclusions = vec![
+        RoleExclusion {
+            role: None,
+            when: Condition::All(vec![Condition::Rarity(Rarity::Basic), Condition::SourceTag("Strike".into())]),
+        },
+        RoleExclusion {
+            role: Some(Role::FastDamage),
+            when: Condition::Any(vec![Condition::TotalDamageAtMost(6), Condition::DamagePerEnergyAtMost(6)]),
+        },
+    ];
+    let attack = |id: &str, cost: u8, damage: u32, hits: u32| {
+        let mut c = card(id, CardType::Attack, Rarity::Common, "Deal damage.");
+        (c.cost, c.damage, c.hits) = (Some(cost), Some(damage), Some(hits));
+        c
+    };
+    let mut strike = attack("STRIKE_HERO", 1, 9, 1);
+    (strike.rarity, strike.tags) = (Rarity::Basic, vec!["Strike".into()]);
+    assert!(pb.roles_of(&strike).is_empty(), "starter Strikes fill no role");
+    assert!(pb.roles_of(&attack("POKE", 0, 6, 1)).is_empty(), "6 damage or less");
+    assert!(pb.roles_of(&attack("HEAVY", 2, 12, 1)).is_empty(), "6 per energy or less");
+    assert_eq!(pb.roles_of(&attack("TWIN", 1, 4, 2)), vec![Role::FastDamage], "8 in all for 1 energy");
+    assert_eq!(pb.roles_of(&attack("CLEAVE", 2, 13, 1)), vec![Role::FastDamage]);
 }

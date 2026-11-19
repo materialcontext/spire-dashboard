@@ -41,7 +41,7 @@
 use crate::analysis::jobs;
 use crate::analysis::rules::{self, Kind as RuleKind};
 use crate::analysis::shape;
-use crate::analysis::sim::{DeckSim, PlayStats};
+use crate::analysis::sim::{DeckSim, PlayStats, TurnOutput};
 use crate::analysis::tags::Tag;
 use crate::analysis::threats::{Scaling, Wave, lineup_incoming, lineup_statuses, lineup_waves};
 use crate::catalog::{Catalog, Encounter};
@@ -287,6 +287,34 @@ pub struct Outlook {
     pub rules: Vec<RuleNote>,
     /// What holds the deck back, most pressing first.
     pub limits: Vec<Limit>,
+    /// The fight's certain spikes, with how often a turn spent defending
+    /// blocks each in full.
+    pub spikes: Vec<SpikeOdds>,
+}
+
+/// A spike turn against the deck's whole spread of Block, bad draws
+/// included, not only its average.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SpikeOdds {
+    /// Enemy turn, 1-based.
+    pub turn: usize,
+    pub damage: f32,
+    /// Share of hands that block it all when playing to defend (0–1).
+    pub odds: f32,
+}
+
+/// What gets through a turn of `coming` damage when the way spends `share`
+/// of it blocking. A turn spent wholly on Block counts bad draws: the
+/// average shortfall over the deck's whole spread, not the shortfall of its
+/// average (a deck that blocks 20 on average still takes hits from 26 on
+/// its weaker hands). `keep` thins the Block for junk in the deck.
+fn taken(out: &TurnOutput, coming: f32, share: f32, keep: f32) -> f32 {
+    let block = out.block.mean * keep;
+    if share >= 1.0 && out.block_steps.known {
+        out.block_steps.short_of(coming, keep)
+    } else {
+        (coming - block * share).max(0.0)
+    }
 }
 
 impl Outlook {
@@ -366,8 +394,8 @@ fn play(sim: &DeckSim, foe: Foe, way: Way) -> Line {
             // the way still splits the same way).
             let blast_turn = foe.blast.map(|floor| {
                 let blast = floor.max(incoming(stage, t + 1 - since));
-                let block = output(t + 1).block.mean * keep;
-                lost += (blast - block * share_for(blast, block)).max(0.0);
+                let next = output(t + 1);
+                lost += taken(&next, blast, share_for(blast, next.block.mean * keep), keep);
                 t as u32 + 2
             });
             let junk = junk + passed;
@@ -376,7 +404,7 @@ fn play(sim: &DeckSim, foe: Foe, way: Way) -> Line {
         // A stage that arrived this turn takes its first enemy turn now.
         let coming = if stunned { 0.0 } else { incoming(stage, t - since) + enraged };
         stunned = false;
-        let through = (coming - block * share_for(coming, block)).max(0.0);
+        let through = taken(&out, coming, share_for(coming, block), keep);
         lost += through;
         if through > 0.0 {
             junk += foe.stages[stage].mods.junk_unblocked;
@@ -421,7 +449,17 @@ pub fn outlook(sim: &DeckSim, foe: Foe, hp: i32) -> Option<Outlook> {
         Some(_) if lead.hp_loss as f32 >= hp as f32 * SAFE_SHARE => Verdict::Tight,
         Some(_) => Verdict::OnTrack,
     };
-    Some(Outlook { verdict, lead, ways, hp, status_cards: 0, joins: Vec::new(), rules: Vec::new(), limits: Vec::new() })
+    Some(Outlook {
+        verdict,
+        lead,
+        ways,
+        hp,
+        status_cards: 0,
+        joins: Vec::new(),
+        rules: Vec::new(),
+        limits: Vec::new(),
+        spikes: Vec::new(),
+    })
 }
 
 /// A stage's rules, from its monsters' powers.
@@ -462,10 +500,32 @@ fn rule_words(rules: &[rules::Rule], play: &PlayStats) -> Vec<RuleNote> {
     out
 }
 
+/// Each certain spike against the Block of the turn before it, spent
+/// defending (the simulator's last turn stands in for later ones).
+fn spike_odds(shape: &shape::Shape, sim: &DeckSim) -> Vec<SpikeOdds> {
+    shape
+        .spikes
+        .iter()
+        .filter(|s| s.certain)
+        .filter_map(|s| {
+            let out = sim.turns.get((s.turn - 1).min(sim.turns.len().checked_sub(1)?))?;
+            let damage = s.load.expected;
+            let odds = if out.block_steps.known {
+                out.block_steps.reaching(damage, 1.0)
+            } else {
+                f32::from(u8::from(out.block.mean >= damage))
+            };
+            Some(SpikeOdds { turn: s.turn, damage, odds })
+        })
+        .collect()
+}
+
 /// What holds the deck back, as the roles that would fix it and the tags
 /// that give them.
+#[allow(clippy::too_many_arguments)]
 fn limits(
     shape: &shape::Shape,
+    spikes: &[SpikeOdds],
     jobs: &jobs::Jobs,
     lead: &Line,
     foe: &Foe,
@@ -475,9 +535,19 @@ fn limits(
 ) -> Vec<Limit> {
     let mut out = Vec::new();
     let mut add = |role: Role, text: String| out.push(Limit { role: Some(role), text, tags: playbook.tags_for(role) });
-    let biggest = shape.spikes.iter().filter(|s| s.certain).map(|s| s.load.expected).fold(0.0f32, f32::max);
-    if biggest > 0.0 && jobs.survival < biggest {
-        add(Role::Survival, format!("spikes of {biggest:.0}; a defending turn blocks {:.0}", jobs.survival));
+    // The spike the deck is least likely to block in full.
+    if let Some(s) = spikes.iter().min_by(|a, b| a.odds.total_cmp(&b.odds))
+        && s.odds < playbook.fights.spike_odds
+    {
+        add(
+            Role::Survival,
+            format!(
+                "{:.0} on enemy turn {}: a turn spent defending blocks it all on {:.0}% of hands",
+                s.damage,
+                s.turn,
+                s.odds * 100.0
+            ),
+        );
     }
     if shape.pressure > 0.0 && jobs.mitigation < shape.pressure {
         add(
@@ -572,12 +642,14 @@ pub fn for_encounter(
     let mods = Mods::of(&all_rules, fades);
     let jobs = jobs::measure(sim);
     outlook(sim, foe, state.hp).map(|o| {
-        let limits = limits(&shape, &jobs, &o.lead, &foe, &mods, &sim.play, playbook);
+        let spikes = spike_odds(&shape, sim);
+        let limits = limits(&shape, &spikes, &jobs, &o.lead, &foe, &mods, &sim.play, playbook);
         Outlook {
             status_cards: if any { playbook.simulation.status_cards } else { 0 },
             joins,
             rules: rule_words(&all_rules, &sim.play),
             limits,
+            spikes,
             ..o
         }
     })
@@ -586,11 +658,12 @@ pub fn for_encounter(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::analysis::sim::{Spread, TurnOutput};
+    use crate::analysis::sim::{Spread, Steps, TurnOutput};
 
     fn sim(attack: f32, block: f32) -> DeckSim {
         let s = |m| Spread { mean: m, low: m, high: m };
-        DeckSim { turns: vec![TurnOutput { damage: s(attack), block: s(block) }; 5], ..Default::default() }
+        let turn = TurnOutput { damage: s(attack), block: s(block), block_steps: Steps::flat(block) };
+        DeckSim { turns: vec![turn; 5], ..Default::default() }
     }
 
     fn stage(incoming: &[f32], hp: u32) -> [Stage<'_>; 1] {
@@ -732,5 +805,64 @@ mod tests {
         let rushed = outlook(&sim(20.0, 30.0), f, 80).unwrap();
         assert_eq!(rushed.lead.way, Way::Race);
         assert_eq!(rushed.lead.kill_turn, Some(5));
+    }
+
+    /// Half the fights block `low`, half `high`.
+    fn uneven(attack: f32, low: f32, high: f32) -> DeckSim {
+        let mut values = [low; 21];
+        values[10..].fill(high);
+        values[10] = (low + high) / 2.0;
+        let mean = (low + high) / 2.0;
+        let turn = TurnOutput {
+            damage: Spread { mean: attack, low: attack, high: attack },
+            block: Spread { mean, low, high },
+            block_steps: Steps { values, known: true },
+        };
+        DeckSim { turns: vec![turn; 5], ..Default::default() }
+    }
+
+    #[test]
+    fn steps_read_the_whole_spread() {
+        let s = Steps { values: std::array::from_fn(|i| i as f32), known: true };
+        // Slices sit at 0.5, 1.5, … 19.5.
+        assert_eq!(s.reaching(10.0, 1.0), 0.5);
+        assert_eq!(s.reaching(10.0, 2.0), 0.75);
+        assert!((s.short_of(5.0, 1.0) - (4.5 + 3.5 + 2.5 + 1.5 + 0.5) / 20.0).abs() < 1e-5);
+        assert_eq!(Steps::flat(8.0).short_of(10.0, 1.0), 2.0);
+    }
+
+    #[test]
+    fn bad_draws_let_spikes_through_when_walling() {
+        // 26 every turn; both decks block 20 on average. The even one lets
+        // 6 through a turn; the uneven one blocks 10 or 30, so half its
+        // hands let 16 through: 8 a turn.
+        let incoming = [26.0f32; 20];
+        let even = outlook(&sim(20.0, 20.0), foe(&stage(&incoming, 100), None), 80).unwrap();
+        let swingy = outlook(&uneven(20.0, 10.0, 30.0), foe(&stage(&incoming, 100), None), 80).unwrap();
+        let wall = |o: &Outlook| *o.way("Wall").unwrap();
+        assert!(wall(&swingy).hp_loss > wall(&even).hp_loss, "{:?} vs {:?}", wall(&swingy), wall(&even));
+    }
+
+    #[test]
+    fn spike_odds_count_the_hands_that_block_it() {
+        use crate::analysis::shape::{Kind, Load, Shape, Spike};
+        let spike = |turn, expected| Spike { turn, load: Load { low: 0, expected, high: 40 }, certain: true };
+        let shape = Shape {
+            kind: Kind::Spikes,
+            turns: Vec::new(),
+            pressure: 10.0,
+            spikes: vec![spike(3, 26.0), spike(9, 12.0)],
+            windows: Vec::new(),
+            ramp: 1.0,
+            clocks: Vec::new(),
+            stages: vec![100],
+            gaps: Vec::new(),
+            rules: Vec::new(),
+        };
+        let odds = spike_odds(&shape, &uneven(20.0, 10.0, 30.0));
+        // Of the 20 slices, 9 block 30, one 25, one 15 and 9 block 10: 26
+        // is blocked by 9 of them, 12 by 11. Turn 9 reads the simulator's
+        // last turn.
+        assert_eq!(odds.iter().map(|s| (s.turn, s.odds)).collect::<Vec<_>>(), vec![(3, 0.45), (9, 0.55)]);
     }
 }

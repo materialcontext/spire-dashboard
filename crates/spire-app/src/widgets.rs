@@ -336,7 +336,15 @@ pub fn section<R>(ui: &mut Ui, title: &str, note: Option<&str>, add: impl FnOnce
 /// Width of a [`bar`]'s label column, to line notes up under the bar.
 pub const BAR_LABEL_WIDTH: f32 = 150.0;
 
-pub fn bar(ui: &mut Ui, label: &str, value: u32, extra: u32, max: u32, target: Option<u32>, color: Color32) {
+pub fn bar(
+    ui: &mut Ui,
+    label: &str,
+    value: u32,
+    extra: u32,
+    max: u32,
+    target: Option<u32>,
+    color: Color32,
+) -> egui::Response {
     ui.horizontal(|ui| {
         ui.add_sized([BAR_LABEL_WIDTH, 18.0], egui::Label::new(RichText::new(label).color(text_dim())).truncate());
         let width = (ui.available_width() - 64.0).max(60.0);
@@ -366,7 +374,8 @@ pub fn bar(ui: &mut Ui, label: &str, value: u32, extra: u32, max: u32, target: O
         };
         let met = target.is_none_or(|t| value >= t);
         ui.label(RichText::new(text).small().color(if met { crate::style::color::text() } else { warn() }));
-    });
+    })
+    .response
 }
 
 /// A thin coloured mark, e.g. the card-type stripe on deck rows.

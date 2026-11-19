@@ -110,11 +110,11 @@ mod tests {
     fn measures_each_job_from_the_spreads() {
         let s = |mean: f32, low: f32, high: f32| Spread { mean, low, high };
         let turns = vec![
-            TurnOutput { damage: s(10.0, 6.0, 14.0), block: s(8.0, 5.0, 12.0) },
-            TurnOutput { damage: s(12.0, 8.0, 16.0), block: s(8.0, 5.0, 12.0) },
-            TurnOutput { damage: s(14.0, 10.0, 20.0), block: s(8.0, 5.0, 12.0) },
-            TurnOutput { damage: s(16.0, 12.0, 22.0), block: s(8.0, 5.0, 12.0) },
-            TurnOutput { damage: s(20.0, 14.0, 26.0), block: s(8.0, 5.0, 12.0) },
+            TurnOutput { damage: s(10.0, 6.0, 14.0), block: s(8.0, 5.0, 12.0), ..Default::default() },
+            TurnOutput { damage: s(12.0, 8.0, 16.0), block: s(8.0, 5.0, 12.0), ..Default::default() },
+            TurnOutput { damage: s(14.0, 10.0, 20.0), block: s(8.0, 5.0, 12.0), ..Default::default() },
+            TurnOutput { damage: s(16.0, 12.0, 22.0), block: s(8.0, 5.0, 12.0), ..Default::default() },
+            TurnOutput { damage: s(20.0, 14.0, 26.0), block: s(8.0, 5.0, 12.0), ..Default::default() },
         ];
         let sim = DeckSim {
             turns,

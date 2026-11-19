@@ -313,7 +313,7 @@
     {
       "role": "survival",
       "tag": "block",
-      "min": 10
+      "min": 9
     },
     {
       "role": "survival",
@@ -357,39 +357,46 @@
       "tag": "chip_damage"
     }
   ],
-  "role_rules": [
+  "role_max_cost": {
+    "mitigation": 1
+  },
+  "role_exclusions": [
     {
-      "role": "mitigation",
-      "when": {
-        "applies_power": "Intangible"
-      }
-    },
-    {
-      "role": "mitigation",
-      "when": {
-        "applies_power": "Buffer"
-      }
-    },
-    {
-      "role": "mitigation",
       "when": {
         "all": [
           {
-            "card_type": "power"
+            "rarity": "basic"
           },
           {
-            "any": [
-              {
-                "text_contains": "intangible"
-              },
-              {
-                "text_contains": "heal"
-              }
-            ]
+            "source_tag": "Strike"
           }
         ]
       }
     },
+    {
+      "role": "fast_damage",
+      "when": {
+        "all": [
+          {
+            "any": [
+              {
+                "total_damage_at_most": 6
+              },
+              {
+                "damage_per_energy_at_most": 6
+              }
+            ]
+          },
+          {
+            "not": {
+              "applies_power": "Vulnerable"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "role_rules": [
     {
       "role": "mitigation",
       "when": {
@@ -699,7 +706,8 @@
     "ramp": 1.3,
     "slower_by": 1.5,
     "chip_hits": 3.0,
-    "junk_share": 0.3
+    "junk_share": 0.3,
+    "spike_odds": 0.5
   },
   "relic_roles": [
     {

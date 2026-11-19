@@ -40,53 +40,43 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
         });
 
         ui.add_space(crate::style::space::s());
-        ui.label(caption(
-            "Roles · bright: cards you added · faded: starter Strikes/Defends · tick: target this act · \
-             under each, how well the deck does it (simulated)",
-        ));
+        ui.label(caption("Roles")).on_hover_text(
+            "Bright: cards you added. Faded: starter Strikes and Defends. Tick: this act's target. \
+             Hover a role for how well the deck does it (simulated).",
+        );
         let target = |r: Role| plan.and_then(|p| p.targets.iter().find(|t| t.role == r)).map(|t| t.min);
         let max_role =
             Role::ALL.iter().map(|r| (d.role(*r) + d.starter_role(*r)).max(target(*r).unwrap_or(0))).max().unwrap_or(1);
         let jobs = v.combat.map(|c| &c.jobs);
         for r in Role::ALL {
-            bar(ui, r.label(), d.role(r), d.starter_role(r), max_role, target(r), style::role_color(r));
+            let row = bar(ui, r.label(), d.role(r), d.starter_role(r), max_role, target(r), style::role_color(r));
             if let Some(j) = jobs {
-                ui.horizontal(|ui| {
-                    ui.add_space(crate::widgets::BAR_LABEL_WIDTH);
-                    ui.label(caption(j.describe(r)));
-                });
+                row.on_hover_text(j.describe(r));
             }
         }
         if let Some(j) = jobs {
-            ui.label(caption(format!(
-                "On a bad draw (1 hand in 4) the deck deals {:.0}% of its usual damage.",
-                j.floor * 100.0
-            )));
+            ui.label(caption(format!("Bad draws: {:.0}% of usual damage", j.floor * 100.0)))
+                .on_hover_text("What the deck deals on 1 hand in 4, against its average.");
         }
         // Setup piling up and resources running short hold every role back.
         for w in v.combat.map(|c| c.balance.as_slice()).unwrap_or_default() {
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
                 ui.label(RichText::new(w.store.label()).small().strong().color(style::color::warn()));
-                ui.label(RichText::new(&w.text).small());
+                ui.label(RichText::new(&w.text).small()).on_hover_text(&w.detail);
             });
         }
         // Draw and energy aren't roles: they help every role on bad draws.
         bar(ui, "Draw", d.tag(Tag::Draw), 0, max_role, None, style::tag_color());
         bar(ui, "Energy gain", d.tag(Tag::Energy), 0, max_role, None, style::tag_color());
-        // What the deck is made of, by tag (starter cards included).
-        let shares: Vec<String> = Tag::ALL
-            .iter()
-            .filter(|t| !matches!(t, Tag::Draw | Tag::Energy))
-            .filter(|t| d.tag(**t) > 0)
-            .map(|t| format!("{} {}", t.label(), d.tag(*t)))
+        let counts: Vec<String> = [(d.upgraded, "upgraded"), (d.no_role, "with no role"), (d.unknown, "unknown")]
+            .into_iter()
+            .filter(|(n, _)| *n > 0)
+            .map(|(n, what)| format!("{n} {what}"))
             .collect();
-        if !shares.is_empty() {
-            ui.label(caption(format!("Tags: {}", shares.join(" · "))));
+        if !counts.is_empty() {
+            ui.label(caption(counts.join(" · ")));
         }
-
-        ui.add_space(crate::style::space::xs());
-        ui.label(caption(format!("{} upgraded · {} with no role · {} unknown", d.upgraded, d.no_role, d.unknown)));
         if let Some(b) = v.combat.and_then(|c| c.bench.as_ref()) {
             benchmark(ui, v, b);
         }
@@ -97,20 +87,17 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
 /// in one line.
 fn benchmark(ui: &mut Ui, v: &ViewCtx, b: &crate::app::Bench) {
     ui.add_space(crate::style::space::s());
-    let who = if b.all_characters {
-        format!("{} decks of every character (too few of this one's)", b.decks)
-    } else {
-        format!("{} decks", b.decks)
-    };
-    ui.label(RichText::new(format!("Next to decks that cleared Act {}", v.state.act_index + 1)).strong());
-    ui.label(caption(format!("{who} from community runs, at the act's end · the middle half of them shown")));
+    let every = if b.all_characters { " (all characters)" } else { "" };
+    ui.label(
+        RichText::new(format!("Vs. {} decks that cleared Act {}{every}", b.decks, v.state.act_index + 1)).strong(),
+    )
+    .on_hover_text(
+        "Community runs' decks at the end of the act, middle half shown. Listed: where your deck is \
+         worse than 3 in 4 of them. Every character's decks are used when this one has too few.",
+    );
     let short: Vec<_> = b.rows.iter().filter(|r| r.short).collect();
     if short.is_empty() {
-        ui.label(
-            RichText::new("No shortfalls: the deck is in or above the middle half everywhere.")
-                .small()
-                .color(style::color::good()),
-        );
+        ui.label(RichText::new("No shortfalls").small().color(style::color::good()));
     }
     for r in short {
         ui.horizontal(|ui| {
@@ -132,7 +119,7 @@ fn benchmark(ui: &mut Ui, v: &ViewCtx, b: &crate::app::Bench) {
             });
             ui.label(
                 RichText::new(format!(
-                    "{} · cleared decks {}–{}",
+                    "{} · cleared {}–{}",
                     value(r.measure, r.yours),
                     value(r.measure, r.range.p25),
                     value(r.measure, r.range.p75)
@@ -143,7 +130,7 @@ fn benchmark(ui: &mut Ui, v: &ViewCtx, b: &crate::app::Bench) {
     }
     let fine: Vec<&str> = b.rows.iter().filter(|r| !r.short).map(|r| r.measure.label()).collect();
     if !fine.is_empty() {
-        ui.label(caption(format!("In range or better: {}", fine.join(", "))));
+        ui.label(caption(format!("{} more in range or better", fine.len()))).on_hover_text(fine.join(", "));
     }
 }
 

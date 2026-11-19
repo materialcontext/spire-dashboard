@@ -85,10 +85,10 @@ impl Tag {
             Tag::Vulnerable => "Vulnerable",
             Tag::Draw => "Draw",
             Tag::Energy => "Energy",
-            Tag::ScalingDamage => "Scaling · damage",
-            Tag::ScalingBlock => "Scaling · block",
-            Tag::SetupAttack => "Setup · attack",
-            Tag::SetupBlock => "Setup · block",
+            Tag::ScalingDamage => "Scaling (damage)",
+            Tag::ScalingBlock => "Scaling (block)",
+            Tag::SetupAttack => "Setup (attack)",
+            Tag::SetupBlock => "Setup (block)",
             Tag::CleanUp => "Clean-Up",
         }
     }

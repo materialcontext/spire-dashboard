@@ -251,9 +251,15 @@ Limits (`survival::Limit`) name the role that would help: Survival when a
 certain spike tops a defending turn's Block, Mitigation when the pressure
 tops an ordinary turn's, Fast Damage when the kill is over the community's
 pace by more than 1.5 turns, Chip when a hit rule meets fewer than 3 hits a
-turn, AoE when enemies join and little damage hits them all. Not built yet:
-scoring spike turns against bad draws (the Survival limit uses the high end
-of a defending turn's Block instead).
+turn, AoE when enemies join and little damage hits them all.
+
+Spike turns count bad draws: the simulator keeps each turn's whole spread
+of Block (its value at every 5% of fights, `TurnOutput::block_steps`). A
+turn a way spends wholly on Block loses the average shortfall over that
+spread, not the shortfall of the average, and each certain spike gets the
+share of hands that block it in full (`Outlook::spikes`). The Survival
+limit names the spike least often blocked, under half the hands (the
+playbook's `fights.spike_odds`).
 
 
 Each line is played out against the shape, phase by phase:
@@ -287,7 +293,7 @@ Each line is played out against the shape, phase by phase:
 ### 4. Tags (card vocabulary)
 
 As built (F4): `analysis::tags`. Scaling and Setup are split by side
-(Scaling · damage, Scaling · block, Setup · attack, Setup · block), so the
+(Scaling (damage), Scaling (block), Setup (attack), Setup (block)), so the
 roles can follow them; that makes 14 tags. A tag carries the card's number
 (per hit for Multi-Hit, with its hits). The playbook holds the judgement
 calls: `tag_rules` (channelling Lightning is Damage, Forge is Damage,
@@ -298,6 +304,14 @@ follow them. Limits and fight rules name the tags that answer them
 ("Look for: Multi-Hit, Chip Damage"); junk piling past 30% of the deck is a
 Clean-Up limit. `audit --tags` lists the 62 class cards no tag describes
 (copies, card plays, Stars, random cards).
+
+Since F4, a card costing more than 1 energy (or X) isn't Mitigation,
+whatever its tags (the playbook's `role_max_cost`); a big Block card can
+still be Survival (from 9 Block, so Leap counts). Intangible and Buffer
+are Survival only, at any cost. Starter Strikes fill no role at all, and a
+card that deals 6 damage or less, or 6 or less per energy, isn't Fast
+Damage unless it applies Vulnerable, whose extra damage is presumed to
+make up the difference (Bash); the playbook's `role_exclusions`.
 
 One change from the table below: **Energy gives no role.** Draw and Energy
 keep every role working on bad draws, the note that isn't a role (D2), so

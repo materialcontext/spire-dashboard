@@ -462,7 +462,8 @@ mod tests {
         use spire_core::analysis::tags::{self, TagSource};
         let store = temp_store("tags");
         let cat = Catalog::from_layers([bundled_pack()]);
-        let strike = cat.cards.values().find(|c| c.name == "Strike").unwrap().clone();
+        // A Defend: starter Strikes fill no role, whatever their tags.
+        let strike = cat.cards.values().find(|c| c.name == "Defend").unwrap().clone();
         store.write(MY_TAGS, &format!(r#"{{"{}": ["multi_hit", "no_such_tag"]}}"#, strike.id)).unwrap();
         let loaded = store.load();
         assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);

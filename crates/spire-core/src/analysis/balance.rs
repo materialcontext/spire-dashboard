@@ -20,11 +20,13 @@ use crate::catalog::{Card, CardType, Catalog};
 use crate::playbook::{Playbook, contains_ci};
 use crate::run::{DeckCard, RunState};
 
-/// A store out of balance, in words, with the numbers behind it.
+/// A store out of balance: a short line, and the numbers behind it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Warning {
     pub store: Store,
+    /// Follows the store's name: "piles up: 5 Aim cards for 1 Shoot card".
     pub text: String,
+    pub detail: String,
 }
 
 /// Cards that make a store, and cards that use it.
@@ -74,21 +76,15 @@ pub fn warnings(sim: &DeckSim, state: &RunState, catalog: &Catalog, playbook: &P
             Store::Vigor => ("Vigor card", "attack"),
             _ => ("Stretch card", "Block card"),
         };
-        let text = if users == 0 {
-            format!("{} and no {user}s: the {} is never used", plural(makers, maker), store.label())
+        let used = format!("About {:.1} made a turn, {:.1} used.", f.gained, f.spent);
+        let (text, detail) = if users == 0 {
+            (format!("never used: {}, no {user}s", plural(makers, maker)), used)
         } else if f.spent < f.gained * lines.pile_up || makers as f32 > users as f32 * lines.makers_per_user {
-            format!(
-                "{} piles up: {} for {}; about {:.1} made a turn, {:.1} used",
-                store.label(),
-                plural(makers, maker),
-                plural(users, user),
-                f.gained,
-                f.spent
-            )
+            (format!("piles up: {} for {}", plural(makers, maker), plural(users, user)), used)
         } else {
             continue;
         };
-        out.push(Warning { store, text });
+        out.push(Warning { store, text, detail });
     }
 
     let arrows = sim.stores[Store::Arrows as usize];
@@ -99,10 +95,9 @@ pub fn warnings(sim: &DeckSim, state: &RunState, catalog: &Catalog, playbook: &P
             state.character.as_ref().and_then(|c| catalog.characters.get(c)).and_then(|c| c.arrow_slots).unwrap_or(0);
         out.push(Warning {
             store: Store::Arrows,
-            text: format!(
-                "about 1 shot in {:.0} waits for an Arrow ({}, {}, {:.1} attack hits a turn; a shot \
-                 Arrow returns after {} hits)",
-                (wanted / arrows.waiting).round().max(1.0),
+            text: format!("1 shot in {:.0} waits for an Arrow", (wanted / arrows.waiting).round().max(1.0)),
+            detail: format!(
+                "{}, {}, {:.1} attack hits a turn. A shot Arrow returns after {} hits.",
                 plural(shooters, "Shoot card"),
                 plural(slots as usize, "Arrow slot"),
                 sim.play.hits,
@@ -118,22 +113,20 @@ pub fn warnings(sim: &DeckSim, state: &RunState, catalog: &Catalog, playbook: &P
     if wanted > 0.0 && stars.waiting / wanted >= lines.waiting {
         out.push(Warning {
             store: Store::Stars,
-            text: format!(
-                "Star cards wait for Stars: about {:.1} made a turn, {:.1} spent ({}, {})",
+            text: "Star cards wait for Stars".into(),
+            detail: format!(
+                "About {:.1} made a turn, {:.1} spent; {}, {}.",
                 stars.gained,
                 stars.spent,
-                plural(makers, "card that makes them"),
-                plural(users, "card that spends them")
+                plural(makers, "card makes them"),
+                plural(users, "card spends them")
             ),
         });
     } else if users == 0 && stars.gained >= lines.min_gained {
         out.push(Warning {
             store: Store::Stars,
-            text: format!(
-                "about {:.1} Stars made a turn and nothing in the deck spends them ({})",
-                stars.gained,
-                plural(makers, "card that makes them")
-            ),
+            text: "made, but nothing spends them".into(),
+            detail: format!("About {:.1} a turn from {}.", stars.gained, plural(makers, "card")),
         });
     }
     out
