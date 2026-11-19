@@ -376,12 +376,21 @@
     {
       "role": "fast_damage",
       "when": {
-        "any": [
+        "all": [
           {
-            "total_damage_at_most": 6
+            "any": [
+              {
+                "total_damage_at_most": 6
+              },
+              {
+                "damage_per_energy_at_most": 6
+              }
+            ]
           },
           {
-            "damage_per_energy_at_most": 6
+            "not": {
+              "applies_power": "Vulnerable"
+            }
           }
         ]
       }

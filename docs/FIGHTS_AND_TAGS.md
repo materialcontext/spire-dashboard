@@ -310,7 +310,8 @@ whatever its tags (the playbook's `role_max_cost`); a big Block card can
 still be Survival (from 9 Block, so Leap counts). Intangible and Buffer
 are Survival only, at any cost. Starter Strikes fill no role at all, and a
 card that deals 6 damage or less, or 6 or less per energy, isn't Fast
-Damage (the playbook's `role_exclusions`).
+Damage unless it applies Vulnerable, whose extra damage is presumed to
+make up the difference (Bash); the playbook's `role_exclusions`.
 
 One change from the table below: **Energy gives no role.** Draw and Energy
 keep every role working on bad draws, the note that isn't a role (D2), so

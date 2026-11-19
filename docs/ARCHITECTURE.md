@@ -41,7 +41,8 @@ still there.
 - Cost caps per role (`role_max_cost`): Mitigation is for cards costing 1
   or less.
 - Role exclusions (`role_exclusions`): starter Strikes fill no role; 6
-  damage or less, in all or per energy, isn't Fast Damage.
+  damage or less, in all or per energy, isn't Fast Damage unless the card
+  applies Vulnerable.
 - Per-card tag and role overrides; the player's own overrides of both are
   saved apart (`my_tags.json`, `my_roles.json`).
 - Event opportunity tags.
