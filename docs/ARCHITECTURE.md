@@ -129,7 +129,9 @@ kit, so old runs replay even after a data update.
   the act's (`PRIOR`). `suggest` (in the combat preparation, after the deck
   simulation) gives at most `picks.max`: lines the deck holds part of whose
   missing card is offered often enough this act, ranked by the line's
-  record against the boss being faced when there is one; then `fillers`,
+  record against the boss being faced when there is one (lines on the same
+  held cards within `picks.similar` of the best share one suggestion as
+  options); then `fillers`,
   class cards for the roles the deck lacks against the boss (its outlook's
   limits, then the boss check's gaps), ranked by high-skill card lift and
   kept only when the simulator loses less HP to the boss with them. On

@@ -322,6 +322,11 @@ pub struct PickLines {
     /// The line beats the boss (or the act's bosses) by this much over the
     /// character's decks, in win rate.
     pub min_gain: f32,
+    /// Lines on the same held cards whose gain is within this much of the
+    /// best one's join it as options of one suggestion.
+    pub similar: f32,
+    /// Options one suggestion lists, at most.
+    pub max_options: u32,
     /// Roles the deck lacks against the boss that get a filler, at most.
     pub filler_roles: u32,
     /// Cards tried per role in the simulator, best lift first.
@@ -338,6 +343,8 @@ impl Default for PickLines {
             max_missing: 1,
             min_offered: 0.15,
             min_gain: 0.05,
+            similar: 0.05,
+            max_options: 4,
             filler_roles: 2,
             filler_candidates: 5,
             min_hp_saved: 3,

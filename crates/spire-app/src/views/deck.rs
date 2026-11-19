@@ -359,17 +359,31 @@ fn row_button(text: &str) -> egui::Button<'_> {
 }
 
 fn card_tooltip(ui: &mut Ui, v: &ViewCtx, row: &DeckRow) {
-    match v.catalog.cards.get(&row.card.card) {
+    card_tip(ui, v, &row.card.card, row.card.upgraded, &row.roles, &row.tags);
+}
+
+/// A card's details: name, type, rarity and cost, text, keywords, and its
+/// roles and tags. Shared by every card hover.
+pub fn card_tip(
+    ui: &mut Ui,
+    v: &ViewCtx,
+    id: &spire_core::ids::CardId,
+    upgraded: bool,
+    roles: &[spire_core::playbook::Role],
+    tags: &[Tagged],
+) {
+    match v.catalog.cards.get(id) {
         Some(card) => {
-            ui.label(RichText::new(&row.name).strong());
+            let name = if upgraded { format!("{}+", card.name) } else { card.name.clone() };
+            ui.label(RichText::new(name).strong());
             ui.label(secondary(format!(
                 "{} · {:?} · cost {}",
                 card.card_type.label(),
                 card.rarity,
-                card.cost_label_at(row.card.upgraded)
+                card.cost_label_at(upgraded)
             )));
-            ui.label(card.text_at(row.card.upgraded));
-            let keywords = card.keywords_at(row.card.upgraded);
+            ui.label(card.text_at(upgraded));
+            let keywords = card.keywords_at(upgraded);
             if !keywords.is_empty() {
                 ui.label(RichText::new(keywords.join(" · ")).small().color(info()));
             }
@@ -378,14 +392,14 @@ fn card_tooltip(ui: &mut Ui, v: &ViewCtx, row: &DeckRow) {
             ui.label("Not in the game data");
         }
     }
-    if !row.roles.is_empty() {
+    if !roles.is_empty() {
         ui.add_space(crate::style::space::xs());
-        for r in &row.roles {
+        for r in roles {
             ui.label(RichText::new(r.label()).small().color(style::role_color(*r)));
         }
     }
-    if !row.tags.is_empty() {
-        let tags: Vec<String> = row.tags.iter().map(Tagged::label).collect();
+    if !tags.is_empty() {
+        let tags: Vec<String> = tags.iter().map(Tagged::label).collect();
         ui.label(RichText::new(tags.join(" · ")).small().color(style::tag_color()));
     }
 }
