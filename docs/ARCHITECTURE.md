@@ -45,7 +45,8 @@ still there.
   applies Vulnerable.
 - Per-card tag and role overrides; the player's own overrides of both are
   saved apart (`my_tags.json`, `my_roles.json`).
-- When an event relic is crucial to a deck (`relic_fits`).
+- When a relic is crucial to a deck (`relic_fits`), and what counts as
+  desperately short of Block or max HP (`short`).
 - Per-act targets and thresholds.
 
 None of this is a game fact, so it is kept apart from the catalog. It can be
@@ -111,11 +112,16 @@ kit, so old runs replay even after a data update.
   monsters an on-death power summons (`threats::lineup_waves`) fight as a
   later stage. The lead way loses least HP unless a clocked fight runs past
   the community's pace; `limits` name the roles that would help.
-- `events`: the relic `lookout`: event relics a playbook `relic_fits` rule
-  says are crucial to this deck, from events still possible this act (not
-  seen this run, allowed by the act), with each event's option, whether it
-  gives the relic outright or one of several at random, and how often
-  community runs meet it in this act. Empty unless something qualifies.
+- `events`: the relic `lookout`: relics a playbook `relic_fits` rule says are
+  crucial to this deck, by its cards (one warning per relic) or by a
+  shortfall (Block share or max HP gained, under decks that cleared the
+  previous act by the `short` lines; one warning per shortfall naming every
+  relic that fixes it). Sources are the `?` rooms still possible this act:
+  events (not seen this run, allowed by the act) with the option that gives
+  the relic, and a `?` room turned treasure room, whose chest gives a relic
+  by the act's rarity shares at random among the character's pool. Each
+  carries how often community runs come to it in the act. `fit_holds` is
+  the test, shared with `audit --lookout`. Empty unless something qualifies.
 - `advice`: act targets, boss gaps, area damage and removable curses (run-specific only).
 - `healing`: the rest heal (rules percent plus "heal an additional N" relics); the Ancient heal and starting HP are `GameRules` methods.
 - `tags`: what each card does, in 14 tags (Damage, Chip Damage,
@@ -323,7 +329,11 @@ names (Trash Heap's "random forgotten Relic" is one of five, Doll Room lets
 you choose one of three), and the share of runs that met each event in each
 act (by act id, so Overgrowth and Underdocks stay apart) goes into
 `Event::met`. Relics from the general pools are left out: no one can fish an
-event for them.
+event for them. Per act, it also measures how often a `?` room turns into a
+treasure room (`Act::unknown_treasure`, share of runs) and the rarity of the
+relics treasure rooms give (`Act::chest_rarity`), and `benchmarks.rs` adds
+the max HP decks had gained by the end of each act they cleared
+(`Benchmark::max_hp_gained`).
 
 Results land in `Encounter::lineups`, `spawns` and `stats`. The update reads
 `run_pages` pages (default 3, about 3,000 runs) from the last 14 days, so

@@ -244,6 +244,10 @@ pub(crate) struct WRoom {
     #[serde(deserialize_with = "lenient::ids")]
     pub(crate) monster_ids: Vec<String>,
     pub(crate) turns_taken: Option<u32>,
+    /// What the room turned out to be (a `?` room's event, fight, shop or
+    /// treasure).
+    #[serde(deserialize_with = "lenient::opt_id")]
+    pub(crate) room_type: Option<String>,
 }
 
 #[derive(Deserialize, Default)]

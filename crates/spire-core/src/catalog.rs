@@ -923,6 +923,14 @@ pub struct Act {
     /// Floors whose room never varies, measured from community runs.
     #[serde(default)]
     pub fixed_rooms: Vec<FixedRoom>,
+    /// Share of community runs in which a `?` room turned into a treasure
+    /// room in this act.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unknown_treasure: Option<f32>,
+    /// Share of treasure-room relics of each rarity in this act, from
+    /// community runs.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub chest_rarity: BTreeMap<Rarity, f32>,
 }
 
 /// A floor whose room type is always the same.
@@ -1133,6 +1141,9 @@ pub struct Benchmark {
     pub tags: BTreeMap<crate::analysis::tags::Tag, Quartiles>,
     /// Each role's job (`analysis::jobs::Jobs::value`).
     pub jobs: BTreeMap<crate::playbook::Role, Quartiles>,
+    /// Max HP gained since the start of the run (negative when lost).
+    #[serde(default)]
+    pub max_hp_gained: Quartiles,
 }
 
 impl DataPack {

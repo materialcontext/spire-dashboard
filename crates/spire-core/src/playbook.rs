@@ -268,18 +268,62 @@ impl Default for TagLines {
     }
 }
 
-/// When an event relic is crucial to a deck: it has at least `at_least`
-/// cards matching `cards` (dead cards left out).
+/// When a relic is crucial to a deck, by its cards (`cards`, counted at
+/// `at_least`, dead cards left out), by a shortfall the relic fixes
+/// (`short_of`), or both.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RelicFit {
     pub relic: crate::ids::RelicId,
-    pub cards: Condition,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cards: Option<Condition>,
+    #[serde(default)]
     pub at_least: u32,
-    /// The cards counted, plural ("Powers").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub short_of: Option<Shortfall>,
+    /// The cards counted, plural ("Powers"); unused for a shortfall.
+    #[serde(default)]
     pub what: String,
-    /// What the relic does with them ("each deals 8 damage to ALL enemies
-    /// when played").
+    /// What the relic does for the deck ("each deals 8 damage to ALL
+    /// enemies when played").
     pub why: String,
+}
+
+/// What a deck can be desperately short of, next to decks that cleared
+/// the previous act.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Shortfall {
+    /// Share of the deck that gains Block.
+    Block,
+    /// Max HP gained since the start of the run.
+    MaxHp,
+}
+
+impl Shortfall {
+    pub fn label(self) -> &'static str {
+        match self {
+            Shortfall::Block => "Block",
+            Shortfall::MaxHp => "max HP",
+        }
+    }
+}
+
+/// When a deck counts as desperately short (`analysis::events`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShortLines {
+    /// Block cards under this share of what 3 in 4 decks had entering the
+    /// act (their 25th percentile).
+    pub block_share: f32,
+    /// Max HP gained this many points under what 3 in 4 decks had gained
+    /// entering the act (in act 1: lost since the start).
+    pub max_hp_points: f32,
+}
+
+impl Default for ShortLines {
+    fn default() -> Self {
+        ShortLines { block_share: 0.75, max_hp_points: 5.0 }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -353,9 +397,12 @@ pub struct Playbook {
     #[serde(default)]
     pub multi_enemy_names: Vec<String>,
     pub acts: Vec<ActPlan>,
-    /// When an event relic is worth fishing `?` rooms for.
+    /// When a relic is worth fishing `?` rooms for.
     #[serde(default)]
     pub relic_fits: Vec<RelicFit>,
+    /// When a deck counts as desperately short of Block or max HP.
+    #[serde(default)]
+    pub short: ShortLines,
     #[serde(default)]
     pub simulation: SimAssumptions,
     /// Which roles a relic plays, from what the deck simulator reads in its

@@ -711,8 +711,57 @@
       "at_least": 8,
       "what": "cards that Exhaust",
       "why": "each Exhaust deals 1 damage to a random enemy"
+    },
+    {
+      "relic": "ANCHOR",
+      "short_of": "block",
+      "why": "10 Block at the start of each combat"
+    },
+    {
+      "relic": "HORN_CLEAT",
+      "short_of": "block",
+      "why": "14 Block on turn 2"
+    },
+    {
+      "relic": "ORICHALCUM",
+      "short_of": "block",
+      "why": "6 Block on any turn that ends with none"
+    },
+    {
+      "relic": "CAPTAINS_WHEEL",
+      "short_of": "block",
+      "why": "18 Block on turn 3"
+    },
+    {
+      "relic": "STRAWBERRY",
+      "short_of": "max_hp",
+      "why": "7 max HP"
+    },
+    {
+      "relic": "PEAR",
+      "short_of": "max_hp",
+      "why": "10 max HP"
+    },
+    {
+      "relic": "MANGO",
+      "short_of": "max_hp",
+      "why": "14 max HP"
+    },
+    {
+      "relic": "BIG_MUSHROOM",
+      "short_of": "max_hp",
+      "why": "20 max HP, but 2 fewer cards drawn each combat"
+    },
+    {
+      "relic": "CHOSEN_CHEESE",
+      "short_of": "max_hp",
+      "why": "1 max HP after every combat"
     }
   ],
+  "short": {
+    "block_share": 0.75,
+    "max_hp_points": 5.0
+  },
   "simulation": {
     "hand_size": 5,
     "max_hand": 10,

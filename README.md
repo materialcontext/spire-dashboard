@@ -44,12 +44,16 @@ the card you took, HP and gold after. Then it re-analyses the run.
   you've already had this act are left out, and so is the elite you just
   fought: community runs show neither comes straight back. Each is checked
   against your deck.
-- **Relic lookout**: shown only when a `?` event this act can still give a
-  relic that's crucial to your deck (Lost Wisp with four or more Powers, The
-  Boot with many small hits). It names the event, the option and its cost,
-  whether the relic is given outright or one of several at random, and how
-  often community runs meet the event in this act. Events you've had this
-  run, and those the act doesn't allow, are left out.
+- **Relic lookout**: shown only when a `?` room this act can still give a
+  relic that's crucial to your deck. A relic is crucial when your cards call
+  for it (Lost Wisp with six or more Powers, The Boot with many small hits),
+  or when your deck is desperately short of Block or max HP next to decks
+  that cleared the act before (Orichalcum, Anchor; Strawberry, Pear, Mango).
+  A `?` room is an event or, now and then, a treasure room: the lookout names
+  the event and the option that gives the relic (with its cost), or the
+  treasure room and how often its chest gives one of those relics, and how
+  often community runs come to each in this act. Events you've had this run,
+  and those the act doesn't allow, are left out.
 - **Macro advice** about your run only: role gaps for this act, boss gaps,
   missing area damage and removable curses. There are no general tips.
 - **Enemies seen** this run.
@@ -239,8 +243,9 @@ Everything the dashboard *believes* lives in `data/playbook.json`, not in code:
 - per-card tag and role overrides
 - per-act role targets
 - thresholds for "big hit" and "long fight"
-- when an event relic is crucial to a deck (`relic_fits`: the cards it
-  counts and how many)
+- when a relic is crucial to a deck (`relic_fits`: the cards it counts and
+  how many, or the shortfall it fixes) and when a deck counts as desperately
+  short of Block or max HP (`short`)
 - what the deck simulator assumes where the game data is silent (`simulation`):
   cards drawn per turn, hand limit, turns and fights simulated, and hits that
   bring back a shot Arrow

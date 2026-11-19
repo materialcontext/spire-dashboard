@@ -24,7 +24,7 @@ use crate::run::{NodeKind, RunState};
 
 pub use advice::{Advice, Severity};
 pub use deck::{ClassifiedCard, Coverage, DeckProfile, DeckRow};
-pub use events::{Lookout, Source as RelicSource};
+pub use events::{Lookout, Room as RelicRoom, Source as RelicSource};
 pub use threats::{ThreatPreview, ThreatProfile};
 
 /// Everything the dashboard shows, computed in one pass from a state.
@@ -51,7 +51,7 @@ impl Dashboard {
         let classified = deck::classify_run(state, catalog, playbook);
         let deck = deck::profile(&classified);
         let rows = deck::deck_rows(&classified);
-        let lookout = events::lookout(state, &classified, catalog, playbook);
+        let lookout = events::lookout(state, &classified, &deck, catalog, playbook);
         let bosses = advice::boss_previews(state, catalog, playbook, &deck);
         let advice = advice::advise(state, catalog, playbook, &deck);
         let threats = [NodeKind::Monster, NodeKind::Elite, NodeKind::Boss]

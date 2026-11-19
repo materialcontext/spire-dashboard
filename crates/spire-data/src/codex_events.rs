@@ -1,5 +1,6 @@
-//! Events from the Spire Codex run export: which event relics each event
-//! gave, and how often runs meet each event in each act.
+//! `?` rooms from the Spire Codex run export: which event relics each event
+//! gave, how often runs meet each event in each act, and how often a `?`
+//! room turns into a treasure room, with the rarity of chest relics per act.
 //!
 //! The event endpoint names only some of the relics an event gives (Trash
 //! Heap's "random forgotten Relic" names none). The runs record every relic
@@ -33,6 +34,10 @@ pub struct Sightings {
     pub met: BTreeMap<(String, String), u32>,
     /// Times each event gave each relic.
     pub given: BTreeMap<(String, String), u32>,
+    /// Runs in which a `?` room turned into a treasure room, per act.
+    pub unknown_treasure: BTreeMap<String, u32>,
+    /// Relics taken from treasure rooms (any), per act: `(act, relic)`.
+    pub chest: BTreeMap<(String, String), u32>,
 }
 
 /// Reads single-player, unmodified runs. Bad lines are skipped.
@@ -51,6 +56,19 @@ pub fn sightings(pages: &[String]) -> Sightings {
             }
             *s.runs.entry(act.clone()).or_default() += 1;
             let mut met: BTreeSet<&str> = BTreeSet::new();
+            let mut treasure = false;
+            for p in points {
+                let picked = || p.player_stats.iter().flat_map(|st| &st.relic_choices).filter(|c| c.was_picked);
+                if p.rooms.iter().any(|r| r.room_type.as_deref() == Some("treasure")) {
+                    treasure |= p.map_point_type.as_deref() == Some("unknown");
+                    for c in picked() {
+                        *s.chest.entry((act.clone(), entry(&c.choice).to_string())).or_default() += 1;
+                    }
+                }
+            }
+            if treasure {
+                *s.unknown_treasure.entry(act.clone()).or_default() += 1;
+            }
             for p in points.iter().filter(|p| p.map_point_type.as_deref() != Some("ancient")) {
                 for room in p.rooms.iter().filter(|r| r.model_id.starts_with("EVENT.")) {
                     let event = entry(&room.model_id);
@@ -84,9 +102,26 @@ fn choose_of(text: &str) -> Option<u32> {
     lower.split("choose 1 of ").skip(1).filter_map(|rest| rest.split_whitespace().next()?.parse().ok()).max()
 }
 
-/// Adds the event relics seen given and the share of runs meeting each
-/// event per act. Returns how many events gained a relic.
+/// Adds the event relics seen given, the share of runs meeting each event
+/// per act, and per act how often a `?` room is a treasure room and the
+/// rarity of chest relics. Returns how many events gained a relic.
 pub fn enrich(pack: &mut DataPack, s: &Sightings) -> usize {
+    let rarity: BTreeMap<&str, Rarity> = pack.relics.iter().map(|r| (r.id.0.as_str(), r.rarity)).collect();
+    for act in &mut pack.acts {
+        let id = act.id.0.as_str();
+        let Some(runs) = s.runs.get(id).filter(|n| **n >= MIN_RUNS) else { continue };
+        act.unknown_treasure = Some(s.unknown_treasure.get(id).copied().unwrap_or(0) as f32 / *runs as f32);
+        let mut by_rarity: BTreeMap<Rarity, u32> = BTreeMap::new();
+        for ((a, relic), n) in &s.chest {
+            if let Some(r) = rarity.get(relic.as_str()).filter(|_| a == id) {
+                *by_rarity.entry(*r).or_default() += n;
+            }
+        }
+        let total: u32 = by_rarity.values().sum();
+        if total >= MIN_RUNS {
+            act.chest_rarity = by_rarity.into_iter().map(|(r, n)| (r, n as f32 / total as f32)).collect();
+        }
+    }
     let event_relics: BTreeSet<&str> =
         pack.relics.iter().filter(|r| r.rarity == Rarity::Event).map(|r| r.id.0.as_str()).collect();
     let mut gained = 0;

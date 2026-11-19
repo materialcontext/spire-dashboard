@@ -1037,6 +1037,8 @@ fn map_act(a: WAct) -> Act {
         weak_fights: None,
         length: None,
         fixed_rooms: Vec::new(),
+        unknown_treasure: None,
+        chest_rarity: Default::default(),
     }
 }
 

@@ -3,7 +3,7 @@
 use spire_core::analysis::deck::{Coverage, coverage, deck_profile};
 use spire_core::analysis::events::lookout;
 use spire_core::analysis::threats::next_threats;
-use spire_core::analysis::{Dashboard, Severity, sim, timeline};
+use spire_core::analysis::{Dashboard, RelicRoom, Severity, sim, timeline};
 use spire_core::catalog::*;
 use spire_core::playbook::*;
 use spire_core::run::*;
@@ -155,6 +155,8 @@ fn catalog() -> Catalog {
             weak_fights: None,
             length: None,
             fixed_rooms: Vec::new(),
+            unknown_treasure: None,
+            chest_rarity: Default::default(),
         }],
         ..Default::default()
     };
@@ -340,11 +342,7 @@ fn lookout_names_a_crucial_relic_only_where_this_act_can_give_it() {
     };
     cat.relics.insert(wisp.id.clone(), wisp);
     let pb = playbook();
-    let looks = |run: &Run| {
-        let s = run.state();
-        let deck = spire_core::analysis::deck::classify_run(&s, &cat, &pb);
-        lookout(&s, &deck, &cat, &pb)
-    };
+    let looks = |run: &Run| looks(run, &cat, &pb);
 
     // One Power: not crucial yet.
     let mut run = started(&cat);
@@ -356,10 +354,11 @@ fn lookout_names_a_crucial_relic_only_where_this_act_can_give_it() {
     let l = looks(&run);
     assert_eq!(l.len(), 1);
     assert_eq!(l[0].why, "2 Powers: each hits everyone");
-    let names: Vec<&str> = l[0].sources.iter().map(|s| s.name.as_str()).collect();
-    assert_eq!(names, ["Shrine"]);
+    assert_eq!(l[0].sources.len(), 1, "the Shrine only");
+    let RelicRoom::Event { name, option, .. } = &l[0].sources[0].room else { panic!("an event") };
+    assert_eq!(name, "Shrine");
+    assert_eq!(option.as_ref().map(|(_, text)| text.as_str()), Some("Lose 5 HP. Obtain Wisp."));
     assert_eq!(l[0].sources[0].chance(), Some(0.25));
-    assert_eq!(l[0].sources[0].option_text.as_deref(), Some("Lose 5 HP. Obtain Wisp."));
 
     // Shrine seen this run: nowhere left to find it.
     let mut seen = run.clone();
@@ -374,6 +373,59 @@ fn lookout_names_a_crucial_relic_only_where_this_act_can_give_it() {
     // Already held: nothing to fish for.
     run.push(RunEvent::Adjust(vec![Change::AddRelic(RelicId::new("WISP"))]));
     assert!(looks(&run).is_empty());
+}
+
+fn looks(run: &Run, cat: &Catalog, pb: &Playbook) -> Vec<spire_core::analysis::Lookout> {
+    let s = run.state();
+    let deck = spire_core::analysis::deck::classify_run(&s, cat, pb);
+    let profile = spire_core::analysis::deck::profile(&deck);
+    lookout(&s, &deck, &profile, cat, pb)
+}
+
+#[test]
+fn lookout_warns_of_lost_max_hp_with_the_relics_a_chest_can_give() {
+    let mut cat = catalog();
+    let relic = |id: &str, rarity, pool: &str| Relic {
+        id: RelicId::new(id),
+        name: id.into(),
+        rarity,
+        pool: pool.into(),
+        text: "Upon pickup, raise your Max HP by 10.".into(),
+    };
+    for r in [
+        relic("PEAR", Rarity::Uncommon, "shared"),
+        relic("OTHER", Rarity::Uncommon, "shared"),
+        relic("THEIRS", Rarity::Uncommon, "villain"),
+    ] {
+        cat.relics.insert(r.id.clone(), r);
+    }
+    let act = cat.acts.get_mut(&ActId::new("ACT1")).unwrap();
+    act.unknown_treasure = Some(0.1);
+    act.chest_rarity = [(Rarity::Uncommon, 0.5)].into_iter().collect();
+    let mut pb = playbook();
+    pb.relic_fits.push(RelicFit {
+        relic: RelicId::new("PEAR"),
+        cards: None,
+        at_least: 0,
+        short_of: Some(Shortfall::MaxHp),
+        what: String::new(),
+        why: "raises max HP by 10".into(),
+    });
+
+    let mut run = started(&cat);
+    assert!(looks(&run, &cat, &pb).is_empty(), "nothing lost yet");
+
+    // Act 1 has no earlier decks to compare with: losing max HP is short.
+    run.push(RunEvent::Adjust(vec![Change::SetMaxHp(70)]));
+    let l = looks(&run, &cat, &pb);
+    assert_eq!(l.len(), 1);
+    assert_eq!(l[0].title, "Short of max HP");
+    assert_eq!(l[0].why, "Max HP -10 since the start");
+    let chest = &l[0].sources[0];
+    assert_eq!(chest.room, RelicRoom::Treasure);
+    // A ? room is a treasure room in 1 run in 10; its relic is uncommon
+    // half the time, one of the 2 uncommons this character can get.
+    assert_eq!(chest.chance(), Some(0.1 * 0.5 / 2.0));
 }
 
 #[test]

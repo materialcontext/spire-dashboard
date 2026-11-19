@@ -282,7 +282,8 @@ fn tags(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
 }
 
 fn lookout(cat: &Catalog, pb: &spire_core::Playbook, paths: &[String]) {
-    use spire_core::analysis::deck::classify_run;
+    use spire_core::analysis::deck::{classify_run, profile};
+    use spire_core::analysis::events::fit_holds;
     let mut samples = Vec::new();
     for p in paths {
         let bytes = std::fs::read(p).unwrap_or_else(|e| panic!("{p}: {e}"));
@@ -290,27 +291,31 @@ fn lookout(cat: &Catalog, pb: &spire_core::Playbook, paths: &[String]) {
         samples.extend(spire_data::benchmarks::samples(&text, cat));
     }
     println!("== relic_fits against {} community decks at the end of acts they cleared", samples.len());
+    println!("   (a shortfall is measured against decks that cleared the act before)");
     let mut acts: BTreeMap<u8, usize> = BTreeMap::new();
     for s in &samples {
         *acts.entry(s.act).or_default() += 1;
     }
-    for fit in &pb.relic_fits {
+    let mut hits: BTreeMap<(usize, u8), usize> = BTreeMap::new();
+    for s in &samples {
+        let deck = classify_run(&s.state, cat, pb);
+        let prof = profile(&deck);
+        for (i, fit) in pb.relic_fits.iter().enumerate() {
+            if fit_holds(fit, &s.state, &deck, &prof, cat, pb).is_some() {
+                *hits.entry((i, s.act)).or_default() += 1;
+            }
+        }
+    }
+    for (i, fit) in pb.relic_fits.iter().enumerate() {
         let name = cat.relics.get(&fit.relic).map_or(fit.relic.to_string(), |r| r.name.clone());
-        let mut line = format!("{name:<22} {} {:<34}", fit.at_least, fit.what);
+        let rule = match (fit.short_of, &fit.cards) {
+            (Some(short), _) => format!("short of {}", short.label()),
+            (None, _) => format!("{} {}", fit.at_least, fit.what),
+        };
+        let mut line = format!("{name:<22} {rule:<36}");
         for (act, n) in &acts {
-            let hits = samples
-                .iter()
-                .filter(|s| s.act == *act)
-                .filter(|s| {
-                    let deck = classify_run(&s.state, cat, pb);
-                    let count = deck
-                        .iter()
-                        .filter(|c| c.unmet.is_none() && c.card.is_some_and(|card| fit.cards.matches(card)))
-                        .count();
-                    count as u32 >= fit.at_least
-                })
-                .count();
-            line.push_str(&format!("  act {}: {:>5.1}%", act + 1, hits as f32 * 100.0 / (*n).max(1) as f32));
+            let h = hits.get(&(i, *act)).copied().unwrap_or(0);
+            line.push_str(&format!("  act {}: {:>5.1}%", act + 1, h as f32 * 100.0 / (*n).max(1) as f32));
         }
         println!("{line}");
     }
