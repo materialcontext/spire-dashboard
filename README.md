@@ -62,8 +62,11 @@ the card you took, HP and gold after. Then it re-analyses the run.
   roles its outlook and boss check find missing, your class's cards that
   high-skill players win more with, kept only when the simulator shows the
   deck doing better against the boss with the card (a card that needs a
-  partner, like a Shiv payoff, comes with one). The floor log's card step
-  lists the cards they look for, one click each.
+  partner, like a Shiv payoff, comes with one). Lines on the same cards you
+  hold that do about as well share one entry ("Anger + Setup Strike, Stomp
+  or Rage"). Each entry is the cards and a short label ("Synergy vs
+  Vantom"); hover the label for the numbers and a card for its details. The
+  floor log's card step lists the cards they look for, one click each.
 - **Macro advice** about your run only: role gaps for this act, boss gaps,
   missing area damage and removable curses. There are no general tips.
 - **Enemies seen** this run.

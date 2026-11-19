@@ -40,8 +40,9 @@ fn a_starter_deck_gets_at_most_three_and_fillers_beat_the_boss_better() {
                     "{character}: a filler must do better against the boss"
                 ),
                 Why::Line { .. } => {
-                    assert!(p.cards.iter().any(|(_, held)| *held), "a line is within reach");
-                    assert!(p.missing().count() <= pb.picks.max_missing as usize);
+                    assert!(!p.held.is_empty(), "a line is within reach");
+                    assert!(p.options.iter().all(|o| o.len() <= pb.picks.max_missing as usize));
+                    assert!(p.options.len() <= pb.picks.max_options as usize);
                 }
             }
         }

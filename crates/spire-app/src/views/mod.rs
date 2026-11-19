@@ -218,34 +218,32 @@ pub fn root(
                     culled(&mut cols[0], ("act", g, v.combat.map(|c| c.generation)), |ui| act::show(ui, v, out));
                     cols[0].add_space(GAP);
                     culled(&mut cols[0], ("breakdown", g, v.combat.map(|c| c.generation)), |ui| breakdown::show(ui, v));
-                    if lookout::show(&mut cols[1], v, out) {
-                        cols[1].add_space(GAP);
-                    }
-                    if picks::show(&mut cols[1], v, out) {
-                        cols[1].add_space(GAP);
-                    }
                     if let Some(t) = v.current_fight {
                         threats::current(&mut cols[1], v, t, out);
                         cols[1].add_space(GAP);
                     }
                     culled(&mut cols[1], ("threats", g, st.threat_tab), |ui| threats::show(ui, v, st, out));
+                    cols[1].add_space(GAP);
+                    if lookout::show(&mut cols[1], v, out) {
+                        cols[1].add_space(GAP);
+                    }
+                    picks::show(&mut cols[1], v, out);
                 });
             } else {
                 act::show(ui, v, out);
                 ui.add_space(GAP);
                 breakdown::show(ui, v);
                 ui.add_space(GAP);
-                if lookout::show(ui, v, out) {
-                    ui.add_space(GAP);
-                }
-                if picks::show(ui, v, out) {
-                    ui.add_space(GAP);
-                }
                 if let Some(t) = v.current_fight {
                     threats::current(ui, v, t, out);
                     ui.add_space(GAP);
                 }
                 threats::show(ui, v, st, out);
+                ui.add_space(GAP);
+                if lookout::show(ui, v, out) {
+                    ui.add_space(GAP);
+                }
+                picks::show(ui, v, out);
             }
         });
     });

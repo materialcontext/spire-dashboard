@@ -162,16 +162,22 @@ fn measure_group(character: CharacterId, act: u8, fights: &[&BossFight], offers:
 /// A suggestion for card rewards.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Suggestion {
-    /// The cards, held ones first, with whether the deck has each.
-    pub cards: Vec<(CardId, bool)>,
+    /// Cards the deck has that it builds on (none for a filler).
+    pub held: Vec<CardId>,
+    /// What to look for: any one of these options completes it. An option
+    /// is one card, or a card and the partner it needs. Lines on the same
+    /// held cards that do about as well share one suggestion.
+    pub options: Vec<Vec<CardId>>,
+    /// Why, for the best option.
     pub why: Why,
-    /// Share of community runs offered each missing card in this act.
+    /// Share of community runs offered each card to look for, in this act.
     pub offered: Vec<(CardId, f32)>,
 }
 
 impl Suggestion {
+    /// Every card to look for.
     pub fn missing(&self) -> impl Iterator<Item = &CardId> {
-        self.cards.iter().filter(|(_, held)| !held).map(|(c, _)| c)
+        self.options.iter().flatten()
     }
 }
 
@@ -220,7 +226,7 @@ pub fn lines_within_reach(state: &RunState, catalog: &Catalog, playbook: &Playbo
     let Some(act) = act_lines(state, catalog) else { return Vec::new() };
     let base = rate(act.all);
     let boss = state.boss.as_ref();
-    let mut out: Vec<(f32, Suggestion)> = Vec::new();
+    let mut found: Vec<(f32, f32, Suggestion)> = Vec::new();
     for line in &act.lines {
         let missing: Vec<&CardId> = line.cards.iter().filter(|c| !held(state, c)).collect();
         if missing.is_empty() || missing.len() > lines.max_missing as usize || missing.len() == line.cards.len() {
@@ -247,8 +253,8 @@ pub fn lines_within_reach(state: &RunState, catalog: &Catalog, playbook: &Playbo
         if gain < lines.min_gain {
             continue;
         }
-        let mut cards: Vec<(CardId, bool)> = line.cards.iter().map(|c| (c.clone(), held(state, c))).collect();
-        cards.sort_by_key(|(_, h)| !h);
+        let have: Vec<CardId> = line.cards.iter().filter(|c| held(state, c)).cloned().collect();
+        let option: Vec<CardId> = missing.into_iter().cloned().collect();
         let why = Why::Line {
             together: line.record,
             rate: together,
@@ -256,9 +262,32 @@ pub fn lines_within_reach(state: &RunState, catalog: &Catalog, playbook: &Playbo
             apart: line.apart,
             boss: at_boss.map(|(b, r, rate, _)| (b, r, rate)),
         };
-        out.push((gain * reach, Suggestion { cards, why, offered }));
+        found.push((gain * reach, gain, Suggestion { held: have, options: vec![option], why, offered }));
     }
-    out.sort_by(|a, b| b.0.total_cmp(&a.0));
+    found.sort_by(|a, b| b.0.total_cmp(&a.0));
+    // Lines on the same held cards that do about as well as the best of
+    // them become options of one suggestion.
+    let mut out: Vec<(f32, Suggestion)> = Vec::new();
+    for (_, gain, s) in found {
+        let joins = out.iter_mut().find(|(best, o)| {
+            o.held == s.held && best - gain <= lines.similar && o.options.len() < lines.max_options as usize
+        });
+        match joins {
+            Some((_, o)) => {
+                for option in s.options {
+                    if !o.options.contains(&option) {
+                        o.options.push(option);
+                    }
+                }
+                for (card, share) in s.offered {
+                    if !o.offered.iter().any(|(x, _)| *x == card) {
+                        o.offered.push((card, share));
+                    }
+                }
+            }
+            None => out.push((gain, s)),
+        }
+    }
     out.into_iter().map(|(_, s)| s).collect()
 }
 
@@ -351,8 +380,7 @@ pub fn fillers(
                     verdict_after: after.verdict,
                     lift: catalog.card_lift.get(&card.id).copied(),
                 };
-                best =
-                    Some((saved, Suggestion { cards: cards.into_iter().map(|c| (c, false)).collect(), why, offered }));
+                best = Some((saved, Suggestion { held: Vec::new(), options: vec![cards], why, offered }));
             }
         }
         out.extend(best);
@@ -458,10 +486,37 @@ mod tests {
         state = with_cards(&state, &[CardId::new("A")]);
         let s = lines_within_reach(&state, &catalog, &playbook);
         assert_eq!(s.len(), 1);
-        assert_eq!(s[0].cards, vec![(CardId::new("A"), true), (CardId::new("B"), false)]);
+        assert_eq!(s[0].held, vec![CardId::new("A")]);
+        assert_eq!(s[0].options, vec![vec![CardId::new("B")]]);
         assert_eq!(s[0].offered, vec![(CardId::new("B"), 0.4)]);
         // Both held: nothing left to look for.
         state = with_cards(&state, &[CardId::new("B")]);
         assert!(lines_within_reach(&state, &catalog, &playbook).is_empty());
+    }
+
+    #[test]
+    fn similar_lines_on_the_same_held_card_share_one_suggestion() {
+        let mut f = Vec::new();
+        fights(&mut f, &["A", "B"], 60, 57);
+        fights(&mut f, &["A", "C"], 60, 56);
+        fights(&mut f, &["A"], 60, 36);
+        fights(&mut f, &["B"], 60, 36);
+        fights(&mut f, &["C"], 60, 36);
+        let offers: Offers = [(
+            (CharacterId::new("HERO"), 0),
+            (100, [(CardId::new("B"), 40), (CardId::new("C"), 30)].into_iter().collect()),
+        )]
+        .into_iter()
+        .collect();
+        let catalog = Catalog { card_lines: measure(&f, &offers), ..Default::default() };
+        let playbook: Playbook = serde_json::from_str(r#"{"version": 1, "acts": []}"#).unwrap();
+        let state = with_cards(
+            &RunState { character: Some(CharacterId::new("HERO")), ..Default::default() },
+            &[CardId::new("A")],
+        );
+        let s = lines_within_reach(&state, &catalog, &playbook);
+        assert_eq!(s.len(), 1, "one entry: A with B or C");
+        assert_eq!(s[0].held, vec![CardId::new("A")]);
+        assert_eq!(s[0].options, vec![vec![CardId::new("B")], vec![CardId::new("C")]]);
     }
 }
