@@ -1157,10 +1157,12 @@ fn strikes_and_weak_attacks_are_excluded_from_roles() {
         RoleExclusion {
             role: None,
             when: Condition::All(vec![Condition::Rarity(Rarity::Basic), Condition::SourceTag("Strike".into())]),
+            why: None,
         },
         RoleExclusion {
             role: Some(Role::FastDamage),
             when: Condition::Any(vec![Condition::TotalDamageAtMost(6), Condition::DamagePerEnergyAtMost(6)]),
+            why: None,
         },
     ];
     let attack = |id: &str, cost: u8, damage: u32, hits: u32| {

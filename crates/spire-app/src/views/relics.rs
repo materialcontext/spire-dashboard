@@ -254,7 +254,10 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut RelicBrowser) {
             ui.label(eyebrow("Role"));
             ui.horizontal_wrapped(|ui| {
                 for r in &roles {
-                    crate::widgets::chip(ui, r.label(), style::role_color(*r));
+                    crate::widgets::chip(ui, r.label(), style::role_color(*r)).on_hover_ui(|ui| {
+                        ui.set_max_width(360.0);
+                        ui.label(v.playbook.role_criteria(*r));
+                    });
                 }
             });
         }

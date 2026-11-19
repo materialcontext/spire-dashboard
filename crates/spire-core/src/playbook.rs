@@ -61,6 +61,18 @@ impl Role {
         }
     }
 
+    /// What the role is for, in a line.
+    pub fn purpose(self) -> &'static str {
+        match self {
+            Role::Mitigation => "Absorb steady pressure, turn after turn.",
+            Role::Survival => "Take a spike turn.",
+            Role::FastDamage => "Do most of the work before the fight turns.",
+            Role::ScalingDamage => "Win a long fight.",
+            Role::Aoe => "Handle a group.",
+            Role::Chip => "Wear down an enemy that has to be hit many times.",
+        }
+    }
+
     /// A role by its saved name, old names included: frontload damage is
     /// Fast Damage, both defenses are Mitigation, and consistency is no
     /// role any more (`None`).
@@ -223,6 +235,10 @@ pub struct RoleExclusion {
     #[serde(default)]
     pub role: Option<Role>,
     pub when: Condition,
+    /// The rule in plain words, for tooltips ("is a starter Strike");
+    /// otherwise the condition's own words.
+    #[serde(default)]
+    pub why: Option<String>,
 }
 
 /// A role a tag gives, from its number up ("Block 9+ is Survival").
@@ -593,6 +609,57 @@ impl Playbook {
         matched.sort_by_key(|(r, _)| *r);
         matched.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1);
         matched
+    }
+
+    /// How a card (or relic) gets a role, in words, from the rules as they
+    /// stand: the tags that give it, the other rules, what rules it out,
+    /// and how relics get it. For tooltips on role names.
+    pub fn role_criteria(&self, role: Role) -> String {
+        let mut lines = vec![format!("{}: {}", role.label(), role.purpose())];
+        let tags: Vec<String> = self
+            .tag_roles
+            .iter()
+            .filter(|t| t.role == role)
+            .map(|t| match t.min {
+                0 => t.tag.label().to_string(),
+                1 => format!("{} that deals damage", t.tag.label()),
+                n => format!("{} {n}+", t.tag.label()),
+            })
+            .collect();
+        if !tags.is_empty() {
+            lines.push(format!("A card counts when it has: {}.", tags.join(", ")));
+        }
+        let rules: Vec<String> = self.role_rules.iter().filter(|r| r.role == role).map(|r| r.when.describe()).collect();
+        if !rules.is_empty() {
+            lines.push(format!("Or when it {}.", rules.join("; or ")));
+        }
+        let mut never: Vec<String> = Vec::new();
+        if let Some(max) = self.role_max_cost.get(&role) {
+            never.push(format!("costs more than {max} energy (or X)"));
+        }
+        never.extend(
+            self.role_exclusions
+                .iter()
+                .filter(|x| x.role.is_none_or(|r| r == role))
+                .map(|x| x.why.clone().unwrap_or_else(|| x.when.describe())),
+        );
+        if !never.is_empty() {
+            lines.push(format!("Not when it {}.", never.join("; or ")));
+        }
+        let mut relics: Vec<String> =
+            self.relic_roles.iter().filter(|r| r.role == role).map(|r| r.effect.replace('_', " ")).collect();
+        relics.dedup();
+        relics.extend(
+            self.relic_text_roles
+                .iter()
+                .filter(|r| r.role == role)
+                .flat_map(|r| r.any_text.iter().map(|t| format!("\"{t}\""))),
+        );
+        if !relics.is_empty() {
+            lines.push(format!("Relics count for: {}.", relics.join(", ")));
+        }
+        lines.push("Your own role or tag edits on a card win over all of this.".into());
+        lines.join("\n")
     }
 
     /// The tags that give a role, for "what to look for".

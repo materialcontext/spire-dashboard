@@ -157,6 +157,16 @@ mod tests {
     }
 
     #[test]
+    fn role_criteria_say_how_a_card_gets_each_role() {
+        use spire_core::playbook::Role;
+        let pb = bundled_playbook();
+        let m = pb.role_criteria(Role::Mitigation);
+        assert!(m.contains("Block") && m.contains("costs more than 1 energy"), "{m}");
+        assert!(pb.role_criteria(Role::Survival).contains("Block 9+"));
+        assert!(pb.role_criteria(Role::FastDamage).contains("is a starter Strike"));
+    }
+
+    #[test]
     fn playbook_card_overrides_name_real_cards() {
         let cat = spire_core::Catalog::from_layers([bundled_pack()]);
         let pb = bundled_playbook();

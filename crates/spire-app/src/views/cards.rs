@@ -361,7 +361,12 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut CardBrowser, out: &mut Vec<Actio
     for r in Role::ALL {
         let mut on = edited.contains(&r);
         let label = RichText::new(r.label()).color(style::role_color(r));
-        if ui.checkbox(&mut on, label).changed() {
+        let check = ui.checkbox(&mut on, label);
+        let check = check.on_hover_ui(|ui| {
+            ui.set_max_width(360.0);
+            ui.label(v.playbook.role_criteria(r));
+        });
+        if check.changed() {
             changed = true;
             if on {
                 edited.push(r);
