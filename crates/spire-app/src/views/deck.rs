@@ -21,7 +21,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
     });
     hairline(ui);
     ui.label(caption("Right-click a card to upgrade, enchant or remove it."));
-    strip_key(ui, v);
+    marks_key(ui, v);
 
     // Rows are grouped once per run change (Dashboard::rows), not per frame.
     let mut current = None;
@@ -155,8 +155,8 @@ fn card_row(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
     });
 }
 
-/// The strip's columns, left to right: the six roles, then Draw and
-/// Energy (not roles: they keep every role working on bad draws).
+/// The marks' order, left to right: the six roles, then Draw and Energy
+/// (not roles: they keep every role working on bad draws).
 #[derive(Clone, Copy)]
 enum Slot {
     Role(Role),
@@ -174,21 +174,20 @@ const SLOTS: [Slot; 8] = [
     Slot::Tag(Tag::Energy),
 ];
 
-/// Width of one column, and the gap before Draw and Energy.
+/// Width of one mark.
 const SLOT: f32 = 9.0;
-const SLOT_GAP: f32 = 5.0;
-/// Width kept for a row's buttons, so the strips line up.
+/// Width kept for a row's buttons, so the marks end at the same place.
 const BUTTONS: f32 = 52.0;
-/// The whole right end (strip, gap, buttons) and a little air before it.
-const TRAILING: f32 = 8.0 * SLOT + SLOT_GAP + 6.0 + BUTTONS - 8.0;
+/// Room for every mark.
+const MARKS: f32 = SLOTS.len() as f32 * SLOT;
+/// The whole right end (marks, gap, buttons) and a little air before it.
+const TRAILING: f32 = MARKS + 6.0 + BUTTONS - 3.0;
 
-/// A row's right end at fixed offsets, so every row's strip lines up: the
-/// strip, then the buttons (laid out right to left in a fixed width).
+/// A row's right end at a fixed width: its marks, packed against the
+/// buttons, then the buttons (laid out right to left).
 fn trailing(ui: &mut Ui, v: &ViewCtx, has: impl Fn(Slot) -> bool, add: impl FnOnce(&mut Ui)) {
-    let strip = slot_x(SLOTS.len() - 1) + SLOT;
-    let (rect, _) = ui.allocate_exact_size(vec2(strip + 6.0 + BUTTONS, 24.0), Sense::hover());
-    let strip_rect = egui::Rect::from_min_size(rect.min, vec2(strip, rect.height()));
-    strip_at(ui, strip_rect, v, has);
+    let (rect, _) = ui.allocate_exact_size(vec2(MARKS + 6.0 + BUTTONS, 24.0), Sense::hover());
+    marks_at(ui, egui::Rect::from_min_size(rect.min, vec2(MARKS, rect.height())), v, has);
     let buttons = egui::Rect::from_min_max(egui::pos2(rect.max.x - BUTTONS, rect.min.y), rect.max);
     let mut b =
         ui.new_child(egui::UiBuilder::new().max_rect(buttons).layout(egui::Layout::right_to_left(egui::Align::Center)));
@@ -196,12 +195,8 @@ fn trailing(ui: &mut Ui, v: &ViewCtx, has: impl Fn(Slot) -> bool, add: impl FnOn
     add(&mut b);
 }
 
-fn slot_x(i: usize) -> f32 {
-    i as f32 * SLOT + if i >= 6 { SLOT_GAP } else { 0.0 }
-}
-
-/// One mark system for every row: a fixed strip of columns, a filled square where the card (or relic) has the role or tag. Position says which; colour backs it up. Hover a column for
-/// its name and how a card gets it.
+/// What a card (or relic) has: a square per role, and for Draw and Energy,
+/// coloured by it. Hover a mark for its name and how a card gets it.
 fn has<'a>(roles: &'a [Role], tags: &'a [Tagged]) -> impl Fn(Slot) -> bool + 'a {
     move |s: Slot| match s {
         Slot::Role(r) => roles.contains(&r),
@@ -209,23 +204,31 @@ fn has<'a>(roles: &'a [Role], tags: &'a [Tagged]) -> impl Fn(Slot) -> bool + 'a 
     }
 }
 
-/// Paints the strip into `rect` (no layout of its own: it's on every row).
-fn strip_at(ui: &mut Ui, rect: egui::Rect, v: &ViewCtx, has: impl Fn(Slot) -> bool) {
-    let resp = ui.interact(rect, ui.next_auto_id(), Sense::hover());
-    if ui.is_rect_visible(rect) {
+/// Paints the marks the row has, in [`SLOTS`] order, packed against the
+/// right of `rect` (no layout of its own: it's on every row).
+fn marks_at(ui: &mut Ui, rect: egui::Rect, v: &ViewCtx, has: impl Fn(Slot) -> bool) {
+    let n = SLOTS.iter().filter(|s| has(**s)).count();
+    if n == 0 {
+        return;
+    }
+    let start = rect.max.x - n as f32 * SLOT;
+    let marks = egui::Rect::from_min_max(egui::pos2(start, rect.min.y), rect.max);
+    let resp = ui.interact(marks, ui.next_auto_id(), Sense::hover());
+    let present = || SLOTS.iter().filter(|s| has(**s));
+    if ui.is_rect_visible(marks) {
         let painter = ui.painter();
-        for (i, s) in SLOTS.iter().enumerate().filter(|(_, s)| has(**s)) {
-            let c = egui::pos2(rect.min.x + slot_x(i) + SLOT / 2.0, rect.center().y);
+        for (k, s) in present().enumerate() {
+            let c = egui::pos2(start + k as f32 * SLOT + SLOT / 2.0, rect.center().y);
             painter.rect_filled(egui::Rect::from_center_size(c, vec2(7.0, 7.0)), 0.0, slot_color(*s));
         }
     }
-    // The column under the pointer, named only while hovered.
+    // The mark under the pointer, named only while hovered.
     if let Some(p) = resp.hover_pos() {
-        let i = SLOTS.iter().enumerate().position(|(i, _)| p.x < rect.min.x + slot_x(i) + SLOT);
-        if let Some(i) = i {
+        let k = (((p.x - start) / SLOT) as usize).min(n - 1);
+        if let Some(s) = present().nth(k).copied() {
             resp.on_hover_ui_at_pointer(|ui| {
                 ui.set_max_width(360.0);
-                match SLOTS[i] {
+                match s {
                     Slot::Role(r) => ui.label(v.playbook.role_criteria(r)),
                     Slot::Tag(t) => ui.label(format!(
                         "{}: {}. Not a role: it keeps every role working on bad draws.",
@@ -245,10 +248,10 @@ fn slot_color(s: Slot) -> egui::Color32 {
     }
 }
 
-/// The strip's key, over the deck: every column filled, named on hover.
-fn strip_key(ui: &mut Ui, v: &ViewCtx) {
+/// The marks' key, over the deck: every mark, named on hover.
+fn marks_key(ui: &mut Ui, v: &ViewCtx) {
     ui.horizontal(|ui| {
-        ui.label(caption("Roles")).on_hover_text("One column each, always in this order: Mitigation, Survival, Fast Damage, Scaling Damage, AoE, Chip, then Draw and Energy. Hover a column for how a card gets it.");
+        ui.label(caption("Roles")).on_hover_text("Marks are always in this order: Mitigation, Survival, Fast Damage, Scaling Damage, AoE, Chip, then Draw and Energy. Hover a mark for how a card gets it.");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             trailing(ui, v, |_| true, |_| {});
         });
