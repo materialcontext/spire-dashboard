@@ -233,7 +233,12 @@ files from community exports.
     `SpireApp::apply` like a manual commit, so undo, saving and history
     work unchanged.
   - A finished run (the save disappears and a new `.run` appears) becomes
-    `End` and goes into history.
+    `End` and goes into history, as a victory or a death. When the game
+    looks to be on another run while the followed one isn't over, the app
+    first looks for the followed run's `<start time>.run` in every
+    profile's history: with its save gone, another profile's old save can
+    be the newest. After filing, runs that started before the filed one
+    aren't taken up; the app waits for the next.
 - **The Log panel while monitoring** shows the incoming floors. A **Pause**
   button stops it, and manual logging takes over. If the monitored run and
   the app's run disagree at start (a different seed or character), the app

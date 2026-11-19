@@ -22,6 +22,9 @@ pub struct Status {
     pub conflict: Option<GameRun>,
     /// Runs already filed from the game, so they're not adopted again.
     pub filed: Vec<String>,
+    /// When the last followed run that ended had started: runs that started
+    /// before it are old saves (another profile's), not the next run.
+    pub filed_start: Option<i64>,
     /// Why the game's run isn't being followed, when something stops it.
     pub problem: Option<String>,
     /// Waiting for the next run: the game's latest run ended before we
@@ -32,6 +35,11 @@ pub struct Status {
 /// The app's name for a game run, kept as the followed run's `source`.
 pub fn key(game: &GameRun) -> String {
     format!("game:{}", game.key)
+}
+
+/// When the followed run started, from its key (`game:<start>:<seed>`).
+pub fn followed_start(run: &Run) -> Option<i64> {
+    run.source.as_deref()?.strip_prefix("game:")?.split(':').next()?.parse().ok()
 }
 
 /// The game's run from what the watcher found: the run save (or the last
@@ -62,7 +70,8 @@ pub enum Step {
     Nothing,
     /// The followed run, as the game has it now; file it if it ended.
     Advance { events: Vec<RunEvent>, ended: bool },
-    /// A run that finished before following began: wait for the next.
+    /// A run that finished before following began, or an older run than
+    /// the last one followed: wait for the next.
     Waiting,
     /// The game's run becomes the app's.
     Adopt(GameRun),
@@ -71,14 +80,15 @@ pub enum Step {
 }
 
 /// Decides the step for the game's run against the app's `run`.
-/// `started`: the app's run has begun.
-pub fn step(game: GameRun, run: &Run, started: bool, filed: &[String]) -> Step {
+/// `started`: the app's run has begun. `after`: when the last followed run
+/// that ended had started; older runs aren't taken up.
+pub fn step(game: GameRun, run: &Run, started: bool, filed: &[String], after: Option<i64>) -> Step {
     let key = key(&game);
     if filed.contains(&key) {
         Step::Nothing
     } else if run.source.as_deref() == Some(key.as_str()) {
         Step::Advance { ended: game.ended, events: game.events }
-    } else if game.ended {
+    } else if game.ended || after.zip(game.start_time).is_some_and(|(after, start)| start <= after) {
         Step::Waiting
     } else if !started || run.ended() {
         Step::Adopt(game)
@@ -99,10 +109,24 @@ mod tests {
     fn decides_each_case() {
         let fresh = Run::default();
         let followed = Run { source: Some("game:a".into()), ..Run::default() };
-        assert!(matches!(step(game("a", false), &fresh, false, &[]), Step::Adopt(_)));
-        assert!(matches!(step(game("a", false), &fresh, true, &[]), Step::Conflict(_)));
-        assert_eq!(step(game("a", true), &fresh, false, &[]), Step::Waiting);
-        assert!(matches!(step(game("a", true), &followed, true, &[]), Step::Advance { ended: true, .. }));
-        assert_eq!(step(game("a", true), &followed, true, &["game:a".into()]), Step::Nothing);
+        assert!(matches!(step(game("a", false), &fresh, false, &[], None), Step::Adopt(_)));
+        assert!(matches!(step(game("a", false), &fresh, true, &[], None), Step::Conflict(_)));
+        assert_eq!(step(game("a", true), &fresh, false, &[], None), Step::Waiting);
+        assert!(matches!(step(game("a", true), &followed, true, &[], None), Step::Advance { ended: true, .. }));
+        assert_eq!(step(game("a", true), &followed, true, &["game:a".into()], None), Step::Nothing);
+    }
+
+    #[test]
+    fn after_a_run_ends_older_saves_are_not_taken_up() {
+        let fresh = Run::default();
+        let at = |start: i64| GameRun { start_time: Some(start), ..game("x", false) };
+        // Another profile's old save, started before the run just filed.
+        assert_eq!(step(at(100), &fresh, false, &[], Some(200)), Step::Waiting);
+        // The next run, started after it.
+        assert!(matches!(step(at(300), &fresh, false, &[], Some(200)), Step::Adopt(_)));
+        assert_eq!(
+            followed_start(&Run { source: Some("game:1700000000:SEED".into()), ..Run::default() }),
+            Some(1_700_000_000)
+        );
     }
 }

@@ -732,7 +732,12 @@ impl SpireApp {
             Err(problem) => return self.follow_problem(problem),
         };
         self.follow_problem(None);
-        match crate::follow::step(game, &self.run, self.state.started(), &self.ui.follow.filed) {
+        // The game on another run while ours isn't over: ours may have just
+        // ended (the game drops its save and files it in history), leaving
+        // another profile's save as the newest. File ours first.
+        let game = self.finished_followed(&game).unwrap_or(game);
+        let after = self.ui.follow.filed_start;
+        match crate::follow::step(game, &self.run, self.state.started(), &self.ui.follow.filed, after) {
             Step::Nothing => {}
             Step::Advance { events, ended } => {
                 if self.run.events != events {
@@ -783,9 +788,24 @@ impl SpireApp {
         }
     }
 
+    /// The followed run as the game filed it in history, when the game is on
+    /// another run and ours isn't over: its finished file (named by its start
+    /// time) in any profile, read and ended.
+    fn finished_followed(&self, game: &spire_data::game_run::GameRun) -> Option<spire_data::game_run::GameRun> {
+        let source = self.run.source.as_deref()?;
+        if self.run.ended() || crate::follow::key(game) == source {
+            return None;
+        }
+        let start = crate::follow::followed_start(&self.run)?;
+        let json = spire_data::game_link::find_finished(&spire_data::game_link::game_dir()?, start)?;
+        let done = spire_data::game_run::read(&json, &self.catalog, &Default::default()).ok()?;
+        (done.ended && crate::follow::key(&done) == source).then_some(done)
+    }
+
     /// The followed run has ended in the game: file it in history.
     fn file_followed(&mut self) {
         self.ui.follow.filed.extend(self.run.source.clone());
+        self.ui.follow.filed_start = crate::follow::followed_start(&self.run).or(self.ui.follow.filed_start);
         match self.store.archive_run(&self.run) {
             Ok(_) => self.note("The game's run ended; saved to history."),
             Err(e) => self.note(format!("Could not save the run to history: {e}")),
