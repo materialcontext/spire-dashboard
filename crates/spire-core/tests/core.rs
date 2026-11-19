@@ -1,7 +1,7 @@
 //! Behavior tests for the core, on small hand-built fixtures.
 
 use spire_core::analysis::deck::{Coverage, coverage, deck_profile};
-use spire_core::analysis::events::{needs, watchlist};
+use spire_core::analysis::events::lookout;
 use spire_core::analysis::threats::next_threats;
 use spire_core::analysis::{Dashboard, Severity, sim, timeline};
 use spire_core::catalog::*;
@@ -125,14 +125,22 @@ fn catalog() -> Catalog {
                 name: "Shrine".into(),
                 kind: EventKind::Act,
                 acts: vec![ActId::new("ACT1")],
-                options: vec![EventOption { title: "Pray".into(), text: "Remove a card from your deck.".into() }],
+                options: vec![EventOption { title: "Pray".into(), text: "Lose 5 HP. Obtain Wisp.".into() }],
+                requires: vec![],
+                act_span: None,
+                relics: vec![EventRelic { relic: RelicId::new("WISP"), option: Some("Pray".into()), one_of: 1 }],
+                met: [(ActId::new("ACT1"), 0.25)].into_iter().collect(),
             },
             Event {
                 id: EventId::new("FOUNTAIN"),
                 name: "Fountain".into(),
                 kind: EventKind::Shared,
                 acts: vec![],
-                options: vec![EventOption { title: "Drink".into(), text: "Heal 10 HP.".into() }],
+                options: vec![EventOption { title: "Drink".into(), text: "Heal 10 HP. Obtain Wisp.".into() }],
+                requires: vec!["Act 2 only".into()],
+                act_span: Some((1, 1)),
+                relics: vec![EventRelic { relic: RelicId::new("WISP"), option: Some("Drink".into()), one_of: 1 }],
+                met: Default::default(),
             },
         ],
         acts: vec![Act {
@@ -163,10 +171,6 @@ fn playbook() -> Playbook {
         { "role": "aoe", "when": { "all": ["has_damage", { "target": "all_enemies" }] } }
       ],
       "multi_enemy_names": ["pair"],
-      "opportunity_rules": [
-        { "opportunity": "card_removal", "any_text": ["remove"] },
-        { "opportunity": "heal", "any_text": ["heal"] }
-      ],
       "acts": [{
         "index": 0, "weak_fights": 1,
         "targets": [
@@ -175,7 +179,9 @@ fn playbook() -> Playbook {
         "big_hit": 25,
         "long_fight_hp": { "monster": 100, "elite": 150, "boss": 250 }
       }],
-      "needs": { "low_hp": 0.5, "starter_cards": 2, "low_upgrades": 0.25 }
+      "relic_fits": [
+        { "relic": "WISP", "cards": { "card_type": "power" }, "at_least": 2, "what": "Powers", "why": "each hits everyone" }
+      ]
     }"#;
     serde_json::from_str(json).expect("test playbook parses")
 }
@@ -323,20 +329,51 @@ fn elite_and_boss_threats_read_damage_and_hp() {
 }
 
 #[test]
-fn watchlist_ranks_events_by_needs() {
-    let cat = catalog();
+fn lookout_names_a_crucial_relic_only_where_this_act_can_give_it() {
+    let mut cat = catalog();
+    let wisp = Relic {
+        id: RelicId::new("WISP"),
+        name: "Wisp".into(),
+        rarity: Rarity::Event,
+        pool: "shared".into(),
+        text: "Whenever you play a Power, deal 8 damage to ALL enemies.".into(),
+    };
+    cat.relics.insert(wisp.id.clone(), wisp);
     let pb = playbook();
-    let mut run = started(&cat);
-    run.push(RunEvent::Adjust(vec![Change::AddCard(DeckCard::new("REGRET".into())), Change::SetHp(20)]));
-    let s = run.state();
-    let deck = deck_profile(&s.deck, &cat, &pb);
-    let wants = needs(&s, &deck, &pb);
-    assert!(wants.iter().any(|n| n.opportunity == Opportunity::CardRemoval));
-    assert!(wants.iter().any(|n| n.opportunity == Opportunity::Heal));
+    let looks = |run: &Run| {
+        let s = run.state();
+        let deck = spire_core::analysis::deck::classify_run(&s, &cat, &pb);
+        lookout(&s, &deck, &cat, &pb)
+    };
 
-    let list = watchlist(&s, &cat, &pb, &wants);
-    assert_eq!(list.len(), 2, "act event plus shared event");
-    assert!(list.iter().all(|e| e.score > 0));
+    // One Power: not crucial yet.
+    let mut run = started(&cat);
+    run.push(RunEvent::Adjust(vec![Change::AddCard(DeckCard::new("INFLAME".into()))]));
+    assert!(looks(&run).is_empty());
+
+    // Two: the act-1 Shrine gives it; the Fountain is act 2 only.
+    run.push(RunEvent::Adjust(vec![Change::AddCard(DeckCard::new("INFLAME".into()))]));
+    let l = looks(&run);
+    assert_eq!(l.len(), 1);
+    assert_eq!(l[0].why, "2 Powers: each hits everyone");
+    let names: Vec<&str> = l[0].sources.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, ["Shrine"]);
+    assert_eq!(l[0].sources[0].chance(), Some(0.25));
+    assert_eq!(l[0].sources[0].option_text.as_deref(), Some("Lose 5 HP. Obtain Wisp."));
+
+    // Shrine seen this run: nowhere left to find it.
+    let mut seen = run.clone();
+    seen.push(RunEvent::Node(NodeReport {
+        kind: NodeKind::Unknown,
+        encounter: None,
+        event: Some(EventId::new("SHRINE")),
+        changes: vec![],
+    }));
+    assert!(looks(&seen).is_empty());
+
+    // Already held: nothing to fish for.
+    run.push(RunEvent::Adjust(vec![Change::AddRelic(RelicId::new("WISP"))]));
+    assert!(looks(&run).is_empty());
 }
 
 #[test]
@@ -476,30 +513,19 @@ fn with_eternal_curse(mut cat: Catalog) -> Catalog {
 }
 
 #[test]
-fn eternal_curses_never_drive_removal_or_transform() {
-    use spire_core::analysis::events::needs;
+fn eternal_curses_count_apart_from_removable_ones() {
     let cat = with_eternal_curse(catalog());
-    let mut pb = playbook();
-    pb.needs.starter_cards = 99; // isolate curses from the starter-card rule
+    let pb = playbook();
     let mut run = started(&cat);
     run.push(RunEvent::Adjust(vec![Change::AddCard(DeckCard::new("BANE".into()))]));
     let s = run.state();
     let deck = deck_profile(&s.deck, &cat, &pb);
     assert_eq!((deck.eternal, deck.removable_curses, deck.dead), (1, 0, 1));
-    let wants = needs(&s, &deck, &pb);
-    assert!(
-        !wants.iter().any(|n| matches!(n.opportunity, Opportunity::CardRemoval | Opportunity::Transform)),
-        "an eternal curse alone must not ask for removal: {wants:?}"
-    );
 
-    // A removable curse still does.
     run.push(RunEvent::Adjust(vec![Change::AddCard(DeckCard::new("REGRET".into()))]));
     let s = run.state();
     let deck = deck_profile(&s.deck, &cat, &pb);
     assert_eq!(deck.removable_curses, 1);
-    let wants = needs(&s, &deck, &pb);
-    let removal = wants.iter().find(|n| n.opportunity == Opportunity::CardRemoval).unwrap();
-    assert!(removal.reason.starts_with("1 removable"), "{}", removal.reason);
 }
 
 #[test]

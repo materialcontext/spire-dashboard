@@ -860,6 +860,41 @@ pub struct Event {
     pub acts: Vec<ActId>,
     #[serde(default)]
     pub options: Vec<EventOption>,
+    /// What the game checks before offering it, as the data words it
+    /// ("Act 2 only", "Requires 150+ gold").
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requires: Vec<String>,
+    /// The 0-based acts it's limited to (first, last), read from
+    /// `requires`; `None` when any act will do.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub act_span: Option<(u8, u8)>,
+    /// Event relics it can give: named in an option, or seen given in
+    /// community runs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relics: Vec<EventRelic>,
+    /// Share of community runs that met it in each act they played.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub met: BTreeMap<ActId, f32>,
+}
+
+impl Event {
+    /// Whether it can appear in an act with this 0-based index, by its
+    /// `requires` (its act list is checked by [`Catalog::events_in`]).
+    pub fn in_act_index(&self, index: u8) -> bool {
+        self.act_span.is_none_or(|(first, last)| (first..=last).contains(&index))
+    }
+}
+
+/// A relic an event gives.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EventRelic {
+    pub relic: RelicId,
+    /// The option that gives it, when one names it (or lets you choose it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub option: Option<String>,
+    /// It's one of this many the event gives at random; 1 when an option
+    /// gives it outright or lets you choose it.
+    pub one_of: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1235,12 +1270,16 @@ impl Catalog {
     }
 
     /// Non-ancient events that can appear in an act: the act's own events
-    /// plus shared ones.
+    /// plus shared ones the act's number allows.
     pub fn events_in<'a>(&'a self, act: &'a ActId) -> impl Iterator<Item = &'a Event> + 'a {
-        self.events.values().filter(move |e| match e.kind {
-            EventKind::Shared => true,
-            EventKind::Act => e.acts.is_empty() || e.acts.contains(act),
-            EventKind::Ancient => false,
+        let index = self.acts.get(act).map(|a| a.index);
+        self.events.values().filter(move |e| {
+            let listed = match e.kind {
+                EventKind::Shared => true,
+                EventKind::Act => e.acts.is_empty() || e.acts.contains(act),
+                EventKind::Ancient => false,
+            };
+            listed && index.is_none_or(|i| e.in_act_index(i))
         })
     }
 }

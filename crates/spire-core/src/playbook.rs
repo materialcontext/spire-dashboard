@@ -1,8 +1,9 @@
 //! Strategy knowledge, kept as data.
 //!
 //! The playbook is everything the dashboard *believes* about good play: how to
-//! classify a card's deck role, what each act demands, which event options are
-//! opportunities, and the thresholds that turn monster stats into threats.
+//! classify a card's deck role, what each act demands, which event relics are
+//! crucial to which decks, and the thresholds that turn monster stats into
+//! threats.
 //! It ships as `data/playbook.json` and can be overridden by the user without
 //! touching code. Nothing here is a game fact; facts live in the catalog.
 
@@ -267,59 +268,18 @@ impl Default for TagLines {
     }
 }
 
-/// What an event option can give (or cost) the player.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Opportunity {
-    CardRemoval,
-    Upgrade,
-    Transform,
-    Enchant,
-    NewCard,
-    Relic,
-    Potion,
-    Gold,
-    MaxHp,
-    Heal,
-    Fight,
-    CurseRisk,
-    HpCost,
-    #[serde(other)]
-    Other,
-}
-
-impl Opportunity {
-    pub fn label(self) -> &'static str {
-        match self {
-            Opportunity::CardRemoval => "Card removal",
-            Opportunity::Upgrade => "Upgrade",
-            Opportunity::Transform => "Transform",
-            Opportunity::Enchant => "Enchant",
-            Opportunity::NewCard => "New card",
-            Opportunity::Relic => "Relic",
-            Opportunity::Potion => "Potion",
-            Opportunity::Gold => "Gold",
-            Opportunity::MaxHp => "Max HP",
-            Opportunity::Heal => "Heal",
-            Opportunity::Fight => "Fight",
-            Opportunity::CurseRisk => "Curse risk",
-            Opportunity::HpCost => "HP cost",
-            Opportunity::Other => "Other",
-        }
-    }
-
-    /// Costs rather than rewards.
-    pub fn is_risk(self) -> bool {
-        matches!(self, Opportunity::CurseRisk | Opportunity::HpCost)
-    }
-}
-
-/// Tags an event option with an opportunity when its text contains any of
-/// the given phrases (case-insensitive).
+/// When an event relic is crucial to a deck: it has at least `at_least`
+/// cards matching `cards` (dead cards left out).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct OpportunityRule {
-    pub opportunity: Opportunity,
-    pub any_text: Vec<String>,
+pub struct RelicFit {
+    pub relic: crate::ids::RelicId,
+    pub cards: Condition,
+    pub at_least: u32,
+    /// The cards counted, plural ("Powers").
+    pub what: String,
+    /// What the relic does with them ("each deals 8 damage to ALL enemies
+    /// when played").
+    pub why: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -350,17 +310,6 @@ pub struct RoomThresholds {
     pub monster: u32,
     pub elite: u32,
     pub boss: u32,
-}
-
-/// Thresholds for reading the run state into needs.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct NeedThresholds {
-    /// HP fraction below which healing is a priority.
-    pub low_hp: f32,
-    /// Starter Strikes/Defends at or above which removal is a priority.
-    pub starter_cards: u32,
-    /// Fraction of upgraded cards below which upgrades are a priority.
-    pub low_upgrades: f32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -403,9 +352,10 @@ pub struct Playbook {
     /// list each distinct monster once, so `Many Corpse Slugs` looks like one.
     #[serde(default)]
     pub multi_enemy_names: Vec<String>,
-    pub opportunity_rules: Vec<OpportunityRule>,
     pub acts: Vec<ActPlan>,
-    pub needs: NeedThresholds,
+    /// When an event relic is worth fishing `?` rooms for.
+    #[serde(default)]
+    pub relic_fits: Vec<RelicFit>,
     #[serde(default)]
     pub simulation: SimAssumptions,
     /// Which roles a relic plays, from what the deck simulator reads in its
@@ -694,18 +644,5 @@ impl Playbook {
 
     pub fn sounds_like_group(&self, encounter_name: &str) -> bool {
         self.multi_enemy_names.iter().any(|w| contains_ci(encounter_name, w))
-    }
-
-    /// Opportunities found in a piece of event text.
-    pub fn opportunities_in(&self, text: &str) -> Vec<Opportunity> {
-        let mut found: Vec<Opportunity> = self
-            .opportunity_rules
-            .iter()
-            .filter(|r| r.any_text.iter().any(|p| contains_ci(text, p)))
-            .map(|r| r.opportunity)
-            .collect();
-        found.sort();
-        found.dedup();
-        found
     }
 }

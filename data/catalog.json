@@ -38519,7 +38519,10 @@
           "title": "Abstain",
           "text": "Heal 10 HP."
         }
-      ]
+      ],
+      "met": {
+        "UNDERDOCKS": 0.1170336
+      }
     },
     {
       "id": "AMALGAMATOR",
@@ -38537,7 +38540,14 @@
           "title": "Combine Defends",
           "text": "Remove 2 Defends. Add Ultimate Defend to your Deck."
         }
-      ]
+      ],
+      "requires": [
+        "Requires 2+ Strikes in deck",
+        "Requires 2+ Defends in deck"
+      ],
+      "met": {
+        "HIVE": 0.0636663
+      }
     },
     {
       "id": "AROMA_OF_CHAOS",
@@ -38555,7 +38565,10 @@
           "title": "Maintain Control",
           "text": "Upgrade a card in your Deck."
         }
-      ]
+      ],
+      "met": {
+        "OVERGROWTH": 0.10330138
+      }
     },
     {
       "id": "BATTLEWORN_DUMMY",
@@ -38577,7 +38590,10 @@
           "title": "Setting 3",
           "text": "Fight a 300 HP dummy. Obtain a random Relic."
         }
-      ]
+      ],
+      "met": {
+        "GLORY": 0.14398421
+      }
     },
     {
       "id": "BRAIN_LEECH",
@@ -38593,7 +38609,19 @@
           "title": "Rip the Leech Off",
           "text": "Lose 5 HP. Gain a Colorless card reward."
         }
-      ]
+      ],
+      "requires": [
+        "Act 1–2 only"
+      ],
+      "act_span": [
+        0,
+        1
+      ],
+      "met": {
+        "HIVE": 0.07903403,
+        "OVERGROWTH": 0.10117146,
+        "UNDERDOCKS": 0.13093859
+      }
     },
     {
       "id": "BUGSLAYER",
@@ -38611,7 +38639,10 @@
           "title": "Learn Squash Technique",
           "text": "Add Squash to your Deck."
         }
-      ]
+      ],
+      "met": {
+        "HIVE": 0.08122942
+      }
     },
     {
       "id": "BYRDONIS_NEST",
@@ -38629,7 +38660,13 @@
           "title": "Take the Egg",
           "text": "Add Byrdonis Egg to your Deck."
         }
-      ]
+      ],
+      "requires": [
+        "Cannot have an event pet"
+      ],
+      "met": {
+        "OVERGROWTH": 0.08839191
+      }
     },
     {
       "id": "COLORFUL_PHILOSOPHERS",
@@ -38663,7 +38700,10 @@
           "title": "Green",
           "text": "Obtain 3 Silent cards."
         }
-      ]
+      ],
+      "met": {
+        "HIVE": 0.07354555
+      }
     },
     {
       "id": "COLOSSAL_FLOWER",
@@ -38681,7 +38721,20 @@
           "title": "Reach Deeper",
           "text": "Enter deeper. Lose 5 HP."
         }
-      ]
+      ],
+      "requires": [
+        "Requires 19+ HP"
+      ],
+      "relics": [
+        {
+          "relic": "POLLINOUS_CORE",
+          "option": "Enter the Center",
+          "one_of": 1
+        }
+      ],
+      "met": {
+        "HIVE": 0.094401754
+      }
     },
     {
       "id": "CRYSTAL_SPHERE",
@@ -38697,7 +38750,19 @@
           "title": "Payment Plan",
           "text": "Gain a Debt. Divine 6 times."
         }
-      ]
+      ],
+      "requires": [
+        "Requires 100+ gold",
+        "Act 2+"
+      ],
+      "act_span": [
+        1,
+        255
+      ],
+      "met": {
+        "GLORY": 0.09664694,
+        "HIVE": 0.07793634
+      }
     },
     {
       "id": "DARV",
@@ -38722,7 +38787,10 @@
           "title": "Rest",
           "text": "Heal 30% Max HP. Fight some enemies."
         }
-      ]
+      ],
+      "met": {
+        "OVERGROWTH": 0.10969116
+      }
     },
     {
       "id": "DOLL_ROOM",
@@ -38742,7 +38810,34 @@
           "title": "Examine Each and Make the Best Choice",
           "text": "Lose 15 HP. Choose 1 of 3 Doll Relics."
         }
-      ]
+      ],
+      "requires": [
+        "Act 2 only"
+      ],
+      "act_span": [
+        1,
+        1
+      ],
+      "relics": [
+        {
+          "relic": "BING_BONG",
+          "option": "Examine Each and Make the Best Choice",
+          "one_of": 1
+        },
+        {
+          "relic": "DAUGHTER_OF_THE_WIND",
+          "option": "Examine Each and Make the Best Choice",
+          "one_of": 1
+        },
+        {
+          "relic": "MR_STRUGGLES",
+          "option": "Examine Each and Make the Best Choice",
+          "one_of": 1
+        }
+      ],
+      "met": {
+        "HIVE": 0.08781559
+      }
     },
     {
       "id": "DOORS_OF_LIGHT_AND_DARK",
@@ -38760,7 +38855,10 @@
           "title": "Dark Door",
           "text": "Remove 1 card from your Deck."
         }
-      ]
+      ],
+      "met": {
+        "UNDERDOCKS": 0.1216686
+      }
     },
     {
       "id": "DROWNING_BEACON",
@@ -38778,7 +38876,17 @@
           "title": "Climb",
           "text": "Obtain Fresnel Lens. Lose 13 Max HP."
         }
-      ]
+      ],
+      "relics": [
+        {
+          "relic": "FRESNEL_LENS",
+          "option": "Climb",
+          "one_of": 1
+        }
+      ],
+      "met": {
+        "UNDERDOCKS": 0.12282734
+      }
     },
     {
       "id": "ENDLESS_CONVEYOR",
@@ -38792,14 +38900,75 @@
           "title": "Observe the Chef",
           "text": "Upgrade a random card in your Deck."
         }
-      ]
+      ],
+      "requires": [
+        "Requires 120+ gold"
+      ],
+      "met": {
+        "UNDERDOCKS": 0.064889915
+      }
     },
     {
       "id": "FAKE_MERCHANT",
       "name": "The Merchant???",
       "kind": "shared",
       "acts": [],
-      "options": []
+      "options": [],
+      "requires": [
+        "Act 2+",
+        "Single player only",
+        "Requires 100+ gold or a Foul Potion"
+      ],
+      "act_span": [
+        1,
+        255
+      ],
+      "relics": [
+        {
+          "relic": "FAKE_ANCHOR",
+          "one_of": 10
+        },
+        {
+          "relic": "FAKE_BLOOD_VIAL",
+          "one_of": 10
+        },
+        {
+          "relic": "FAKE_HAPPY_FLOWER",
+          "one_of": 10
+        },
+        {
+          "relic": "FAKE_LEES_WAFFLE",
+          "one_of": 10
+        },
+        {
+          "relic": "FAKE_MANGO",
+          "one_of": 10
+        },
+        {
+          "relic": "FAKE_MERCHANTS_RUG",
+          "one_of": 10
+        },
+        {
+          "relic": "FAKE_ORICHALCUM",
+          "one_of": 10
+        },
+        {
+          "relic": "FAKE_SNECKO_EYE",
+          "one_of": 10
+        },
+        {
+          "relic": "FAKE_STRIKE_DUMMY",
+          "one_of": 10
+        },
+        {
+          "relic": "FAKE_VENERABLE_TEA_SET",
+          "one_of": 10
+        }
+      ],
+      "met": {
+        "GLORY": 0.09270217,
+        "HIVE": 0.04829857
+      }
     },
     {
       "id": "FIELD_OF_MAN_SIZED_HOLES",
@@ -38817,7 +38986,10 @@
           "title": "Enter Your Hole",
           "text": "Enchant a card with Perfect Fit."
         }
-      ]
+      ],
+      "met": {
+        "HIVE": 0.09001098
+      }
     },
     {
       "id": "GRAVE_OF_THE_FORGOTTEN",
@@ -38839,7 +39011,17 @@
           "title": "Accept the Forgotten Soul",
           "text": "Obtain Forgotten Soul."
         }
-      ]
+      ],
+      "relics": [
+        {
+          "relic": "FORGOTTEN_SOUL",
+          "option": "Accept the Forgotten Soul",
+          "one_of": 1
+        }
+      ],
+      "met": {
+        "GLORY": 0.112426035
+      }
     },
     {
       "id": "HUNGRY_FOR_MUSHROOMS",
@@ -38857,7 +39039,22 @@
           "title": "Fragrant Mushroom",
           "text": "Obtain Fragrant Mushroom. Upon pickup, lose 15 HP and Upgrade 2 random cards."
         }
-      ]
+      ],
+      "relics": [
+        {
+          "relic": "BIG_MUSHROOM",
+          "option": "Big Mushroom",
+          "one_of": 1
+        },
+        {
+          "relic": "FRAGRANT_MUSHROOM",
+          "option": "Fragrant Mushroom",
+          "one_of": 1
+        }
+      ],
+      "met": {
+        "GLORY": 0.1459566
+      }
     },
     {
       "id": "INFESTED_AUTOMATON",
@@ -38875,7 +39072,10 @@
           "title": "Touch the Core",
           "text": "Obtain a random 0 cost card."
         }
-      ]
+      ],
+      "met": {
+        "HIVE": 0.09330406
+      }
     },
     {
       "id": "JUNGLE_MAZE_ADVENTURE",
@@ -38893,7 +39093,10 @@
           "title": "Join Forces",
           "text": "Gain 35-65 Gold."
         }
-      ]
+      ],
+      "met": {
+        "OVERGROWTH": 0.09371672
+      }
     },
     {
       "id": "LOST_WISP",
@@ -38911,7 +39114,17 @@
           "title": "Search the Nearby Area",
           "text": "Gain 45-75 Gold."
         }
-      ]
+      ],
+      "relics": [
+        {
+          "relic": "LOST_WISP",
+          "option": "Capture the Wisp",
+          "one_of": 1
+        }
+      ],
+      "met": {
+        "HIVE": 0.06915478
+      }
     },
     {
       "id": "LUMINOUS_CHOIR",
@@ -38933,7 +39146,13 @@
           "title": "Locked",
           "text": "Requires 100-149 Gold."
         }
-      ]
+      ],
+      "requires": [
+        "Requires 100-149 gold"
+      ],
+      "met": {
+        "OVERGROWTH": 0.02768903
+      }
     },
     {
       "id": "MORPHIC_GROVE",
@@ -38951,7 +39170,13 @@
           "title": "Loner",
           "text": "Gain 5 Max HP."
         }
-      ]
+      ],
+      "requires": [
+        "Requires 100+ gold"
+      ],
+      "met": {
+        "OVERGROWTH": 0.060702875
+      }
     },
     {
       "id": "MUSEUM_OF_TORTURE",
@@ -38963,6 +39188,13 @@
           "title": "Continue",
           "text": ""
         }
+      ],
+      "requires": [
+        "Act 2 only"
+      ],
+      "act_span": [
+        1,
+        1
       ]
     },
     {
@@ -39016,7 +39248,18 @@
           "title": "Ransack",
           "text": "Procure 1 random Uncommon Potion."
         }
-      ]
+      ],
+      "requires": [
+        "Act 2+"
+      ],
+      "act_span": [
+        1,
+        255
+      ],
+      "met": {
+        "GLORY": 0.09270217,
+        "HIVE": 0.094401754
+      }
     },
     {
       "id": "PUNCH_OFF",
@@ -39034,7 +39277,10 @@
           "title": "I Can Take Them",
           "text": "Fight them for Greater Rewards."
         }
-      ]
+      ],
+      "met": {
+        "UNDERDOCKS": 0.042873695
+      }
     },
     {
       "id": "RANWID_THE_ELDER",
@@ -39062,7 +39308,19 @@
           "title": "Locked",
           "text": "You don't have any Relics that can be given."
         }
-      ]
+      ],
+      "requires": [
+        "Act 2+",
+        "Requires at least one potion"
+      ],
+      "act_span": [
+        1,
+        255
+      ],
+      "met": {
+        "GLORY": 0.078895465,
+        "HIVE": 0.062568605
+      }
     },
     {
       "id": "REFLECTIONS",
@@ -39080,7 +39338,10 @@
           "title": "Shatter",
           "text": "Duplicate your Deck. Receive Bad Luck."
         }
-      ]
+      ],
+      "met": {
+        "GLORY": 0.12623274
+      }
     },
     {
       "id": "RELIC_TRADER",
@@ -39100,7 +39361,19 @@
           "title": "Take the Bottom One",
           "text": "Trade one of your Relics for a random Relic."
         }
-      ]
+      ],
+      "requires": [
+        "Act 2+",
+        "Requires 5+ tradeable relics"
+      ],
+      "act_span": [
+        1,
+        255
+      ],
+      "met": {
+        "GLORY": 0.12031558,
+        "HIVE": 0.030735455
+      }
     },
     {
       "id": "ROOM_FULL_OF_CHEESE",
@@ -39116,7 +39389,26 @@
           "title": "Search",
           "text": "Lose 14 HP. Obtain the Chosen Cheese."
         }
-      ]
+      ],
+      "requires": [
+        "Act 1–2 only"
+      ],
+      "act_span": [
+        0,
+        1
+      ],
+      "relics": [
+        {
+          "relic": "CHOSEN_CHEESE",
+          "option": "Search",
+          "one_of": 1
+        }
+      ],
+      "met": {
+        "HIVE": 0.09220637,
+        "OVERGROWTH": 0.10010649,
+        "UNDERDOCKS": 0.11587486
+      }
     },
     {
       "id": "ROUND_TEA_PARTY",
@@ -39134,7 +39426,20 @@
           "title": "Pick a Fight",
           "text": "Lose 11 HP. Obtain a random Relic."
         }
-      ]
+      ],
+      "requires": [
+        "Requires 12+ HP"
+      ],
+      "relics": [
+        {
+          "relic": "ROYAL_POISON",
+          "option": "Enjoy Your Tea",
+          "one_of": 1
+        }
+      ],
+      "met": {
+        "GLORY": 0.12820514
+      }
     },
     {
       "id": "SAPPHIRE_SEED",
@@ -39152,7 +39457,10 @@
           "title": "Plant and Nourish",
           "text": "Enchant a card with Sown."
         }
-      ]
+      ],
+      "met": {
+        "OVERGROWTH": 0.11608094
+      }
     },
     {
       "id": "SELF_HELP_BOOK",
@@ -39188,7 +39496,13 @@
           "title": "Move On",
           "text": "You don't have any cards that can be Enchanted."
         }
-      ]
+      ],
+      "met": {
+        "GLORY": 0.10059172,
+        "HIVE": 0.07244786,
+        "OVERGROWTH": 0.08839191,
+        "UNDERDOCKS": 0.13093859
+      }
     },
     {
       "id": "SHRINE_OF_THE_WARLORD",
@@ -39210,6 +39524,13 @@
           "title": "Take the Wings",
           "text": "Add a Clumsy to your Deck. Obtain Mighty Wings."
         }
+      ],
+      "relics": [
+        {
+          "relic": "MIGHTY_WINGS",
+          "option": "Take the Wings",
+          "one_of": 1
+        }
       ]
     },
     {
@@ -39226,7 +39547,17 @@
           "title": "Hold On",
           "text": "Lose 3 HP. The card in the above option is randomized."
         }
-      ]
+      ],
+      "requires": [
+        "Floor 7+",
+        "Requires removable cards in deck"
+      ],
+      "met": {
+        "GLORY": 0.1183432,
+        "HIVE": 0.07354555,
+        "OVERGROWTH": 0.03514377,
+        "UNDERDOCKS": 0.04866744
+      }
     },
     {
       "id": "SPIRALING_WHIRLPOOL",
@@ -39244,7 +39575,10 @@
           "title": "Drink",
           "text": "Heal 33% Max HP."
         }
-      ]
+      ],
+      "met": {
+        "UNDERDOCKS": 0.13441484
+      }
     },
     {
       "id": "SPIRIT_GRAFTER",
@@ -39262,7 +39596,10 @@
           "title": "Rejection",
           "text": "Lose 10 HP. Upgrade a card."
         }
-      ]
+      ],
+      "met": {
+        "HIVE": 0.10208562
+      }
     },
     {
       "id": "STONE_OF_ALL_TIME",
@@ -39286,7 +39623,18 @@
           "title": "Push",
           "text": "Lose 6 HP. Enchant an Attack with Vigorous 8."
         }
-      ]
+      ],
+      "requires": [
+        "Act 2 only",
+        "Requires at least one potion"
+      ],
+      "act_span": [
+        1,
+        1
+      ],
+      "met": {
+        "HIVE": 0.06805708
+      }
     },
     {
       "id": "SUNKEN_STATUE",
@@ -39305,7 +39653,18 @@
           "title": "Dive into the Water",
           "text": "Gain 101-121 Gold. Lose 7 HP."
         }
-      ]
+      ],
+      "relics": [
+        {
+          "relic": "SWORD_OF_STONE",
+          "option": "Grab the Sword",
+          "one_of": 1
+        }
+      ],
+      "met": {
+        "OVERGROWTH": 0.08519702,
+        "UNDERDOCKS": 0.13209733
+      }
     },
     {
       "id": "SUNKEN_TREASURY",
@@ -39323,7 +39682,10 @@
           "title": "Second Chest",
           "text": "Gain 303-363 Gold. Receive Greed."
         }
-      ]
+      ],
+      "met": {
+        "UNDERDOCKS": 0.1170336
+      }
     },
     {
       "id": "SYMBIOTE",
@@ -39343,7 +39705,18 @@
           "title": "Kill with Fire",
           "text": "Choose a card to Transform."
         }
-      ]
+      ],
+      "requires": [
+        "Act 2+"
+      ],
+      "act_span": [
+        1,
+        255
+      ],
+      "met": {
+        "GLORY": 0.13412228,
+        "HIVE": 0.10208562
+      }
     },
     {
       "id": "TABLET_OF_TRUTH",
@@ -39361,7 +39734,10 @@
           "title": "Smash",
           "text": "Heal 20 HP."
         }
-      ]
+      ],
+      "met": {
+        "OVERGROWTH": 0.12034079
+      }
     },
     {
       "id": "TANX",
@@ -39398,7 +39774,37 @@
           "title": "Tea of Discourtesy",
           "text": "At the start of the next combat, shuffle 2 Dazed into your Draw Pile."
         }
-      ]
+      ],
+      "requires": [
+        "Requires 150+ gold",
+        "Act 1–2 only"
+      ],
+      "act_span": [
+        0,
+        1
+      ],
+      "relics": [
+        {
+          "relic": "BONE_TEA",
+          "option": "Bone Tea",
+          "one_of": 1
+        },
+        {
+          "relic": "EMBER_TEA",
+          "option": "Ember Tea",
+          "one_of": 1
+        },
+        {
+          "relic": "TEA_OF_DISCOURTESY",
+          "option": "Tea of Discourtesy",
+          "one_of": 1
+        }
+      ],
+      "met": {
+        "HIVE": 0.04829857,
+        "OVERGROWTH": 0.022364218,
+        "UNDERDOCKS": 0.028968714
+      }
     },
     {
       "id": "TEZCATARA",
@@ -39442,7 +39848,13 @@
           "title": "Insert Token Potion",
           "text": "Lose a Potion. Obtain an Upgraded Common Attack/Skill."
         }
-      ]
+      ],
+      "met": {
+        "GLORY": 0.088757396,
+        "HIVE": 0.03841932,
+        "OVERGROWTH": 0.02768903,
+        "UNDERDOCKS": 0.034762457
+      }
     },
     {
       "id": "THE_LANTERN_KEY",
@@ -39460,7 +39872,10 @@
           "title": "Keep the Key",
           "text": "Fight to obtain the Key."
         }
-      ]
+      ],
+      "met": {
+        "HIVE": 0.08232711
+      }
     },
     {
       "id": "THE_LEGENDS_WERE_TRUE",
@@ -39476,7 +39891,19 @@
           "title": "Slowly Find an Exit",
           "text": "Lose 8 HP. Procure 1 random Potion."
         }
-      ]
+      ],
+      "requires": [
+        "Requires 10+ HP",
+        "Act 1 only"
+      ],
+      "act_span": [
+        0,
+        0
+      ],
+      "met": {
+        "OVERGROWTH": 0.11927582,
+        "UNDERDOCKS": 0.12862109
+      }
     },
     {
       "id": "THERMAE_NONUPEIPE",
@@ -39498,6 +39925,9 @@
           "title": "Drink Bath Water",
           "text": "Lose 31 HP. Add 3 Guilty to your Deck. Obtain a random Relic."
         }
+      ],
+      "requires": [
+        "Requires ≤75% HP"
       ]
     },
     {
@@ -39514,7 +39944,13 @@
           "title": "That",
           "text": "Add Clumsy to your Deck. Obtain a random Relic."
         }
-      ]
+      ],
+      "met": {
+        "GLORY": 0.08678501,
+        "HIVE": 0.06476399,
+        "OVERGROWTH": 0.08945687,
+        "UNDERDOCKS": 0.13209733
+      }
     },
     {
       "id": "TINKER_TIME",
@@ -39528,7 +39964,10 @@
           "title": "Accept",
           "text": "Create a custom card to add to your Deck."
         }
-      ]
+      ],
+      "met": {
+        "GLORY": 0.12426036
+      }
     },
     {
       "id": "TRASH_HEAP",
@@ -39546,7 +39985,32 @@
           "title": "Grab Random Junk",
           "text": "Gain 100 Gold. Obtain a random forgotten card from the past."
         }
-      ]
+      ],
+      "relics": [
+        {
+          "relic": "DARKSTONE_PERIAPT",
+          "one_of": 5
+        },
+        {
+          "relic": "DREAM_CATCHER",
+          "one_of": 5
+        },
+        {
+          "relic": "HAND_DRILL",
+          "one_of": 5
+        },
+        {
+          "relic": "MAW_BANK",
+          "one_of": 5
+        },
+        {
+          "relic": "THE_BOOT",
+          "one_of": 5
+        }
+      ],
+      "met": {
+        "UNDERDOCKS": 0.114716105
+      }
     },
     {
       "id": "TRIAL",
@@ -39564,7 +40028,10 @@
           "title": "Reject",
           "text": "You are not allowed to Reject."
         }
-      ]
+      ],
+      "met": {
+        "GLORY": 0.13806707
+      }
     },
     {
       "id": "UNREST_SITE",
@@ -39582,7 +40049,13 @@
           "title": "Kill the Trees",
           "text": "Lose 8 Max HP. Obtain a random Relic."
         }
-      ]
+      ],
+      "requires": [
+        "Requires ≤70% HP"
+      ],
+      "met": {
+        "OVERGROWTH": 0.047923323
+      }
     },
     {
       "id": "VAKUU",
@@ -39607,7 +40080,17 @@
           "title": "Unlock the Chest",
           "text": "Lose Lantern Key. Procure 2 random Potions. Obtain 2 random Relics."
         }
-      ]
+      ],
+      "relics": [
+        {
+          "relic": "HISTORY_COURSE",
+          "option": "Unlock the Cage",
+          "one_of": 1
+        }
+      ],
+      "met": {
+        "GLORY": 0.03550296
+      }
     },
     {
       "id": "WATERFALL_OF_OBVIOUS_SECRETS",
@@ -39651,7 +40134,13 @@
           "title": "Locked",
           "text": "Requires 120 Gold."
         }
-      ]
+      ],
+      "requires": [
+        "Requires 55+ gold"
+      ],
+      "met": {
+        "UNDERDOCKS": 0.08806489
+      }
     },
     {
       "id": "WELCOME_TO_WONGOS",
@@ -39687,7 +40176,24 @@
           "title": "Leave",
           "text": "Downgrade a random card."
         }
-      ]
+      ],
+      "requires": [
+        "Requires 100+ gold",
+        "Act 2 only"
+      ],
+      "act_span": [
+        1,
+        1
+      ],
+      "relics": [
+        {
+          "relic": "WONGOS_MYSTERY_TICKET",
+          "one_of": 1
+        }
+      ],
+      "met": {
+        "HIVE": 0.085620195
+      }
     },
     {
       "id": "WELLSPRING",
@@ -39705,7 +40211,10 @@
           "title": "Bathe",
           "text": "Remove 1 card from your Deck. Add 1 Guilty to your Deck."
         }
-      ]
+      ],
+      "met": {
+        "OVERGROWTH": 0.10223642
+      }
     },
     {
       "id": "WHISPERING_HOLLOW",
@@ -39723,7 +40232,13 @@
           "title": "Hug the Tree",
           "text": "Lose 9 HP. Choose a card to Transform."
         }
-      ]
+      ],
+      "requires": [
+        "Requires 44+ gold"
+      ],
+      "met": {
+        "OVERGROWTH": 0.08626198
+      }
     },
     {
       "id": "WOOD_CARVINGS",
@@ -39749,7 +40264,13 @@
           "title": "Torus",
           "text": "Choose 1 starter card to Transform into Toric Toughness."
         }
-      ]
+      ],
+      "requires": [
+        "Requires a removable basic card"
+      ],
+      "met": {
+        "OVERGROWTH": 0.10543131
+      }
     },
     {
       "id": "WUPPY_IN_TROUBLE",
@@ -39770,6 +40291,16 @@
         {
           "title": "Ignore",
           "text": "Procure a random potion."
+        }
+      ],
+      "requires": [
+        "Cannot have an event pet"
+      ],
+      "relics": [
+        {
+          "relic": "WUPPY",
+          "option": "Help Immediately",
+          "one_of": 1
         }
       ]
     },
@@ -39797,7 +40328,13 @@
           "title": "Locked",
           "text": "Not enough Gold."
         }
-      ]
+      ],
+      "requires": [
+        "Requires 125+ gold"
+      ],
+      "met": {
+        "HIVE": 0.05268935
+      }
     }
   ],
   "acts": [

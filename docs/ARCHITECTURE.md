@@ -45,7 +45,7 @@ still there.
   applies Vulnerable.
 - Per-card tag and role overrides; the player's own overrides of both are
   saved apart (`my_tags.json`, `my_roles.json`).
-- Event opportunity tags.
+- When an event relic is crucial to a deck (`relic_fits`).
 - Per-act targets and thresholds.
 
 None of this is a game fact, so it is kept apart from the catalog. It can be
@@ -111,8 +111,11 @@ kit, so old runs replay even after a data update.
   monsters an on-death power summons (`threats::lineup_waves`) fight as a
   later stage. The lead way loses least HP unless a clocked fight runs past
   the community's pace; `limits` name the roles that would help.
-- `events`: run `needs` (removal, heal, upgrade…), and a `watchlist` of
-  act events ranked by how well they meet those needs.
+- `events`: the relic `lookout`: event relics a playbook `relic_fits` rule
+  says are crucial to this deck, from events still possible this act (not
+  seen this run, allowed by the act), with each event's option, whether it
+  gives the relic outright or one of several at random, and how often
+  community runs meet it in this act. Empty unless something qualifies.
 - `advice`: act targets, boss gaps, area damage and removable curses (run-specific only).
 - `healing`: the rest heal (rules percent plus "heal an additional N" relics); the Ancient heal and starting HP are `GameRules` methods.
 - `tags`: what each card does, in 14 tags (Damage, Chip Damage,
@@ -277,6 +280,10 @@ Notes:
   `multi_enemy_names` is only a fallback for encounters with no run data.
 - Keyless use allows 15 requests per minute per endpoint. One update makes one
   call per endpoint.
+- Events keep their `preconditions` as `Event::requires`. "Act 2 only",
+  "Act 1–2 only" and "Act 2+" become `act_span`, which `Catalog::events_in`
+  applies to shared events. Event relics named in any option, first screen or
+  later (`pages`), become `Event::relics`.
 
 ## Community runs: exact lineups
 
@@ -309,6 +316,14 @@ cleared becomes a sample. `analysis::benchmark::measure` tags and simulates
 them into `Catalog::benchmarks` (quartiles per character and act, plus all
 characters), and `benchmark::compare` lines the run's deck up against them
 for the deck panel.
+
+`spire-data/src/codex_events.rs` reads them a third way, for events: the
+event relics picked up on each event's floor fill in the relics no option
+names (Trash Heap's "random forgotten Relic" is one of five, Doll Room lets
+you choose one of three), and the share of runs that met each event in each
+act (by act id, so Overgrowth and Underdocks stay apart) goes into
+`Event::met`. Relics from the general pools are left out: no one can fish an
+event for them.
 
 Results land in `Encounter::lineups`, `spawns` and `stats`. The update reads
 `run_pages` pages (default 3, about 3,000 runs) from the last 14 days, so

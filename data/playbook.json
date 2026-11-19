@@ -501,93 +501,6 @@
     "cultists",
     "gremlins"
   ],
-  "opportunity_rules": [
-    {
-      "opportunity": "card_removal",
-      "any_text": [
-        "remove"
-      ]
-    },
-    {
-      "opportunity": "upgrade",
-      "any_text": [
-        "upgrade"
-      ]
-    },
-    {
-      "opportunity": "transform",
-      "any_text": [
-        "transform"
-      ]
-    },
-    {
-      "opportunity": "enchant",
-      "any_text": [
-        "enchant"
-      ]
-    },
-    {
-      "opportunity": "new_card",
-      "any_text": [
-        "to your deck",
-        "add a",
-        "card reward",
-        "choose a card"
-      ]
-    },
-    {
-      "opportunity": "relic",
-      "any_text": [
-        "relic"
-      ]
-    },
-    {
-      "opportunity": "potion",
-      "any_text": [
-        "potion"
-      ]
-    },
-    {
-      "opportunity": "gold",
-      "any_text": [
-        "gain gold",
-        "gold."
-      ]
-    },
-    {
-      "opportunity": "max_hp",
-      "any_text": [
-        "max hp"
-      ]
-    },
-    {
-      "opportunity": "heal",
-      "any_text": [
-        "heal"
-      ]
-    },
-    {
-      "opportunity": "fight",
-      "any_text": [
-        "fight",
-        "combat"
-      ]
-    },
-    {
-      "opportunity": "curse_risk",
-      "any_text": [
-        "curse"
-      ]
-    },
-    {
-      "opportunity": "hp_cost",
-      "any_text": [
-        "damage",
-        "lose hp",
-        "lose max hp"
-      ]
-    }
-  ],
   "acts": [
     {
       "index": 0,
@@ -694,11 +607,112 @@
       }
     }
   ],
-  "needs": {
-    "low_hp": 0.5,
-    "starter_cards": 7,
-    "low_upgrades": 0.25
-  },
+  "relic_fits": [
+    {
+      "relic": "LOST_WISP",
+      "cards": {
+        "card_type": "power"
+      },
+      "at_least": 6,
+      "what": "Powers",
+      "why": "each deals 8 damage to ALL enemies when played"
+    },
+    {
+      "relic": "HISTORY_COURSE",
+      "cards": {
+        "all": [
+          {
+            "card_type": "attack"
+          },
+          {
+            "not": {
+              "total_damage_at_most": 14
+            }
+          }
+        ]
+      },
+      "at_least": 4,
+      "what": "attacks dealing 15+ damage",
+      "why": "the last one played is played again at the start of each turn"
+    },
+    {
+      "relic": "MIGHTY_WINGS",
+      "cards": {
+        "all": [
+          {
+            "card_type": "attack"
+          },
+          "has_damage",
+          {
+            "not": {
+              "damage_at_most": 19
+            }
+          }
+        ]
+      },
+      "at_least": 2,
+      "what": "attacks hitting for 20+",
+      "why": "with a little Strength each reaches 30 in one hit, for 2 more Strength"
+    },
+    {
+      "relic": "THE_BOOT",
+      "cards": {
+        "all": [
+          {
+            "card_type": "attack"
+          },
+          "has_damage",
+          {
+            "damage_at_most": 4
+          }
+        ]
+      },
+      "at_least": 4,
+      "what": "attacks hitting for 4 or less",
+      "why": "every unblocked hit becomes 5"
+    },
+    {
+      "relic": "DAUGHTER_OF_THE_WIND",
+      "cards": {
+        "all": [
+          {
+            "card_type": "attack"
+          },
+          {
+            "cost_at_most": 1
+          }
+        ]
+      },
+      "at_least": 14,
+      "what": "cheap attacks",
+      "why": "each gives 1 Block when played"
+    },
+    {
+      "relic": "FORGOTTEN_SOUL",
+      "cards": {
+        "any": [
+          {
+            "keyword": "Exhaust"
+          },
+          {
+            "all": [
+              {
+                "text_contains": "exhaust"
+              },
+              {
+                "not": {
+                  "text_contains": "exhaust pile"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "at_least": 8,
+      "what": "cards that Exhaust",
+      "why": "each Exhaust deals 1 damage to a random enemy"
+    }
+  ],
   "simulation": {
     "hand_size": 5,
     "max_hand": 10,

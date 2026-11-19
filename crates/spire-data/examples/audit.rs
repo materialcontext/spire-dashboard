@@ -12,6 +12,9 @@
 //! turn (12 turns), its HP, and the community's turns and damage taken.
 //! `--tags` counts each tag per character and lists every class card the
 //! reader leaves untagged.
+//! `--lookout <page.gz>...` rebuilds community decks at the end of each act
+//! they cleared (run export pages) and counts, per `relic_fits` rule, the
+//! share that qualify: a lookout warning should be rare.
 
 use std::collections::BTreeMap;
 
@@ -41,6 +44,11 @@ fn main() {
     }
     if std::env::args().any(|a| a == "--mechanics") {
         mechanics(&cat);
+        return;
+    }
+    if std::env::args().any(|a| a == "--lookout") {
+        let pages: Vec<String> = std::env::args().skip_while(|a| a != "--lookout").skip(1).collect();
+        lookout(&cat, &pb, &pages);
         return;
     }
 
@@ -270,5 +278,40 @@ fn tags(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
     println!("\n== untagged class cards: {}", untagged.len());
     for u in &untagged {
         println!("  {u}");
+    }
+}
+
+fn lookout(cat: &Catalog, pb: &spire_core::Playbook, paths: &[String]) {
+    use spire_core::analysis::deck::classify_run;
+    let mut samples = Vec::new();
+    for p in paths {
+        let bytes = std::fs::read(p).unwrap_or_else(|e| panic!("{p}: {e}"));
+        let text = spire_data::fetch::decode_maybe_gzip(&bytes).unwrap_or_else(|e| panic!("{p}: {e}"));
+        samples.extend(spire_data::benchmarks::samples(&text, cat));
+    }
+    println!("== relic_fits against {} community decks at the end of acts they cleared", samples.len());
+    let mut acts: BTreeMap<u8, usize> = BTreeMap::new();
+    for s in &samples {
+        *acts.entry(s.act).or_default() += 1;
+    }
+    for fit in &pb.relic_fits {
+        let name = cat.relics.get(&fit.relic).map_or(fit.relic.to_string(), |r| r.name.clone());
+        let mut line = format!("{name:<22} {} {:<34}", fit.at_least, fit.what);
+        for (act, n) in &acts {
+            let hits = samples
+                .iter()
+                .filter(|s| s.act == *act)
+                .filter(|s| {
+                    let deck = classify_run(&s.state, cat, pb);
+                    let count = deck
+                        .iter()
+                        .filter(|c| c.unmet.is_none() && c.card.is_some_and(|card| fit.cards.matches(card)))
+                        .count();
+                    count as u32 >= fit.at_least
+                })
+                .count();
+            line.push_str(&format!("  act {}: {:>5.1}%", act + 1, hits as f32 * 100.0 / (*n).max(1) as f32));
+        }
+        println!("{line}");
     }
 }

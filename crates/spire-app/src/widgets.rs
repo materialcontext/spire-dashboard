@@ -2,7 +2,7 @@
 
 use eframe::egui::{self, Color32, Rect, RichText, Sense, Stroke, StrokeKind, Ui, Vec2, vec2};
 use spire_core::analysis::Coverage;
-use spire_core::playbook::{Opportunity, contains_ci};
+use spire_core::playbook::contains_ci;
 
 use crate::style::color::*;
 
@@ -405,10 +405,6 @@ pub fn coverage_color(c: Coverage) -> Color32 {
         Coverage::Thin => warn(),
         Coverage::Covered => good(),
     }
-}
-
-pub fn opportunity_color(o: Opportunity) -> Color32 {
-    if o.is_risk() { warn() } else { info() }
 }
 
 /// A search box with a short list of matches. Returns the picked id.

@@ -13,6 +13,7 @@
 
 pub mod benchmarks;
 pub mod codex;
+pub mod codex_events;
 pub mod codex_runs;
 pub mod curated;
 pub mod fetch;
@@ -172,6 +173,19 @@ mod tests {
         let pb = bundled_playbook();
         for id in pb.card_roles.keys().chain(pb.card_tags.keys()) {
             assert!(cat.cards.contains_key(id), "playbook card_roles or card_tags names unknown card {id}");
+        }
+    }
+
+    #[test]
+    fn relic_fits_name_relics_an_event_gives() {
+        let cat = spire_core::Catalog::from_layers([bundled_pack()]);
+        for fit in &bundled_playbook().relic_fits {
+            assert!(cat.relics.contains_key(&fit.relic), "relic_fits names unknown relic {}", fit.relic);
+            assert!(
+                cat.events.values().any(|e| e.relics.iter().any(|r| r.relic == fit.relic)),
+                "no event gives {}",
+                fit.relic
+            );
         }
     }
 

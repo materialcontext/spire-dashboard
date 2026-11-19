@@ -8,7 +8,7 @@ use spire_core::DataPack;
 use ureq::tls::{RootCerts, TlsConfig};
 
 use crate::codex::{self, Channel, Responses};
-use crate::{DataError, codex_runs, now_rfc3339, rfc3339, unix_now};
+use crate::{DataError, codex_events, codex_runs, now_rfc3339, rfc3339, unix_now};
 
 /// Default pages of community runs (1000 runs each) read per update.
 pub const DEFAULT_RUN_PAGES: u32 = 3;
@@ -157,6 +157,8 @@ pub fn add_community_data(pack: &mut DataPack, pages: &[String], notes: &mut Vec
         "Community runs: {} fights read, {} encounters with exact lineups, weak fights per act {:?}.",
         s.fights, s.encounters, s.weak_fights
     ));
+    let events = codex_events::enrich(pack, &codex_events::sightings(pages));
+    notes.push(format!("Community runs: event relics found for {events} events, and how often each event comes up."));
     let decks = crate::benchmarks::add(pack, pages, &crate::bundled_playbook());
     notes.push(format!(
         "Community runs: {decks} decks rebuilt at the acts they cleared, {} benchmarks.",

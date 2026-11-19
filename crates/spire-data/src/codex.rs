@@ -330,6 +330,18 @@ struct WEvent {
     kind: String,
     #[serde(default)]
     options: Option<Vec<WOption>>,
+    /// Later screens, whose options can name relics the first screen
+    /// doesn't ("Reach Deeper" → "Pollinous Core").
+    #[serde(default)]
+    pages: Option<Vec<WPage>>,
+    #[serde(default)]
+    preconditions: Option<Vec<String>>,
+}
+
+#[derive(Deserialize)]
+struct WPage {
+    #[serde(default)]
+    options: Option<Vec<WOption>>,
 }
 
 #[derive(Deserialize)]
@@ -840,7 +852,9 @@ pub fn to_pack(
             event_acts.entry(e.as_str()).or_default().push(ActId::new(&a.id));
         }
     }
-    let events = parse::<WEvent>(responses, "events")?.into_iter().map(|e| map_event(e, &event_acts)).collect();
+    let event_relics: Vec<&Relic> = relics.iter().filter(|r| r.rarity == Rarity::Event).collect();
+    let events =
+        parse::<WEvent>(responses, "events")?.into_iter().map(|e| map_event(e, &event_acts, &event_relics)).collect();
 
     let ascensions: Vec<AscensionLevel> = parse_optional::<WAscension>(responses, "ascensions")?
         .into_iter()
@@ -951,23 +965,61 @@ fn map_encounter(e: WEncounter, act_of: &BTreeMap<&str, &str>) -> Option<Encount
     })
 }
 
-fn map_event(e: WEvent, acts_of: &BTreeMap<&str, Vec<ActId>>) -> Event {
+fn map_event(e: WEvent, acts_of: &BTreeMap<&str, Vec<ActId>>, event_relics: &[&Relic]) -> Event {
     let kind = match e.kind.as_str() {
         "Ancient" => EventKind::Ancient,
         "Shared" => EventKind::Shared,
         _ => EventKind::Act,
     };
+    let option = |o: &WOption| EventOption { title: strip_markup(&o.title), text: strip_markup(&o.description) };
+    let options: Vec<EventOption> = e.options.iter().flatten().map(option).collect();
+    // Every option on every screen, for the relics they name.
+    let every: Vec<EventOption> = options
+        .iter()
+        .cloned()
+        .chain(e.pages.iter().flatten().flat_map(|p| p.options.iter().flatten()).map(option))
+        .collect();
+    let relics = event_relics
+        .iter()
+        .filter_map(|r| {
+            let gives = every.iter().find(|o| names(&o.text, &r.name) || names(&o.title, &r.name))?;
+            Some(EventRelic { relic: r.id.clone(), option: Some(gives.title.clone()), one_of: 1 })
+        })
+        .collect();
+    let requires: Vec<String> = e.preconditions.unwrap_or_default().iter().map(|p| strip_markup(p)).collect();
     Event {
         acts: acts_of.get(e.id.as_str()).cloned().unwrap_or_default(),
-        options: e
-            .options
-            .unwrap_or_default()
-            .into_iter()
-            .map(|o| EventOption { title: strip_markup(&o.title), text: strip_markup(&o.description) })
-            .collect(),
+        act_span: requires.iter().find_map(|r| act_span(r)),
+        requires,
+        relics,
+        met: BTreeMap::new(),
+        options,
         id: EventId(e.id),
         name: e.name,
         kind,
+    }
+}
+
+/// Whether `text` names `name` as whole words, ignoring case.
+pub(crate) fn names(text: &str, name: &str) -> bool {
+    let (text, name) = (text.to_lowercase(), name.to_lowercase());
+    let word = |c: Option<char>| c.is_some_and(char::is_alphanumeric);
+    text.match_indices(&name)
+        .any(|(at, _)| !word(text[..at].chars().next_back()) && !word(text[at + name.len()..].chars().next()))
+}
+
+/// The 0-based acts a precondition limits an event to: "Act 2 only",
+/// "Act 1–2 only", "Act 2+".
+fn act_span(precondition: &str) -> Option<(u8, u8)> {
+    let rest = precondition.trim().strip_prefix("Act ")?;
+    let num = |s: &str| s.trim().parse::<u8>().ok().filter(|n| *n > 0).map(|n| n - 1);
+    if let Some(n) = rest.strip_suffix('+') {
+        return Some((num(n)?, u8::MAX));
+    }
+    let span = rest.strip_suffix(" only")?;
+    match span.split_once(['–', '-']) {
+        Some((a, b)) => Some((num(a)?, num(b)?)),
+        None => num(span).map(|n| (n, n)),
     }
 }
 
@@ -1011,6 +1063,22 @@ pub fn latest_stable_version(body: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn reads_act_limits_from_preconditions() {
+        assert_eq!(act_span("Act 2 only"), Some((1, 1)));
+        assert_eq!(act_span("Act 1–2 only"), Some((0, 1)));
+        assert_eq!(act_span("Act 2+"), Some((1, u8::MAX)));
+        assert_eq!(act_span("Requires 100+ gold"), None);
+        assert_eq!(act_span("Floor 7+"), None);
+    }
+
+    #[test]
+    fn relic_names_match_whole_words() {
+        assert!(names("Obtain the Chosen Cheese.", "The Chosen Cheese"));
+        assert!(names("Lose 8 HP. Obtain Wuppy with 30 HP.", "Wuppy"));
+        assert!(!names("Obtain Lanterns.", "Lantern"));
+    }
+
     use super::*;
 
     #[test]

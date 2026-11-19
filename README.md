@@ -2,7 +2,7 @@
 
 A desktop companion for **Slay the Spire 2** (beta branch) that helps you learn
 and play the *macro* game: what your deck is missing, what the next fight will ask of it,
-which `?` events to hope for, and what the act boss demands.
+which event relics are worth fishing `?` rooms for, and what the act boss demands.
 
 It never reads the game. After each node you tell it what happened: the fight,
 the card you took, HP and gold after. Then it re-analyses the run.
@@ -44,8 +44,12 @@ the card you took, HP and gold after. Then it re-analyses the run.
   you've already had this act are left out, and so is the elite you just
   fought: community runs show neither comes straight back. Each is checked
   against your deck.
-- **`?` event watchlist**: events possible in this act, ranked by how well
-  they answer what the run needs (removal for curses, healing when low…).
+- **Relic lookout**: shown only when a `?` event this act can still give a
+  relic that's crucial to your deck (Lost Wisp with four or more Powers, The
+  Boot with many small hits). It names the event, the option and its cost,
+  whether the relic is given outright or one of several at random, and how
+  often community runs meet the event in this act. Events you've had this
+  run, and those the act doesn't allow, are left out.
 - **Macro advice** about your run only: role gaps for this act, boss gaps,
   missing area damage and removable curses. There are no general tips.
 - **Enemies seen** this run.
@@ -235,7 +239,8 @@ Everything the dashboard *believes* lives in `data/playbook.json`, not in code:
 - per-card tag and role overrides
 - per-act role targets
 - thresholds for "big hit" and "long fight"
-- the words that mark event options as removal, upgrade, relic and so on
+- when an event relic is crucial to a deck (`relic_fits`: the cards it
+  counts and how many)
 - what the deck simulator assumes where the game data is silent (`simulation`):
   cards drawn per turn, hand limit, turns and fights simulated, and hits that
   bring back a shot Arrow
