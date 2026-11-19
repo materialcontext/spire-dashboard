@@ -195,7 +195,26 @@ pub fn root(
                 return;
             }
             let g = v.generation;
-            if ui.available_width() > 680.0 {
+            // On the boss floor the boss is the next fight: its card takes the
+            // width, and the Next fight panel steps aside.
+            let boss_floor = spire_core::analysis::floors::expected_room(v.state, v.catalog)
+                == Some(spire_core::catalog::NodeKind::Boss);
+            if boss_floor {
+                culled(ui, ("act-wide", g, v.combat.map(|c| c.generation)), |ui| act::show(ui, v, out));
+                ui.add_space(GAP);
+                if ui.available_width() > 680.0 {
+                    ui.columns(2, |cols| {
+                        culled(&mut cols[0], ("breakdown", g, v.combat.map(|c| c.generation)), |ui| {
+                            breakdown::show(ui, v)
+                        });
+                        events::show(&mut cols[1], v);
+                    });
+                } else {
+                    breakdown::show(ui, v);
+                    ui.add_space(GAP);
+                    events::show(ui, v);
+                }
+            } else if ui.available_width() > 680.0 {
                 ui.columns(2, |cols| {
                     culled(&mut cols[0], ("act", g, v.combat.map(|c| c.generation)), |ui| act::show(ui, v, out));
                     cols[0].add_space(GAP);

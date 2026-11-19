@@ -1,5 +1,6 @@
 //! Writes a sample run into a data folder, for screenshots and manual
-//! testing: `seed_run <data-dir> <mid|late|fool|history>`. `history` files
+//! testing: `seed_run <data-dir> <mid|late|fool|boss|history>`. `boss` is
+//! the mid run logged on to its act's boss floor. `history` files
 //! three finished runs in the run history and leaves the current run alone.
 
 use spire_core::catalog::{Catalog, RoomType};
@@ -7,6 +8,20 @@ use spire_core::ids::*;
 use spire_core::run::{Change, DeckCard, NodeKind, NodeReport};
 use spire_core::{Run, RunEvent};
 use spire_data::store::Store;
+
+/// The mid run, logged on until the next floor is the act's boss.
+fn boss_floor_run(cat: &Catalog) -> Run {
+    use spire_core::analysis::floors::expected_room;
+    let mut run = spire_app::bench::mid_run(cat);
+    for _ in 0..40 {
+        if expected_room(&run.state(), cat) == Some(NodeKind::Boss) {
+            break;
+        }
+        let kind = expected_room(&run.state(), cat).unwrap_or(NodeKind::Unknown);
+        run.push(RunEvent::Node(NodeReport { kind, encounter: None, event: None, changes: vec![] }));
+    }
+    run
+}
 
 /// The Fool at A10, deep in act 3 with both bosses known.
 fn fool_run(cat: &Catalog) -> Run {
@@ -80,6 +95,7 @@ fn main() {
     let run = match kind {
         "mid" => spire_app::bench::mid_run(&cat),
         "fool" => fool_run(&cat),
+        "boss" => boss_floor_run(&cat),
         _ => spire_app::bench::late_run(&cat),
     };
     store.save_run(&run).expect("save run");
