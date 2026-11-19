@@ -64,7 +64,7 @@ impl Dashboard {
             .iter()
             .map(|r| {
                 catalog.relics.get(r).map_or_else(Vec::new, |relic| {
-                    playbook.relic_roles(&crate::mechanics::read(&relic.text, &orbs, false))
+                    playbook.relic_roles(&relic.text, &crate::mechanics::read(&relic.text, &orbs, false))
                 })
             })
             .collect();

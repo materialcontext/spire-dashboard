@@ -140,6 +140,23 @@ mod tests {
     }
 
     #[test]
+    fn thorns_is_chip_and_healing_relics_are_mitigation() {
+        use spire_core::playbook::Role;
+        let cat = bundled_catalog();
+        let pb = bundled_playbook();
+        let card = |name: &str| cat.cards.values().find(|c| c.name == name).unwrap();
+        assert!(pb.roles_of(card("Abrasive")).contains(&Role::Chip));
+        assert!(pb.roles_of(card("Cho Barbs")).contains(&Role::Chip));
+        let relic = |name: &str| {
+            let r = cat.relics.values().find(|r| r.name == name).unwrap();
+            pb.relic_roles(&r.text, &spire_core::mechanics::read(&r.text, &[], false))
+        };
+        assert!(relic("Burning Blood").contains(&Role::Mitigation));
+        assert!(relic("Mango").contains(&Role::Mitigation), "raising max HP");
+        assert!(!relic("Leafy Poultice").contains(&Role::Mitigation), "losing max HP isn't");
+    }
+
+    #[test]
     fn playbook_card_overrides_name_real_cards() {
         let cat = spire_core::Catalog::from_layers([bundled_pack()]);
         let pb = bundled_playbook();

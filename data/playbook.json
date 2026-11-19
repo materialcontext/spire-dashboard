@@ -426,6 +426,12 @@
       "when": {
         "text_contains": "intangible"
       }
+    },
+    {
+      "role": "chip",
+      "when": {
+        "applies_power": "Thorns"
+      }
     }
   ],
   "card_roles": {
@@ -803,6 +809,21 @@
     {
       "effect": "plating",
       "role": "mitigation"
+    }
+  ],
+  "relic_text_roles": [
+    {
+      "role": "mitigation",
+      "any_text": [
+        "heal",
+        "raise your max hp"
+      ]
+    },
+    {
+      "role": "chip",
+      "any_text": [
+        "thorns"
+      ]
     }
   ],
   "balance": {

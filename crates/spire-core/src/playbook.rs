@@ -392,6 +392,9 @@ pub struct Playbook {
     /// text: an effect (or passive) name, when it happens, and the role.
     #[serde(default)]
     pub relic_roles: Vec<RelicRoleRule>,
+    /// Roles a relic plays when its text says so ("heal" is Mitigation).
+    #[serde(default)]
+    pub relic_text_roles: Vec<RelicTextRole>,
     /// Where a fight's turns count as spikes or quiet, and as ramping.
     #[serde(default)]
     pub fights: FightThresholds,
@@ -456,6 +459,15 @@ impl Default for FightThresholds {
             spike_odds: 0.5,
         }
     }
+}
+
+/// "A relic that heals is Mitigation": a role from phrases in a relic's
+/// text, for what the simulator doesn't play out.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RelicTextRole {
+    pub role: Role,
+    /// Any of these, case-insensitive.
+    pub any_text: Vec<String>,
 }
 
 /// "A relic that gains Block once a combat is frontloaded defense."
@@ -563,16 +575,23 @@ impl Playbook {
         out
     }
 
-    /// The roles a relic plays, from what the simulator understands in its
-    /// text (`crate::mechanics::read`). Relics with nothing understood
-    /// play none, so only obvious fits are flagged.
-    pub fn relic_roles(&self, m: &crate::mechanics::Mechanics) -> Vec<Role> {
+    /// The roles a relic plays: from what the simulator understands in its
+    /// text (`crate::mechanics::read`), and from phrases the simulator
+    /// doesn't play out (healing, max HP, Thorns). Relics with neither play
+    /// none, so only obvious fits are flagged.
+    pub fn relic_roles(&self, text: &str, m: &crate::mechanics::Mechanics) -> Vec<Role> {
         let facts = m.facts();
         let mut roles: Vec<Role> = self
             .relic_roles
             .iter()
             .filter(|r| facts.iter().any(|(k, rec)| *k == r.effect && r.recurring.is_none_or(|want| want == *rec)))
             .map(|r| r.role)
+            .chain(
+                self.relic_text_roles
+                    .iter()
+                    .filter(|r| r.any_text.iter().any(|p| contains_ci(text, p)))
+                    .map(|r| r.role),
+            )
             .collect();
         roles.sort();
         roles.dedup();
