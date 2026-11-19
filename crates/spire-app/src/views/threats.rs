@@ -65,15 +65,17 @@ pub fn preview_body(
     // Turns where runs end are marked for elites and bosses only.
     let boss_or_elite = t.room != RoomType::Monster;
     crate::views::turns::strip(ui, (key, &t.encounter), &t.plans, t.stats.as_ref().filter(|_| boss_or_elite));
-    // Elites and bosses: when runs end here, and whether this deck is on track.
+    // Elites and bosses: when runs end here.
     if boss_or_elite {
         // Once monsters join mid-fight, a turn number no longer says whose
         // move it is, so the deadly turns go unnamed.
         let named: &[spire_core::analysis::threats::MonsterPlan] = if t.spawns.is_empty() { &t.plans } else { &[] };
         crate::views::turns::deaths(ui, (key, &t.encounter), named, t.stats.as_ref());
-        if let Some(o) = outlook {
-            crate::views::turns::outlook(ui, o, t.stats.as_ref());
-        }
+    }
+    // Whether this deck is on track: elites and bosses, and the fight being
+    // played (a hallway fight gets its outlook then).
+    if let Some(o) = outlook {
+        crate::views::turns::outlook(ui, o, t.stats.as_ref());
     }
     if let Some(s) = &t.stats {
         ui.label(caption(format!(
@@ -123,25 +125,41 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
         for t in list {
             culled(ui, ("threat", v.generation, v.combat.map(|c| c.generation), st.threat_tab, &t.encounter), |ui| {
                 ui.add_space(crate::style::space::s());
-                ui.horizontal(|ui| {
-                    let name = RichText::new(&t.name).family(crate::style::strong_family()).color(if t.seen {
-                        text_dim()
-                    } else {
-                        text()
-                    });
-                    if link(ui, name).on_hover_text("Open in Enemies").clicked() {
-                        out.push(Action::Open(Link::Encounter(t.encounter.clone())));
-                    }
-                    if t.seen {
-                        ui.label(caption("fought"));
-                    }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let (word, color) = status_word(t.worst());
-                        ui.label(RichText::new(word).small().strong().color(color));
-                    });
-                });
-                preview_body(ui, v.generation, t, v.combat.and_then(|c| c.outlook(&t.encounter)));
+                fight_card(ui, v, t, out);
             });
         }
     });
+}
+
+/// The fight the game is in, above Next fight (following only, not for
+/// bosses: those have the act panel).
+pub fn current(ui: &mut Ui, v: &ViewCtx, t: &ThreatPreview, out: &mut Vec<Action>) {
+    let room = match t.room {
+        RoomType::Elite => "Elite",
+        _ => "Enemy",
+    };
+    panel(ui, "Current fight", Some(room), |ui| fight_card(ui, v, t, out));
+}
+
+/// One fight: its name (opens it in Enemies), whether it's covered, and
+/// its preview with the deck's outlook.
+fn fight_card(ui: &mut Ui, v: &ViewCtx, t: &ThreatPreview, out: &mut Vec<Action>) {
+    ui.horizontal(|ui| {
+        let name = RichText::new(&t.name).family(crate::style::strong_family()).color(if t.seen {
+            text_dim()
+        } else {
+            text()
+        });
+        if link(ui, name).on_hover_text("Open in Enemies").clicked() {
+            out.push(Action::Open(Link::Encounter(t.encounter.clone())));
+        }
+        if t.seen {
+            ui.label(caption("fought"));
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let (word, color) = status_word(t.worst());
+            ui.label(RichText::new(word).small().strong().color(color));
+        });
+    });
+    preview_body(ui, v.generation, t, v.combat.and_then(|c| c.outlook(&t.encounter)));
 }

@@ -76,6 +76,9 @@ pub struct GameRun {
     pub ended: bool,
     /// Ids the catalog doesn't know (kept in the log as they are).
     pub unknown: Vec<String>,
+    /// The fight being played, when the save was written in one that isn't
+    /// recorded yet (the live save's `pre_finished_room`).
+    pub current_fight: Option<EncounterId>,
 }
 
 /// Why a run save couldn't be read.
@@ -231,10 +234,19 @@ pub fn read(json: &str, catalog: &Catalog, hint: &ActHint) -> Result<GameRun, Un
         _ => None,
     };
     let ended = outcome.is_some();
+    // The room being played joins the history once it's done: a fight in it
+    // that isn't the last floor recorded is the fight in progress.
+    let last = run.map_point_history.iter().flatten().last().and_then(|p| p.rooms.first()).map(|r| r.model_id.as_str());
+    let current_fight = run
+        .pre_finished_room
+        .as_ref()
+        .and_then(|r| r.encounter_id.as_deref())
+        .filter(|id| !ended && last.is_none_or(|l| entry(l) != entry(id)))
+        .map(|id| EncounterId::new(entry(id)));
     if let Some(outcome) = outcome {
         push(&mut events, &mut state, RunEvent::End { outcome, at: None });
     }
-    Ok(GameRun { key, start_time: run.start_time, events, floors, ended, unknown })
+    Ok(GameRun { key, start_time: run.start_time, events, floors, ended, unknown, current_fight })
 }
 
 /// One floor's changes, naming cards as they sit in the deck now.
@@ -525,5 +537,26 @@ mod tests {
         save["map_point_history"].as_array_mut().unwrap().push(serde_json::json!([]));
         save["current_act_index"] = serde_json::json!(2);
         assert_eq!(act_of(&save, &ActHint::default()), 1);
+    }
+
+    #[test]
+    fn the_fight_being_played_comes_from_the_room_in_progress() {
+        let cat = catalog();
+        let mut save: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/fixtures/in_progress.save")).expect("fixture");
+        let current =
+            |save: &serde_json::Value| read(&save.to_string(), &cat, &ActHint::default()).unwrap().current_fight;
+        // Saved in Neow's event: no fight.
+        assert_eq!(current(&save), None);
+        // Saved on entering a fight: it's the fight being played.
+        save["pre_finished_room"] = serde_json::json!({
+            "encounter_id": "ENCOUNTER.SHRINKER_BEETLE_WEAK", "room_type": "monster", "is_pre_finished": false
+        });
+        assert_eq!(current(&save), Some(EncounterId::new("SHRINKER_BEETLE_WEAK")));
+        // Once it's recorded as the last floor, it's over.
+        let done = serde_json::json!({"map_point_type": "monster", "player_stats": [],
+            "rooms": [{"model_id": "ENCOUNTER.SHRINKER_BEETLE_WEAK", "room_type": "monster"}]});
+        save["map_point_history"][0].as_array_mut().unwrap().push(done);
+        assert_eq!(current(&save), None);
     }
 }

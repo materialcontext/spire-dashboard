@@ -73,8 +73,8 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
             });
         }
         // Draw and energy aren't roles: they help every role on bad draws.
-        bar(ui, "Draw", d.tag(Tag::Draw), 0, max_role, None, style::tag_color());
-        bar(ui, "Energy gain", d.tag(Tag::Energy), 0, max_role, None, style::tag_color());
+        bar(ui, "Draw", d.tag(Tag::Draw), 0, max_role, None, style::tag_color_of(Tag::Draw));
+        bar(ui, "Energy gain", d.tag(Tag::Energy), 0, max_role, None, style::tag_color_of(Tag::Energy));
         let counts: Vec<String> = [(d.upgraded, "upgraded"), (d.no_role, "with no role"), (d.unknown, "unknown")]
             .into_iter()
             .filter(|(n, _)| *n > 0)

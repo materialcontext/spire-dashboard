@@ -412,7 +412,7 @@ fn tag_editor(ui: &mut Ui, v: &ViewCtx, card: &Card, up: bool, out: &mut Vec<Act
     }
     ui.horizontal_wrapped(|ui| {
         for t in &current {
-            crate::widgets::chip(ui, t.label(), style::tag_color()).on_hover_text(t.tag.describe());
+            crate::widgets::chip(ui, t.label(), style::tag_color_of(t.tag)).on_hover_text(t.tag.describe());
         }
     });
     ui.label(caption(match source {

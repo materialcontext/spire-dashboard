@@ -31,6 +31,8 @@ pub struct ViewCtx<'a> {
     pub combat: Option<&'a Combat>,
     /// The run follows the game (monitored): floors log themselves.
     pub following: bool,
+    /// The fight the game is in, when following and it isn't a boss.
+    pub current_fight: Option<&'a spire_core::analysis::threats::ThreatPreview>,
 }
 
 /// The live deck's simulation and how it fares against this act's elites
@@ -117,6 +119,9 @@ const COMBAT_SETTLE: f64 = 0.15;
 const TOAST_SECONDS: f64 = 6.0;
 
 pub struct SpireApp {
+    /// The fight being played (following only): its preview, with the
+    /// generation it was built for.
+    current_fight: Option<(u64, spire_core::analysis::threats::ThreatPreview)>,
     store: Store,
     saver: RunSaver,
     catalog: Catalog,
@@ -163,6 +168,7 @@ impl SpireApp {
             Source::PackUrl { url } => url.clone(),
         };
         Self {
+            current_fight: None,
             draft: NodeDraft::for_next(&state, &loaded.catalog),
             saver: store.run_saver(),
             store,
@@ -224,16 +230,37 @@ impl SpireApp {
         }
     }
 
-    /// Ends the run, files it in history and returns to the start screen.
-    fn finish(&mut self, outcome: Outcome) {
+    /// Ends the run and files it in history; the id it's filed under.
+    fn finish(&mut self, outcome: Outcome) -> Option<String> {
         self.run.push(RunEvent::End { outcome, at: Some(spire_data::now_rfc3339()) });
-        match self.store.archive_run(&self.run) {
-            Ok(_) => self.note("Run saved to history."),
-            Err(e) => self.note(format!("Could not save the run to history: {e}")),
-        }
+        self.file_run("Run saved to history.")
+    }
+
+    /// Files the run, which has ended, in history and clears it.
+    fn file_run(&mut self, saved: &str) -> Option<String> {
+        let id = match self.store.archive_run(&self.run) {
+            Ok(id) => {
+                self.note(saved);
+                Some(id)
+            }
+            Err(e) => {
+                self.note(format!("Could not save the run to history: {e}"));
+                None
+            }
+        };
         self.run = Run::default();
         self.ui.history.invalidate();
         self.run_changed();
+        id
+    }
+
+    /// A run just ended: History, with it selected (the Run tab would show
+    /// the start screen).
+    fn show_filed(&mut self, id: Option<String>) {
+        if let Some(id) = id {
+            self.ui.history.select(&id);
+            self.ui.tab = crate::views::Tab::History;
+        }
     }
 
     /// With "Match system" on, shows the light or dark look the system calls
@@ -465,13 +492,17 @@ impl SpireApp {
             },
             Action::AbandonRun => {
                 if self.state.started() && !self.run.ended() {
+                    // Abandoned to start another: stays on the start screen.
                     self.finish(Outcome::Abandoned);
                 } else {
                     self.run = Run::default();
                     self.run_changed();
                 }
             }
-            Action::EndRun(outcome) => self.finish(outcome),
+            Action::EndRun(outcome) => {
+                let filed = self.finish(outcome);
+                self.show_filed(filed);
+            }
             Action::EnterAct { act, index, boss } => {
                 self.run.push(RunEvent::EnterAct { act, index, boss });
                 self.run_changed();
@@ -677,6 +708,7 @@ impl SpireApp {
                 analytics: self.analytics.as_ref().filter(|(g, _)| *g == self.generation).map(|(_, a)| a),
                 combat: self.combat.as_ref(),
                 following: self.following(),
+                current_fight: self.current_fight.as_ref().filter(|_| self.following()).map(|(_, p)| p),
             };
             let (store, settings) = (&self.store, &self.settings);
             let mut page = |ui: &mut egui::Ui, st: &mut UiState, out: &mut Vec<Action>| {
@@ -737,7 +769,15 @@ impl SpireApp {
         // another profile's save as the newest. File ours first.
         let game = self.finished_followed(&game).unwrap_or(game);
         let after = self.ui.follow.filed_start;
-        match crate::follow::step(game, &self.run, self.state.started(), &self.ui.follow.filed, after) {
+        let current = game.current_fight.clone();
+        let step = crate::follow::step(game, &self.run, self.state.started(), &self.ui.follow.filed, after);
+        // The fight in progress belongs to the run being followed.
+        self.ui.follow.current_fight = match &step {
+            Step::Advance { ended: false, .. } => current,
+            Step::Adopt(g) if !g.ended => current,
+            _ => None,
+        };
+        match step {
             Step::Nothing => {}
             Step::Advance { events, ended } => {
                 if self.run.events != events {
@@ -806,13 +846,46 @@ impl SpireApp {
     fn file_followed(&mut self) {
         self.ui.follow.filed.extend(self.run.source.clone());
         self.ui.follow.filed_start = crate::follow::followed_start(&self.run).or(self.ui.follow.filed_start);
-        match self.store.archive_run(&self.run) {
-            Ok(_) => self.note("The game's run ended; saved to history."),
-            Err(e) => self.note(format!("Could not save the run to history: {e}")),
+        let filed = self.file_run("The game's run ended; saved to history.");
+        self.show_filed(filed);
+    }
+
+    /// The fight the game is in (following, not a boss): its preview, and
+    /// its outlook beside the others. The game can enter a fight without
+    /// the run changing (the fight joins the history once it's over), so
+    /// this keys on the fight as well as the generation.
+    fn prepare_current_fight(&mut self) {
+        let enc = self
+            .ui
+            .follow
+            .current_fight
+            .as_ref()
+            .filter(|_| self.following())
+            .and_then(|id| self.catalog.encounters.get(id))
+            .filter(|e| e.room != spire_core::catalog::RoomType::Boss);
+        let Some(enc) = enc else {
+            self.current_fight = None;
+            return;
+        };
+        if self.current_fight.as_ref().is_none_or(|(g, p)| *g != self.generation || p.encounter != enc.id) {
+            let scaling = spire_core::analysis::threats::Scaling::for_run(&self.state, &self.catalog);
+            let preview = spire_core::analysis::threats::preview(
+                enc,
+                &self.catalog,
+                &self.playbook,
+                self.state.act_index,
+                scaling,
+                &self.dash.deck,
+                false,
+            );
+            self.current_fight = Some((self.generation, preview));
         }
-        self.run = Run::default();
-        self.ui.history.invalidate();
-        self.run_changed();
+        if let Some(c) = self.combat.as_mut()
+            && !c.outlooks.iter().any(|(e, _)| *e == enc.id)
+            && let Some(o) = survival::for_encounter(&c.sim, enc, &self.catalog, &self.state, &self.playbook)
+        {
+            c.outlooks.push((enc.id.clone(), o));
+        }
     }
 
     /// Builds what the open tab needs and nothing else: analytics for the
@@ -856,6 +929,7 @@ impl SpireApp {
             let balance = spire_core::analysis::balance::warnings(&sim, &self.state, &self.catalog, &self.playbook);
             self.combat = Some(Combat { generation: self.generation, sim, jobs, outlooks, bench, balance });
         }
+        self.prepare_current_fight();
         match self.ui.tab {
             Tab::Analytics if self.analytics.as_ref().is_none_or(|(g, _)| *g != self.generation) => {
                 let sim = match &self.combat {
@@ -976,10 +1050,13 @@ mod follow_tests {
         assert_eq!(app.state.floor, floor + 1);
         assert!(app.ui.toast.is_some());
 
-        // The run ends: filed in history, and the app is ready for the next.
+        // The run ends: filed in history and shown there, and the app is
+        // ready for the next.
+        app.ui.tab = crate::views::Tab::Run;
         app.sync_game(update(FINISHED.to_string(), false), &ctx);
         assert!(!app.state.started());
         assert_eq!(app.store.archived_runs().len(), 1);
+        assert_eq!(app.ui.tab, crate::views::Tab::History);
         // Seeing the same finished run again changes nothing.
         app.sync_game(update(FINISHED.to_string(), false), &ctx);
         assert_eq!(app.store.archived_runs().len(), 1);
@@ -1041,5 +1118,24 @@ mod follow_tests {
         app.apply(Action::FollowGameRun, &ctx);
         assert!(app.run.source.is_some());
         assert_eq!(app.store.archived_runs().len(), 1);
+        assert_eq!(app.ui.tab, crate::views::Tab::Run, "stays on the run it took");
+    }
+
+    #[test]
+    fn ending_a_run_shows_it_in_history_and_abandoning_starts_another() {
+        let (mut app, ctx) = app();
+        let character = app.catalog.characters.keys().next().unwrap().clone();
+        app.apply(Action::NewRun { character: character.clone(), ascension: 0 }, &ctx);
+        app.apply(Action::EndRun(Outcome::Abandoned), &ctx);
+        assert_eq!(app.ui.tab, crate::views::Tab::History);
+        assert_eq!(app.store.archived_runs().len(), 1);
+
+        // New run over a run in progress: on to the start screen.
+        app.ui.tab = crate::views::Tab::Run;
+        app.apply(Action::NewRun { character, ascension: 0 }, &ctx);
+        app.apply(Action::AbandonRun, &ctx);
+        assert_eq!(app.ui.tab, crate::views::Tab::Run);
+        assert!(!app.state.started());
+        assert_eq!(app.store.archived_runs().len(), 2);
     }
 }

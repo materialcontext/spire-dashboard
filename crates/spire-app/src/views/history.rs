@@ -92,9 +92,12 @@ impl HistoryBrowser {
         }
     }
 
-    /// Selects a run by id (its file name without `.json`).
+    /// Selects a run by id (its file name without `.json`), clearing the
+    /// filters so it's in the list.
     pub fn select(&mut self, id: &str) {
         self.selected = Some(id.to_string());
+        self.character = None;
+        self.outcome = OutcomeFilter::All;
     }
 
     /// Re-read from disk next time the tab shows (a run was just filed).
