@@ -1176,3 +1176,12 @@ fn strikes_and_weak_attacks_are_excluded_from_roles() {
     assert_eq!(pb.roles_of(&attack("TWIN", 1, 4, 2)), vec![Role::FastDamage], "8 in all for 1 energy");
     assert_eq!(pb.roles_of(&attack("CLEAVE", 2, 13, 1)), vec![Role::FastDamage]);
 }
+
+#[test]
+fn the_current_floor_is_the_one_being_played() {
+    let cat = catalog();
+    let mut run = started(&cat);
+    assert_eq!(run.state().current_floor(), 1, "a new run is on floor 1");
+    run.push(RunEvent::End { outcome: Outcome::Died { encounter: None }, at: None });
+    assert_eq!(run.state().current_floor(), 0, "an ended run shows the floors it reached");
+}

@@ -205,7 +205,7 @@ fn vitals(ui: &mut Ui, v: &ViewCtx, tight: bool, minimal: bool) {
         stat(ui, &format!("Act {}", s.act_index + 1), act.map_or("Not started", |a| a.name.as_str()), text());
     }
     ui.add_space(gap);
-    stat(ui, "Floor", s.floor.to_string(), text());
+    stat(ui, "Floor", s.current_floor().to_string(), text()).on_hover_text(format!("{} floors recorded", s.floor));
     ui.add_space(gap);
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 2.0;

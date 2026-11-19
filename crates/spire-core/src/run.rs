@@ -228,6 +228,13 @@ impl RunState {
         self.character.is_some()
     }
 
+    /// The floor being played: one past the floors recorded while the run
+    /// is on (a floor is recorded as the next one is entered, which is when
+    /// the game saves), and the last floor once it's over.
+    pub fn current_floor(&self) -> u32 {
+        if self.outcome.is_some() || !self.started() { self.floor } else { self.floor + 1 }
+    }
+
     /// The Ancient heal that's due: in act 2 and later, once the boss is
     /// known and before anything has been logged in the act. Act 1's heal is
     /// the starting HP. Returns the percent to heal.
