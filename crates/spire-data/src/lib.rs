@@ -12,6 +12,7 @@
 //! Updates only happen when the user presses the button: see [`fetch`].
 
 pub mod benchmarks;
+pub mod card_lines;
 pub mod codex;
 pub mod codex_events;
 pub mod codex_runs;

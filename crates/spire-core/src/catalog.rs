@@ -1093,6 +1093,14 @@ pub struct DataPack {
     /// What community decks that cleared each act had (from community runs).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub benchmarks: Vec<Benchmark>,
+    /// Card lines that beat each act's bosses, per character (from
+    /// community runs).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub card_lines: Vec<ActLines>,
+    /// How much picking each card lifts high-skill players' win rate (from
+    /// the source's card metrics).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub card_lift: BTreeMap<CardId, CardLift>,
 }
 
 /// The middle half and median of a measure across community decks.
@@ -1146,6 +1154,56 @@ pub struct Benchmark {
     pub max_hp_gained: Quartiles,
 }
 
+/// Boss fights, and those won.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Record {
+    pub fights: u32,
+    pub wins: u32,
+}
+
+/// Card lines for one character in one act: sets of cards community decks
+/// beat the act's boss with more often together than apart
+/// (`analysis::lines`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ActLines {
+    pub character: CharacterId,
+    /// 0-based act whose boss the decks fought.
+    pub act: u8,
+    /// Every boss fight in the sample.
+    pub all: Record,
+    /// Per boss.
+    #[serde(default)]
+    pub bosses: BTreeMap<EncounterId, Record>,
+    /// Share of runs offered each card as a reward in this act.
+    #[serde(default)]
+    pub offered: BTreeMap<CardId, f32>,
+    pub lines: Vec<CardLine>,
+}
+
+/// Cards that won together.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CardLine {
+    /// Two or three cards, sorted.
+    pub cards: Vec<CardId>,
+    /// Boss fights with all of them in the deck.
+    pub record: Record,
+    /// The best win rate among its smaller sets (each card alone, or each
+    /// pair of three), shrunk like the line's.
+    pub apart: f32,
+    /// Per boss, where it was fought often enough to say.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub bosses: BTreeMap<EncounterId, Record>,
+}
+
+/// A card's win-rate lift among high-skill players: their win rate with it
+/// minus what they'd expect from the floor they took it on, in points.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CardLift {
+    pub lift: f32,
+    /// Seats it's measured over.
+    pub n: u32,
+}
+
 impl DataPack {
     pub fn summary(&self) -> String {
         format!(
@@ -1190,6 +1248,10 @@ pub struct Catalog {
     pub rules: GameRules,
     /// From the last layer that has any.
     pub benchmarks: Vec<Benchmark>,
+    /// From the last layer that has any.
+    pub card_lines: Vec<ActLines>,
+    /// From the last layer that has any.
+    pub card_lift: BTreeMap<CardId, CardLift>,
 }
 
 fn merge<K: Ord, V>(map: &mut BTreeMap<K, V>, items: Vec<V>, key: impl Fn(&V) -> K) {
@@ -1223,6 +1285,12 @@ impl Catalog {
             }
             if !pack.benchmarks.is_empty() {
                 cat.benchmarks = pack.benchmarks;
+            }
+            if !pack.card_lines.is_empty() {
+                cat.card_lines = pack.card_lines;
+            }
+            if !pack.card_lift.is_empty() {
+                cat.card_lift = pack.card_lift;
             }
             cat
         })

@@ -200,7 +200,9 @@ impl Store {
     }
 
     pub fn settings(&self) -> Settings {
-        self.read(SETTINGS).and_then(Result::ok).and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+        let s: Settings =
+            self.read(SETTINGS).and_then(Result::ok).and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        Settings { source: s.source.upgraded(), ..s }
     }
 
     pub fn save_settings(&self, settings: &Settings) -> Result<(), DataError> {

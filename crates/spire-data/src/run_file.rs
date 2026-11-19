@@ -260,6 +260,13 @@ pub(crate) struct WChoice {
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
+pub(crate) struct WCardChoice {
+    pub(crate) card: WCard,
+    pub(crate) was_picked: bool,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
 pub(crate) struct WEnchanted {
     pub(crate) card: WCard,
     #[serde(deserialize_with = "lenient::id")]
@@ -288,6 +295,8 @@ pub(crate) struct WStats {
     pub(crate) cards_enchanted: Vec<WEnchanted>,
     pub(crate) cards_transformed: Vec<WTransformed>,
     pub(crate) relic_choices: Vec<WChoice>,
+    /// Card rewards offered on the floor, and whether each was taken.
+    pub(crate) card_choices: Vec<WCardChoice>,
     #[serde(deserialize_with = "lenient::ids")]
     pub(crate) relics_removed: Vec<String>,
     pub(crate) potion_choices: Vec<WChoice>,

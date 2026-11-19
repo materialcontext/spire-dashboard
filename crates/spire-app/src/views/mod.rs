@@ -16,6 +16,7 @@ pub mod enemies;
 pub mod history;
 pub mod log;
 pub mod lookout;
+pub mod picks;
 pub mod relics;
 pub mod start;
 pub mod threats;
@@ -220,6 +221,9 @@ pub fn root(
                     if lookout::show(&mut cols[1], v, out) {
                         cols[1].add_space(GAP);
                     }
+                    if picks::show(&mut cols[1], v, out) {
+                        cols[1].add_space(GAP);
+                    }
                     if let Some(t) = v.current_fight {
                         threats::current(&mut cols[1], v, t, out);
                         cols[1].add_space(GAP);
@@ -232,6 +236,9 @@ pub fn root(
                 breakdown::show(ui, v);
                 ui.add_space(GAP);
                 if lookout::show(ui, v, out) {
+                    ui.add_space(GAP);
+                }
+                if picks::show(ui, v, out) {
                     ui.add_space(GAP);
                 }
                 if let Some(t) = v.current_fight {

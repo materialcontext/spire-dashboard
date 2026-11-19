@@ -308,6 +308,43 @@ impl Shortfall {
     }
 }
 
+/// What card-reward suggestions show (`analysis::lines`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PickLines {
+    /// Suggestions shown at most.
+    pub max: u32,
+    /// A line is within reach when this many of its cards are missing, at
+    /// most (and at least one is held).
+    pub max_missing: u32,
+    /// The missing card is offered in at least this share of runs in the act.
+    pub min_offered: f32,
+    /// The line beats the boss (or the act's bosses) by this much over the
+    /// character's decks, in win rate.
+    pub min_gain: f32,
+    /// Roles the deck lacks against the boss that get a filler, at most.
+    pub filler_roles: u32,
+    /// Cards tried per role in the simulator, best lift first.
+    pub filler_candidates: u32,
+    /// A filler saves at least this much HP against the boss (or improves
+    /// the verdict).
+    pub min_hp_saved: u32,
+}
+
+impl Default for PickLines {
+    fn default() -> Self {
+        PickLines {
+            max: 3,
+            max_missing: 1,
+            min_offered: 0.15,
+            min_gain: 0.05,
+            filler_roles: 2,
+            filler_candidates: 5,
+            min_hp_saved: 3,
+        }
+    }
+}
+
 /// When a deck counts as desperately short (`analysis::events`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -403,6 +440,9 @@ pub struct Playbook {
     /// When a deck counts as desperately short of Block or max HP.
     #[serde(default)]
     pub short: ShortLines,
+    /// What card-reward suggestions show (`analysis::lines`).
+    #[serde(default)]
+    pub picks: PickLines,
     #[serde(default)]
     pub simulation: SimAssumptions,
     /// Which roles a relic plays, from what the deck simulator reads in its

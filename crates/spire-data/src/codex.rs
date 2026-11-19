@@ -63,6 +63,45 @@ pub type Responses = BTreeMap<&'static str, String>;
 
 // ---------------------------------------------------------------- wire types
 
+/// Card metrics among high-skill players (A10 runs by players above a 50%
+/// win rate): the `responses` key, and the path it's fetched from.
+pub const CARD_METRICS: &str = "card_metrics";
+pub const CARD_METRICS_PATH: &str = "runs/metrics/cards?bracket=wr50";
+/// A card's lift is kept from this many seats.
+const MIN_LIFT_SEATS: u32 = 20;
+
+#[derive(Deserialize)]
+struct WMetrics {
+    #[serde(default)]
+    rows: Vec<WMetricRow>,
+}
+
+#[derive(Deserialize)]
+struct WMetricRow {
+    id: String,
+    #[serde(default)]
+    upgraded: bool,
+    #[serde(default)]
+    lift: Option<f32>,
+    #[serde(default)]
+    lift_n: Option<u32>,
+}
+
+/// Each card's win-rate lift, from the card metrics (base cards only, and
+/// only where enough seats measure it). Unreadable metrics read as none:
+/// they only rank suggestions.
+pub fn card_lift(body: &str) -> BTreeMap<CardId, CardLift> {
+    let Ok(m) = serde_json::from_str::<WMetrics>(body) else { return BTreeMap::new() };
+    m.rows
+        .into_iter()
+        .filter(|r| !r.upgraded)
+        .filter_map(|r| {
+            let n = r.lift_n.filter(|n| *n >= MIN_LIFT_SEATS)?;
+            Some((CardId(r.id), CardLift { lift: r.lift?, n }))
+        })
+        .collect()
+}
+
 /// Treats JSON `null` like a missing field (Codex sends both).
 fn null_as_default<'de, D, T>(d: D) -> Result<T, D::Error>
 where
@@ -885,6 +924,8 @@ pub fn to_pack(
         rules,
         // From community runs, added after (`fetch::add_community_data`).
         benchmarks: Vec::new(),
+        card_lines: Vec::new(),
+        card_lift: responses.get(CARD_METRICS).map(|b| card_lift(b)).unwrap_or_default(),
     })
 }
 

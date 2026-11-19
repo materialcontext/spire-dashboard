@@ -54,6 +54,16 @@ the card you took, HP and gold after. Then it re-analyses the run.
   treasure room and how often its chest gives one of those relics, and how
   often community runs come to each in this act. Events you've had this run,
   and those the act doesn't allow, are left out.
+- **Look for in card rewards**: up to three suggestions, from the cards you
+  already have. First, *lines within reach*: two or three cards that
+  community decks beat this act's boss with more often together than apart,
+  where you hold part of the line and the rest is offered often enough in
+  this act. Next, *cards for what your deck lacks against the boss*: for the
+  roles its outlook and boss check find missing, your class's cards that
+  high-skill players win more with, kept only when the simulator shows the
+  deck doing better against the boss with the card (a card that needs a
+  partner, like a Shiv payoff, comes with one). The floor log's card step
+  lists the cards they look for, one click each.
 - **Macro advice** about your run only: role gaps for this act, boss gaps,
   missing area damage and removable curses. There are no general tips.
 - **Enemies seen** this run.
@@ -246,6 +256,9 @@ Everything the dashboard *believes* lives in `data/playbook.json`, not in code:
 - when a relic is crucial to a deck (`relic_fits`: the cards it counts and
   how many, or the shortfall it fixes) and when a deck counts as desperately
   short of Block or max HP (`short`)
+- what card-reward suggestions show (`picks`): how many, how much of a line
+  may be missing, how often its missing card must be offered, and how much
+  better a line or filler must do
 - what the deck simulator assumes where the game data is silent (`simulation`):
   cards drawn per turn, hand limit, turns and fights simulated, and hits that
   bring back a shot Arrow

@@ -122,6 +122,18 @@ kit, so old runs replay even after a data update.
   by the act's rarity shares at random among the character's pool. Each
   carries how often community runs come to it in the act. `fit_holds` is
   the test, shared with `audit --lookout`. Empty unless something qualifies.
+- `lines`: card lines and card-reward suggestions. `measure` (at data
+  refresh) finds, per character and act, sets of two or three cards whose
+  community decks beat the act's boss more often together than with any
+  smaller part and than the character's decks overall, rates shrunk toward
+  the act's (`PRIOR`). `suggest` (in the combat preparation, after the deck
+  simulation) gives at most `picks.max`: lines the deck holds part of whose
+  missing card is offered often enough this act, ranked by the line's
+  record against the boss being faced when there is one; then `fillers`,
+  class cards for the roles the deck lacks against the boss (its outlook's
+  limits, then the boss check's gaps), ranked by high-skill card lift and
+  kept only when the simulator loses less HP to the boss with them. On
+  held-out runs mined lines beat the baseline by a few points on average.
 - `advice`: act targets, boss gaps, area damage and removable curses (run-specific only).
 - `healing`: the rest heal (rules percent plus "heal an additional N" relics); the Ancient heal and starting HP are `GameRules` methods.
 - `tags`: what each card does, in 14 tags (Damage, Chip Damage,
@@ -270,6 +282,8 @@ only a fallback.
 
 - `/api/{acts,characters,cards,relics,potions,enchantments,monsters,encounters,events,ascensions}?channel=beta`
 - `/api/beta/version` (or `/api/versions` on stable), for the game version label
+- `/api/runs/metrics/cards?bracket=wr50`, card lift among high-skill players
+  (optional: the update goes on without it)
 
 The dashboard follows the **beta** branch by default (`Channel::Beta`, which
 sends `?channel=beta`). Wire structs name only the fields used, every field is
@@ -329,14 +343,19 @@ names (Trash Heap's "random forgotten Relic" is one of five, Doll Room lets
 you choose one of three), and the share of runs that met each event in each
 act (by act id, so Overgrowth and Underdocks stay apart) goes into
 `Event::met`. Relics from the general pools are left out: no one can fish an
-event for them. Per act, it also measures how often a `?` room turns into a
+event for them. The same replay that builds benchmarks takes each deck going into every
+boss fight, with whether the run got past it; with the card rewards offered
+per act (`card_lines.rs`), `analysis::lines::measure` turns them into
+`Catalog::card_lines`. The adapter also reads the source's card metrics for
+high-skill players (`runs/metrics/cards?bracket=wr50`) into
+`Catalog::card_lift`. Per act, it also measures how often a `?` room turns into a
 treasure room (`Act::unknown_treasure`, share of runs) and the rarity of the
 relics treasure rooms give (`Act::chest_rarity`), and `benchmarks.rs` adds
 the max HP decks had gained by the end of each act they cleared
 (`Benchmark::max_hp_gained`).
 
 Results land in `Encounter::lineups`, `spawns` and `stats`. The update reads
-`run_pages` pages (default 3, about 3,000 runs) from the last 14 days, so
+`run_pages` pages (default 12, about 12,000 runs) from the last 14 days, so
 lineups track the current game version. The export's own budget is 120
 credits per hour, and one page costs 1 credit. If this step fails, the rest of
 the update still applies.

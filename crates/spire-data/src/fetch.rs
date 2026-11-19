@@ -10,8 +10,12 @@ use ureq::tls::{RootCerts, TlsConfig};
 use crate::codex::{self, Channel, Responses};
 use crate::{DataError, codex_events, codex_runs, now_rfc3339, rfc3339, unix_now};
 
-/// Default pages of community runs (1000 runs each) read per update.
-pub const DEFAULT_RUN_PAGES: u32 = 3;
+/// Default pages of community runs (1000 runs each) read per update: card
+/// lines need many boss fights to say anything.
+pub const DEFAULT_RUN_PAGES: u32 = 12;
+/// The default before card lines. Nothing in the app sets the page count,
+/// so a saved 3 is that old default, not a choice; it reads as the new one.
+const OLD_DEFAULT_RUN_PAGES: u32 = 3;
 /// How far back community runs are read from, so lineups match the current game.
 pub const RUN_WINDOW_DAYS: i64 = 14;
 
@@ -36,6 +40,18 @@ pub enum Source {
     },
     /// A URL serving a complete `DataPack` JSON document.
     PackUrl { url: String },
+}
+
+impl Source {
+    /// A source saved with the old default page count reads with the new one.
+    pub fn upgraded(self) -> Source {
+        match self {
+            Source::SpireCodex { base_url, run_pages: OLD_DEFAULT_RUN_PAGES, channel } => {
+                Source::SpireCodex { base_url, run_pages: DEFAULT_RUN_PAGES, channel }
+            }
+            other => other,
+        }
+    }
 }
 
 impl Default for Source {
@@ -88,6 +104,10 @@ pub fn codex_responses(base_url: &str, channel: Channel) -> Result<(Responses, O
     let mut responses = Responses::new();
     for endpoint in codex::ENDPOINTS {
         responses.insert(endpoint, get(&agent, &format!("{base}/api/{endpoint}{}", channel.query()))?);
+    }
+    // Card metrics only rank suggestions: the update goes on without them.
+    if let Ok(body) = get(&agent, &format!("{base}/api/{}", codex::CARD_METRICS_PATH)) {
+        responses.insert(codex::CARD_METRICS, body);
     }
     // The version is informational; don't fail the update without it.
     let version = match channel {
@@ -159,11 +179,13 @@ pub fn add_community_data(pack: &mut DataPack, pages: &[String], notes: &mut Vec
     ));
     let events = codex_events::enrich(pack, &codex_events::sightings(pages));
     notes.push(format!("Community runs: event relics found for {events} events, and how often each event comes up."));
-    let decks = crate::benchmarks::add(pack, pages, &crate::bundled_playbook());
+    let (decks, bosses) = crate::benchmarks::add(pack, pages, &crate::bundled_playbook());
     notes.push(format!(
         "Community runs: {decks} decks rebuilt at the acts they cleared, {} benchmarks.",
         pack.benchmarks.len()
     ));
+    let lines = crate::card_lines::add(pack, &bosses, pages);
+    notes.push(format!("Community runs: {} boss fights, {lines} card lines.", bosses.len()));
 }
 
 /// Fetches and converts a full data pack from a source. Blocking: run it off

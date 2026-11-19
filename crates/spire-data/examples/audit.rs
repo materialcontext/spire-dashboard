@@ -12,6 +12,8 @@
 //! turn (12 turns), its HP, and the community's turns and damage taken.
 //! `--tags` counts each tag per character and lists every class card the
 //! reader leaves untagged.
+//! `--lines` prints the card lines in the catalog: per character and act,
+//! the boss fights behind them and the best lines.
 //! `--lookout <page.gz>...` rebuilds community decks at the end of each act
 //! they cleared (run export pages) and counts, per `relic_fits` rule, the
 //! share that qualify: a lookout warning should be rare.
@@ -44,6 +46,10 @@ fn main() {
     }
     if std::env::args().any(|a| a == "--mechanics") {
         mechanics(&cat);
+        return;
+    }
+    if std::env::args().any(|a| a == "--lines") {
+        lines(&cat);
         return;
     }
     if std::env::args().any(|a| a == "--lookout") {
@@ -319,4 +325,35 @@ fn lookout(cat: &Catalog, pb: &spire_core::Playbook, paths: &[String]) {
         }
         println!("{line}");
     }
+}
+
+fn lines(cat: &Catalog) {
+    use spire_core::analysis::lines::shrunk;
+    let rate = |r: spire_core::catalog::Record| r.wins as f32 / r.fights.max(1) as f32;
+    for a in &cat.card_lines {
+        let base = rate(a.all);
+        println!(
+            "== {} act {}: {} boss fights, {:.0}% won, {} lines",
+            a.character,
+            a.act + 1,
+            a.all.fights,
+            base * 100.0,
+            a.lines.len()
+        );
+        for l in a.lines.iter().take(8) {
+            let names: Vec<String> = l.cards.iter().map(|c| cat.card_name(c)).collect();
+            let offered: Vec<String> =
+                l.cards.iter().map(|c| format!("{:.0}%", a.offered.get(c).copied().unwrap_or(0.0) * 100.0)).collect();
+            println!(
+                "   {:<48} {:>4} decks  {:>3.0}% (shrunk {:.0}%) vs {:.0}% apart  offered {}",
+                names.join(" + "),
+                l.record.fights,
+                rate(l.record) * 100.0,
+                shrunk(l.record, base) * 100.0,
+                l.apart * 100.0,
+                offered.join("/")
+            );
+        }
+    }
+    println!("== card lift: {} cards", cat.card_lift.len());
 }
