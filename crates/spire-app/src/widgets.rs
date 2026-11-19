@@ -96,6 +96,21 @@ pub fn link(ui: &mut Ui, text: RichText) -> egui::Response {
     r
 }
 
+/// A [`link`] cut short with "…" past `max_width` (the full text shows on
+/// hover), for rows with columns to their right.
+pub fn link_within(ui: &mut Ui, text: RichText, max_width: f32) -> egui::Response {
+    ui.scope(|ui| {
+        ui.set_max_width(max_width.max(40.0));
+        let r = ui.add(egui::Label::new(text).sense(Sense::click()).truncate());
+        if r.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            ui.painter().hline(r.rect.x_range(), r.rect.max.y - 1.0, Stroke::new(1.0, text_faint()));
+        }
+        r
+    })
+    .inner
+}
+
 /// Small, dimmed text: secondary lines that still carry information.
 pub fn secondary(text: impl Into<String>) -> RichText {
     RichText::new(text).small().color(text_dim())

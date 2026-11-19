@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::analysis::tags::{self, Tag, Tagged};
 use crate::catalog::{Card, CardType, Target};
-use crate::ids::CardId;
+use crate::ids::{CardId, CharacterId};
 
 /// The problems a deck solves: what the player sees, on the deck and on
 /// each card. Each is measured by a job (`analysis::jobs`).
@@ -61,6 +61,18 @@ impl Role {
         }
     }
 
+    /// What the role is for, in a line.
+    pub fn purpose(self) -> &'static str {
+        match self {
+            Role::Mitigation => "Absorb steady pressure, turn after turn.",
+            Role::Survival => "Take a spike turn.",
+            Role::FastDamage => "Do most of the work before the fight turns.",
+            Role::ScalingDamage => "Win a long fight.",
+            Role::Aoe => "Handle a group.",
+            Role::Chip => "Wear down an enemy that has to be hit many times.",
+        }
+    }
+
     /// A role by its saved name, old names included: frontload damage is
     /// Fast Damage, both defenses are Mitigation, and consistency is no
     /// role any more (`None`).
@@ -104,6 +116,8 @@ pub enum Condition {
     Rarity(crate::catalog::Rarity),
     /// One of the data's own card tags ("Strike", "Defend").
     SourceTag(String),
+    /// Costs Stars.
+    StarCost,
     /// Case-insensitive substring match on the card text.
     TextContains(String),
     Keyword(String),
@@ -155,6 +169,7 @@ impl Condition {
             Condition::DamagePerEnergyAtMost(n) => format!("deals {n} damage or less per energy"),
             Condition::Rarity(r) => format!("is {r:?}"),
             Condition::SourceTag(t) => format!("is a {t}"),
+            Condition::StarCost => "costs Stars".into(),
             Condition::TextContains(t) => format!("mentions \"{t}\""),
             Condition::Keyword(k) => format!("has {k}"),
             Condition::CardType(t) => format!("is a {}", t.label()),
@@ -184,6 +199,7 @@ impl Condition {
             }),
             Condition::Rarity(r) => card.rarity == *r,
             Condition::SourceTag(t) => card.tags.iter().any(|x| x.eq_ignore_ascii_case(t)),
+            Condition::StarCost => card.star_cost.is_some_and(|n| n > 0),
             Condition::TextContains(s) => contains_ci(&card.text, s),
             Condition::Keyword(k) => card.keywords.iter().any(|x| x.eq_ignore_ascii_case(k)),
             Condition::CardType(t) => card.card_type == *t,
@@ -219,6 +235,10 @@ pub struct RoleExclusion {
     #[serde(default)]
     pub role: Option<Role>,
     pub when: Condition,
+    /// The rule in plain words, for tooltips ("is a starter Strike");
+    /// otherwise the condition's own words.
+    #[serde(default)]
+    pub why: Option<String>,
 }
 
 /// A role a tag gives, from its number up ("Block 9+ is Survival").
@@ -392,6 +412,9 @@ pub struct Playbook {
     /// text: an effect (or passive) name, when it happens, and the role.
     #[serde(default)]
     pub relic_roles: Vec<RelicRoleRule>,
+    /// Roles a relic plays when its text says so ("heal" is Mitigation).
+    #[serde(default)]
+    pub relic_text_roles: Vec<RelicTextRole>,
     /// Where a fight's turns count as spikes or quiet, and as ramping.
     #[serde(default)]
     pub fights: FightThresholds,
@@ -458,6 +481,15 @@ impl Default for FightThresholds {
     }
 }
 
+/// "A relic that heals is Mitigation": a role from phrases in a relic's
+/// text, for what the simulator doesn't play out.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RelicTextRole {
+    pub role: Role,
+    /// Any of these, case-insensitive.
+    pub any_text: Vec<String>,
+}
+
 /// "A relic that gains Block once a combat is frontloaded defense."
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RelicRoleRule {
@@ -471,7 +503,7 @@ pub struct RelicRoleRule {
 }
 
 /// What the deck simulator assumes where the game data is silent.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SimAssumptions {
     /// Cards drawn at the start of each turn.
@@ -491,6 +523,28 @@ pub struct SimAssumptions {
     /// data marks the move ("Status" intent) but not the card or how many,
     /// so this is an assumption; the survival check uses it.
     pub status_cards: u32,
+    /// Cards that do nothing without something the deck must supply
+    /// (Growth without Sadness, Dualcast without orbs). Unmet, they're dead
+    /// cards: unplayable in the simulator, no roles in the deck.
+    pub requirements: Vec<Requirement>,
+}
+
+/// What a kind of card needs to do anything at all, and what supplies it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Requirement {
+    /// What's needed, in words ("Sadness", "orbs").
+    pub what: String,
+    /// The cards that need it (cards that also supply it don't).
+    pub needs: Condition,
+    /// Deck cards that supply it.
+    #[serde(default)]
+    pub met_by: Option<Condition>,
+    /// Relics whose text has any of these supply it.
+    #[serde(default)]
+    pub relics: Vec<String>,
+    /// Characters that have it built in (the Fool's Arrows).
+    #[serde(default)]
+    pub characters: Vec<CharacterId>,
 }
 
 impl Default for SimAssumptions {
@@ -503,6 +557,7 @@ impl Default for SimAssumptions {
             arrow_return_hits: 3,
             max_orb_slots: 10,
             status_cards: 2,
+            requirements: Vec::new(),
         }
     }
 }
@@ -556,6 +611,57 @@ impl Playbook {
         matched
     }
 
+    /// How a card (or relic) gets a role, in words, from the rules as they
+    /// stand: the tags that give it, the other rules, what rules it out,
+    /// and how relics get it. For tooltips on role names.
+    pub fn role_criteria(&self, role: Role) -> String {
+        let mut lines = vec![format!("{}: {}", role.label(), role.purpose())];
+        let tags: Vec<String> = self
+            .tag_roles
+            .iter()
+            .filter(|t| t.role == role)
+            .map(|t| match t.min {
+                0 => t.tag.label().to_string(),
+                1 => format!("{} that deals damage", t.tag.label()),
+                n => format!("{} {n}+", t.tag.label()),
+            })
+            .collect();
+        if !tags.is_empty() {
+            lines.push(format!("A card counts when it has: {}.", tags.join(", ")));
+        }
+        let rules: Vec<String> = self.role_rules.iter().filter(|r| r.role == role).map(|r| r.when.describe()).collect();
+        if !rules.is_empty() {
+            lines.push(format!("Or when it {}.", rules.join("; or ")));
+        }
+        let mut never: Vec<String> = Vec::new();
+        if let Some(max) = self.role_max_cost.get(&role) {
+            never.push(format!("costs more than {max} energy (or X)"));
+        }
+        never.extend(
+            self.role_exclusions
+                .iter()
+                .filter(|x| x.role.is_none_or(|r| r == role))
+                .map(|x| x.why.clone().unwrap_or_else(|| x.when.describe())),
+        );
+        if !never.is_empty() {
+            lines.push(format!("Not when it {}.", never.join("; or ")));
+        }
+        let mut relics: Vec<String> =
+            self.relic_roles.iter().filter(|r| r.role == role).map(|r| r.effect.replace('_', " ")).collect();
+        relics.dedup();
+        relics.extend(
+            self.relic_text_roles
+                .iter()
+                .filter(|r| r.role == role)
+                .flat_map(|r| r.any_text.iter().map(|t| format!("\"{t}\""))),
+        );
+        if !relics.is_empty() {
+            lines.push(format!("Relics count for: {}.", relics.join(", ")));
+        }
+        lines.push("Your own role or tag edits on a card win over all of this.".into());
+        lines.join("\n")
+    }
+
     /// The tags that give a role, for "what to look for".
     pub fn tags_for(&self, role: Role) -> Vec<Tag> {
         let mut out: Vec<Tag> = self.tag_roles.iter().filter(|t| t.role == role).map(|t| t.tag).collect();
@@ -563,16 +669,23 @@ impl Playbook {
         out
     }
 
-    /// The roles a relic plays, from what the simulator understands in its
-    /// text (`crate::mechanics::read`). Relics with nothing understood
-    /// play none, so only obvious fits are flagged.
-    pub fn relic_roles(&self, m: &crate::mechanics::Mechanics) -> Vec<Role> {
+    /// The roles a relic plays: from what the simulator understands in its
+    /// text (`crate::mechanics::read`), and from phrases the simulator
+    /// doesn't play out (healing, max HP, Thorns). Relics with neither play
+    /// none, so only obvious fits are flagged.
+    pub fn relic_roles(&self, text: &str, m: &crate::mechanics::Mechanics) -> Vec<Role> {
         let facts = m.facts();
         let mut roles: Vec<Role> = self
             .relic_roles
             .iter()
             .filter(|r| facts.iter().any(|(k, rec)| *k == r.effect && r.recurring.is_none_or(|want| want == *rec)))
             .map(|r| r.role)
+            .chain(
+                self.relic_text_roles
+                    .iter()
+                    .filter(|r| r.any_text.iter().any(|p| contains_ci(text, p)))
+                    .map(|r| r.role),
+            )
             .collect();
         roles.sort();
         roles.dedup();

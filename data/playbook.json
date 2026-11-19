@@ -371,7 +371,8 @@
             "source_tag": "Strike"
           }
         ]
-      }
+      },
+      "why": "is a starter Strike"
     },
     {
       "role": "fast_damage",
@@ -393,7 +394,8 @@
             }
           }
         ]
-      }
+      },
+      "why": "deals 6 damage or less, in all or per energy (unless it applies Vulnerable)"
     }
   ],
   "role_rules": [
@@ -425,6 +427,12 @@
       "role": "survival",
       "when": {
         "text_contains": "intangible"
+      }
+    },
+    {
+      "role": "chip",
+      "when": {
+        "applies_power": "Thorns"
       }
     }
   ],
@@ -698,7 +706,264 @@
     "trials": 400,
     "arrow_return_hits": 3,
     "max_orb_slots": 10,
-    "status_cards": 2
+    "status_cards": 2,
+    "requirements": [
+      {
+        "what": "Sadness",
+        "needs": {
+          "all": [
+            {
+              "text_contains": "sadness"
+            },
+            {
+              "not": {
+                "card_type": "attack"
+              }
+            }
+          ]
+        },
+        "met_by": {
+          "any": [
+            {
+              "all": [
+                {
+                  "text_contains": "sadness"
+                },
+                {
+                  "any": [
+                    {
+                      "text_contains": "add "
+                    },
+                    {
+                      "text_contains": "shuffle"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "text_contains": "into sadness"
+            }
+          ]
+        }
+      },
+      {
+        "what": "Shivs",
+        "needs": {
+          "all": [
+            {
+              "text_contains": "shiv"
+            },
+            {
+              "not": {
+                "card_type": "attack"
+              }
+            }
+          ]
+        },
+        "met_by": {
+          "all": [
+            {
+              "text_contains": "shiv"
+            },
+            {
+              "any": [
+                {
+                  "text_contains": "add "
+                },
+                {
+                  "text_contains": "create"
+                },
+                {
+                  "text_contains": "shuffle"
+                }
+              ]
+            }
+          ]
+        },
+        "relics": [
+          "shiv"
+        ]
+      },
+      {
+        "what": "Souls",
+        "needs": {
+          "text_contains": "play a soul"
+        },
+        "met_by": {
+          "any": [
+            {
+              "all": [
+                {
+                  "text_contains": "soul"
+                },
+                {
+                  "any": [
+                    {
+                      "text_contains": "add "
+                    },
+                    {
+                      "text_contains": "create"
+                    },
+                    {
+                      "text_contains": "shuffle"
+                    },
+                    {
+                      "text_contains": "put"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "text_contains": "into soul"
+            }
+          ]
+        },
+        "relics": [
+          "soul"
+        ]
+      },
+      {
+        "what": "Sovereign Blade",
+        "needs": {
+          "all": [
+            {
+              "text_contains": "sovereign blade"
+            },
+            {
+              "not": {
+                "text_contains": "forge"
+              }
+            }
+          ]
+        },
+        "met_by": {
+          "any": [
+            {
+              "text_contains": "forge"
+            },
+            {
+              "text_contains": "summon forth"
+            }
+          ]
+        },
+        "relics": [
+          "forge",
+          "sovereign blade"
+        ]
+      },
+      {
+        "what": "orbs",
+        "needs": {
+          "all": [
+            {
+              "any": [
+                {
+                  "text_contains": "evoke"
+                },
+                {
+                  "text_contains": "unique orb"
+                },
+                {
+                  "text_contains": "rightmost orb"
+                },
+                {
+                  "all": [
+                    {
+                      "text_contains": "gain"
+                    },
+                    {
+                      "text_contains": "orb slot"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "not": {
+                "text_contains": "channel"
+              }
+            },
+            {
+              "not": {
+                "card_type": "attack"
+              }
+            },
+            {
+              "not": {
+                "text_contains": "lose"
+              }
+            }
+          ]
+        },
+        "met_by": {
+          "all": [
+            {
+              "text_contains": "channel"
+            },
+            {
+              "not": {
+                "text_contains": "already channeled"
+              }
+            }
+          ]
+        },
+        "relics": [
+          "channel"
+        ]
+      },
+      {
+        "what": "Lightning channeled",
+        "needs": {
+          "text_contains": "already channeled"
+        },
+        "met_by": {
+          "all": [
+            {
+              "text_contains": "channel"
+            },
+            {
+              "text_contains": "lightning"
+            },
+            {
+              "not": {
+                "text_contains": "already channeled"
+              }
+            }
+          ]
+        },
+        "relics": [
+          "lightning"
+        ]
+      },
+      {
+        "what": "Arrows",
+        "needs": {
+          "text_contains": "shoot an arrow"
+        },
+        "characters": [
+          "FOOL"
+        ]
+      },
+      {
+        "what": "Stars",
+        "needs": "star_cost",
+        "met_by": {
+          "all": [
+            {
+              "text_contains": "gain"
+            },
+            {
+              "text_contains": "star"
+            }
+          ]
+        },
+        "relics": [
+          "star"
+        ]
+      }
+    ]
   },
   "fights": {
     "spike": 1.5,
@@ -803,6 +1068,21 @@
     {
       "effect": "plating",
       "role": "mitigation"
+    }
+  ],
+  "relic_text_roles": [
+    {
+      "role": "mitigation",
+      "any_text": [
+        "heal",
+        "raise your max hp"
+      ]
+    },
+    {
+      "role": "chip",
+      "any_text": [
+        "thorns"
+      ]
     }
   ],
   "balance": {

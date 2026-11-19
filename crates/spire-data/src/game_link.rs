@@ -122,6 +122,14 @@ pub fn save_dirs(game: &Path) -> Vec<PathBuf> {
     out
 }
 
+/// A finished run in any profile's history, by its start time (the game
+/// names finished runs `<start time>.run`).
+pub fn find_finished(game: &Path, start_time: i64) -> Option<String> {
+    save_dirs(game)
+        .iter()
+        .find_map(|d| std::fs::read_to_string(d.join("history").join(format!("{start_time}.run"))).ok())
+}
+
 /// `profile2` is 2.
 fn profile_number(dir: &Path) -> Option<i32> {
     dir.file_name()?.to_str()?.strip_prefix("profile")?.parse().ok()
@@ -276,5 +284,18 @@ mod tests {
         named.locate(&game);
         assert_eq!(named.save_dir, Some(other));
         let _ = std::fs::remove_dir_all(game);
+    }
+
+    #[test]
+    fn a_finished_run_is_found_in_any_profiles_history() {
+        let game = std::env::temp_dir().join(format!("spire-finished-{}", std::process::id()));
+        let unmodded = game.join("steam").join("7").join("profile1").join("saves");
+        let modded = game.join("steam").join("7").join("modded").join("profile1").join("saves");
+        std::fs::create_dir_all(unmodded.join("history")).unwrap();
+        std::fs::create_dir_all(modded.join("history")).unwrap();
+        std::fs::write(modded.join("history").join("1700.run"), "{\"win\":false}").unwrap();
+        assert_eq!(find_finished(&game, 1700).as_deref(), Some("{\"win\":false}"));
+        assert_eq!(find_finished(&game, 1699), None);
+        std::fs::remove_dir_all(&game).ok();
     }
 }

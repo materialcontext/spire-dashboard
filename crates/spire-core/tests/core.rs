@@ -1157,10 +1157,12 @@ fn strikes_and_weak_attacks_are_excluded_from_roles() {
         RoleExclusion {
             role: None,
             when: Condition::All(vec![Condition::Rarity(Rarity::Basic), Condition::SourceTag("Strike".into())]),
+            why: None,
         },
         RoleExclusion {
             role: Some(Role::FastDamage),
             when: Condition::Any(vec![Condition::TotalDamageAtMost(6), Condition::DamagePerEnergyAtMost(6)]),
+            why: None,
         },
     ];
     let attack = |id: &str, cost: u8, damage: u32, hits: u32| {
@@ -1175,4 +1177,13 @@ fn strikes_and_weak_attacks_are_excluded_from_roles() {
     assert!(pb.roles_of(&attack("HEAVY", 2, 12, 1)).is_empty(), "6 per energy or less");
     assert_eq!(pb.roles_of(&attack("TWIN", 1, 4, 2)), vec![Role::FastDamage], "8 in all for 1 energy");
     assert_eq!(pb.roles_of(&attack("CLEAVE", 2, 13, 1)), vec![Role::FastDamage]);
+}
+
+#[test]
+fn the_current_floor_is_the_one_being_played() {
+    let cat = catalog();
+    let mut run = started(&cat);
+    assert_eq!(run.state().current_floor(), 1, "a new run is on floor 1");
+    run.push(RunEvent::End { outcome: Outcome::Died { encounter: None }, at: None });
+    assert_eq!(run.state().current_floor(), 0, "an ended run shows the floors it reached");
 }

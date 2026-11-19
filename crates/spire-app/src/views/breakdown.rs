@@ -50,9 +50,15 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
         let jobs = v.combat.map(|c| &c.jobs);
         for r in Role::ALL {
             let row = bar(ui, r.label(), d.role(r), d.starter_role(r), max_role, target(r), style::role_color(r));
-            if let Some(j) = jobs {
-                row.on_hover_text(j.describe(r));
-            }
+            // Built only while hovered: what the deck does, then how a card
+            // counts for the role.
+            row.on_hover_ui(|ui| {
+                ui.set_max_width(360.0);
+                if let Some(j) = jobs {
+                    ui.label(RichText::new(j.describe(r)).strong());
+                }
+                ui.label(v.playbook.role_criteria(r));
+            });
         }
         if let Some(j) = jobs {
             ui.label(caption(format!("Bad draws: {:.0}% of usual damage", j.floor * 100.0)))

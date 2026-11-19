@@ -64,7 +64,7 @@ impl RelicBrowser {
                 .catalog
                 .relics
                 .values()
-                .map(|r| (r.id.clone(), v.playbook.relic_roles(&reading(v.catalog, r))))
+                .map(|r| (r.id.clone(), v.playbook.relic_roles(&r.text, &reading(v.catalog, r))))
                 .filter(|(_, roles)| !roles.is_empty())
                 .collect();
             self.roles = Some((v.generation, Arc::new(map)));
@@ -248,13 +248,16 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut RelicBrowser) {
     hairline(ui);
     ui.label(&relic.text);
     if let Some((_, m)) = &b.reading {
-        let roles = v.playbook.relic_roles(m);
+        let roles = v.playbook.relic_roles(&relic.text, m);
         if !roles.is_empty() {
             ui.add_space(crate::style::space::s());
             ui.label(eyebrow("Role"));
             ui.horizontal_wrapped(|ui| {
                 for r in &roles {
-                    crate::widgets::chip(ui, r.label(), style::role_color(*r));
+                    crate::widgets::chip(ui, r.label(), style::role_color(*r)).on_hover_ui(|ui| {
+                        ui.set_max_width(360.0);
+                        ui.label(v.playbook.role_criteria(*r));
+                    });
                 }
             });
         }

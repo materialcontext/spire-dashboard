@@ -154,7 +154,12 @@ pub fn read(json: &str, catalog: &Catalog, hint: &ActHint) -> Result<GameRun, Un
     let mut floors = 0;
     // The act in progress may have no floors yet: the hint says it began.
     let current_act = hint.index.map(usize::from).or(run.current_act_index);
-    let acts = run.map_point_history.len().max(current_act.map_or(0, |i| i + 1));
+    // At most one act without floors: the one after the last act played.
+    // Around an act change the mod's index can run ahead of the save, and a
+    // save can hold an empty list for the next act; neither may skip an act
+    // (entering Act 3 straight after Act 1's boss).
+    let played = run.map_point_history.iter().rposition(|p| !p.is_empty()).map_or(0, |i| i + 1);
+    let acts = run.map_point_history.len().max(current_act.map_or(0, |i| i + 1)).min(played + 1);
     for i in 0..acts {
         let points: &[WPoint] = run.map_point_history.get(i).map_or(&[], Vec::as_slice);
         let current = current_act == Some(i);
@@ -498,5 +503,27 @@ mod tests {
         assert_eq!(state.act.as_ref(), Some(&act.id));
         assert_eq!(state.boss, act.bosses.first().cloned());
         assert_eq!(state.ascension, 2);
+    }
+
+    #[test]
+    fn an_act_change_never_skips_an_act() {
+        let cat = catalog();
+        let mut save: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/fixtures/in_progress.save")).expect("fixture");
+        let act_of = |save: &serde_json::Value, hint: &ActHint| {
+            let run = read(&save.to_string(), &cat, hint).expect("reads");
+            spire_core::run::replay(&run.events).act_index
+        };
+        // In Act 1; the mod already says Act 2 began: Act 2.
+        let ahead = ActHint { index: Some(1), ..ActHint::default() };
+        assert_eq!(act_of(&save, &ahead), 1);
+        // The mod's index two ahead (or the save's): still only Act 2.
+        let far = ActHint { index: Some(2), ..ActHint::default() };
+        assert_eq!(act_of(&save, &far), 1);
+        // The save holding an empty list for the next act, and its index
+        // past it: Act 2, not 3.
+        save["map_point_history"].as_array_mut().unwrap().push(serde_json::json!([]));
+        save["current_act_index"] = serde_json::json!(2);
+        assert_eq!(act_of(&save, &ActHint::default()), 1);
     }
 }

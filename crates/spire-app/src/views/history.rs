@@ -334,7 +334,7 @@ fn replay(ui: &mut Ui, v: &ViewCtx, run: &Run, d: &mut Detail) {
         }
         ui.add_space(crate::style::space::s());
         ui.label(eyebrow("Deck"));
-        let rows = deck::deck_rows(&deck::classify(&state.deck, v.catalog, v.playbook));
+        let rows = deck::deck_rows(&deck::classify_run(state, v.catalog, v.playbook));
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 10.0;
             for r in &rows {
