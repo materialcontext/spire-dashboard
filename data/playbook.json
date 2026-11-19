@@ -796,5 +796,11 @@
       "effect": "plating",
       "role": "mitigation"
     }
-  ]
+  ],
+  "balance": {
+    "pile_up": 0.5,
+    "waiting": 0.2,
+    "min_gained": 1.0,
+    "makers_per_user": 2.0
+  }
 }

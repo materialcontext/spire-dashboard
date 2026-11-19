@@ -1,6 +1,7 @@
 //! Pure analysis over a run, the catalog and the playbook.
 
 pub mod advice;
+pub mod balance;
 pub mod benchmark;
 pub mod deck;
 pub mod events;

@@ -46,6 +46,8 @@ pub struct Combat {
     /// The deck next to community decks that cleared this act, when the
     /// data has a benchmark for it.
     pub bench: Option<Bench>,
+    /// Setup piling up, Arrows or Stars running short.
+    pub balance: Vec<spire_core::analysis::balance::Warning>,
 }
 
 /// The deck against a benchmark: which decks, and each measure.
@@ -831,7 +833,8 @@ impl SpireApp {
                     rows: spire_core::analysis::benchmark::compare(b, &self.dash.deck, &jobs),
                 })
             });
-            self.combat = Some(Combat { generation: self.generation, sim, jobs, outlooks, bench });
+            let balance = spire_core::analysis::balance::warnings(&sim, &self.state, &self.catalog, &self.playbook);
+            self.combat = Some(Combat { generation: self.generation, sim, jobs, outlooks, bench, balance });
         }
         match self.ui.tab {
             Tab::Analytics if self.analytics.as_ref().is_none_or(|(g, _)| *g != self.generation) => {

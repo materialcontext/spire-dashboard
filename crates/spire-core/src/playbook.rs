@@ -351,6 +351,29 @@ pub struct Playbook {
     /// Where a fight's turns count as spikes or quiet, and as ramping.
     #[serde(default)]
     pub fights: FightThresholds,
+    /// When setup or a resource counts as out of balance.
+    #[serde(default)]
+    pub balance: BalanceLines,
+}
+
+/// Lines for the setup and resource warnings (`analysis::balance`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BalanceLines {
+    /// Setup used at under this share of what's made piles up.
+    pub pile_up: f32,
+    /// Shots or Star cards waiting at or over this share run short.
+    pub waiting: f32,
+    /// Less made a turn than this isn't worth a warning.
+    pub min_gained: f32,
+    /// More setup cards than this per card that uses them piles up.
+    pub makers_per_user: f32,
+}
+
+impl Default for BalanceLines {
+    fn default() -> Self {
+        BalanceLines { pile_up: 0.5, waiting: 0.2, min_gained: 1.0, makers_per_user: 2.0 }
+    }
 }
 
 /// How a fight's turns are read against its typical turn (its pressure).

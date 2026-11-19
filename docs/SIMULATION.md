@@ -137,6 +137,7 @@ what the simulator does:
 - Cruelty adds to Vulnerable (75%).
 - Vigor, Aim (on shots) and Stretch (on Block) apply to every hit or Block gain of the card that spends them.
 - Vigor, Aim and Stretch last until first used, across turns: unspent, they carry into the next turn. The simulator never resets them at a turn's end.
+- A card that makes setup is worth what the deck can make of it: Aim at the deck's Shoot cards' mean Aim multiplier, Vigor if the deck has an attack, Stretch if it has a Block card, and nothing otherwise. Setup already waiting counts toward the card that spends it. The simulator reports each store per turn (`DeckSim::stores`: made, used, and cards waiting on an Arrow or on Stars) for `analysis::balance`.
 - A shot Arrow returns after 3 attack hits, each hit of a multi-hit attack counting (`arrow_return_hits` in the playbook's `simulation`).
 - "Whenever you play a card" powers don't count themselves.
 - No card reads a current value at the moment a same-timing effect fires, so the order of same-timing relics and powers doesn't change results. The simulator fires relics first (in pickup order), then powers in play order.

@@ -63,6 +63,43 @@ pub struct PlayStats {
     pub debuffs: f32,
 }
 
+/// What persists until used: setup (Aim, Vigor, Stretch) and the Fool's
+/// and the Regent's resources (Arrows, Stars).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Store {
+    Aim,
+    Vigor,
+    Stretch,
+    Arrows,
+    Stars,
+}
+
+impl Store {
+    pub const ALL: [Store; 5] = [Store::Aim, Store::Vigor, Store::Stretch, Store::Arrows, Store::Stars];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Store::Aim => "Aim",
+            Store::Vigor => "Vigor",
+            Store::Stretch => "Stretch",
+            Store::Arrows => "Arrows",
+            Store::Stars => "Stars",
+        }
+    }
+}
+
+/// One store per turn: how much was made, how much was used, and how many
+/// cards in hand waited on it at the end of the turn (a Shoot card with no
+/// Arrow, a Star card with too few Stars).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Flow {
+    pub gained: f32,
+    pub spent: f32,
+    pub waiting: f32,
+    /// Shots or Star cards played, for the share that waited.
+    pub plays: f32,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct TurnOutput {
     /// Damage this turn when playing for damage.
@@ -128,6 +165,9 @@ pub struct DeckSim {
     pub resources: Vec<(Resource, f32)>,
     /// How the deck plays, per turn, when playing for damage.
     pub play: PlayStats,
+    /// Each store per turn: Stretch when playing for block, the rest when
+    /// playing for damage.
+    pub stores: [Flow; 5],
     /// Relics whose combat effects are simulated, and those that aren't.
     pub relics_simulated: Vec<String>,
     pub relics_not_simulated: Vec<String>,
@@ -386,6 +426,7 @@ struct TurnLog {
     drawn: u32,
     dead: u32,
     resources: [f32; 6],
+    stores: [Flow; 5],
 }
 
 type Rule = (When, Vec<Effect>);
@@ -402,6 +443,20 @@ struct Setup<'a> {
     relic_rules: Vec<&'a Rule>,
     relic_mods: Mods,
     rules: &'a SimAssumptions,
+    /// What setup is worth per point: Aim by the deck's Shoot cards (their
+    /// mean multiplier), Vigor by its attacks, Stretch by its Block cards;
+    /// 0 when the deck has nothing to spend it on. It lasts until used, so
+    /// any consumer in the deck cashes it in eventually.
+    worth: [f32; 3],
+}
+
+/// What a point of Aim, Vigor and Stretch is worth to a deck of these plays.
+fn setup_worth(plays: &[Play]) -> [f32; 3] {
+    let shooters: Vec<i32> = plays.iter().filter(|p| p.shoots).map(|p| p.aim_multiplier).collect();
+    let aim = if shooters.is_empty() { 0.0 } else { shooters.iter().sum::<i32>() as f32 / shooters.len() as f32 };
+    let attacks = plays.iter().any(|p| p.card_type == CardType::Attack && p.now.damage > 0);
+    let blocks = plays.iter().any(|p| p.now.block > 0);
+    [aim, f32::from(u8::from(attacks)), f32::from(u8::from(blocks))]
 }
 
 /// Nested triggers (a draw that triggers a draw…) stop at this depth.
@@ -616,9 +671,9 @@ impl<'a> Fight<'a> {
             Effect::Strength(n) => self.strength += n,
             Effect::Dexterity(n) => self.dexterity += n,
             Effect::Focus(n) => self.focus += n,
-            Effect::Vigor(n) => self.vigor += n,
-            Effect::Aim(n) => self.aim += n,
-            Effect::Stretch(n) => self.stretch += n,
+            Effect::Vigor(n) => self.gain(Store::Vigor, *n),
+            Effect::Aim(n) => self.gain(Store::Aim, *n),
+            Effect::Stretch(n) => self.gain(Store::Stretch, *n),
             Effect::Plating(n) => self.plating += n,
             Effect::Poison(n) => {
                 self.poison += n;
@@ -628,7 +683,7 @@ impl<'a> Fight<'a> {
             Effect::Vulnerable(n) => self.vulnerable += n,
             Effect::Forge(n) => r(self, Resource::Forge, *n),
             Effect::Stars(n) => {
-                self.stars += n;
+                self.gain(Store::Stars, *n);
                 r(self, Resource::Stars, *n);
             }
             Effect::Summon(n) => r(self, Resource::Summon, *n),
@@ -640,7 +695,28 @@ impl<'a> Fight<'a> {
                 }
             }
             Effect::OrbSlots(n) => self.orb_slots = (self.orb_slots + n).clamp(0, self.s.rules.max_orb_slots as i32),
-            Effect::Arrows(n) => self.arrows += n,
+            Effect::Arrows(n) => self.gain(Store::Arrows, *n),
+        }
+    }
+
+    /// Adds to a store, counting what was made.
+    fn gain(&mut self, store: Store, n: i32) {
+        let slot = match store {
+            Store::Aim => &mut self.aim,
+            Store::Vigor => &mut self.vigor,
+            Store::Stretch => &mut self.stretch,
+            Store::Arrows => &mut self.arrows,
+            Store::Stars => &mut self.stars,
+        };
+        *slot += n;
+        if n > 0 {
+            self.log.stores[store as usize].gained += n as f32;
+        }
+    }
+
+    fn spend(&mut self, store: Store, n: i32) {
+        if n > 0 {
+            self.log.stores[store as usize].spent += n as f32;
         }
     }
 
@@ -693,9 +769,11 @@ impl<'a> Fight<'a> {
             let extra: i32 = self.mods.extra_damage.iter().filter(|(f, _)| matches(f, p)).map(|(_, n)| n).sum();
             let hits = (e.hits + i32::from(self.mods.extra_hit && e.hits > 1)) * times;
             let mut bonus = std::mem::take(&mut self.vigor);
+            self.spend(Store::Vigor, bonus);
             if p.shoots {
-                bonus += self.aim * p.aim_multiplier;
-                self.aim = 0;
+                let aim = std::mem::take(&mut self.aim);
+                self.spend(Store::Aim, aim);
+                bonus += aim * p.aim_multiplier;
             }
             let mut mult = 1.0f32;
             if p.card_type == CardType::Attack {
@@ -723,6 +801,7 @@ impl<'a> Fight<'a> {
             let extra: i32 = self.mods.extra_block.iter().filter(|(f, _)| matches(f, p)).map(|(_, n)| n).sum();
             // Stretch is spent by the card but adds to each of its Block gains.
             let stretch = std::mem::take(&mut self.stretch);
+            self.spend(Store::Stretch, stretch);
             self.log.block += ((e.block + self.dexterity + extra + stretch).max(0) * times) as f32;
             self.fire(|w| *w == When::OnGainBlock);
         }
@@ -731,13 +810,13 @@ impl<'a> Fight<'a> {
         self.log.debuffs += (debuffs as i32 * times) as f32;
         self.energy += e.energy;
         self.next_energy += e.energy_next;
-        self.stars += e.stars * times;
+        self.gain(Store::Stars, e.stars * times);
         self.strength += e.strength;
         self.dexterity += e.dexterity;
         self.focus += e.focus;
-        self.aim += e.aim * times;
-        self.stretch += e.stretch * times;
-        self.vigor += e.vigor * times;
+        self.gain(Store::Aim, e.aim * times);
+        self.gain(Store::Stretch, e.stretch * times);
+        self.gain(Store::Vigor, e.vigor * times);
         self.poison += e.poison * times;
         let r = &mut self.log.resources;
         r[Resource::Stars as usize] += (e.stars * times) as f32;
@@ -768,13 +847,15 @@ impl<'a> Fight<'a> {
                 + e.poison as f32 * 1.5
                 + e.doom as f32 * 0.5
                 + e.forge as f32
-                + e.aim as f32
-                + e.vigor as f32
+                + e.aim as f32 * self.s.worth[0]
+                + e.vigor as f32 * self.s.worth[1]
                 + e.vulnerable as f32 * 3.0)
                 * t
-            + if p.shoots { (self.aim * p.aim_multiplier) as f32 } else { 0.0 };
-        let defend = if e.block > 0 { (e.block + self.dexterity).max(0) as f32 * t } else { 0.0 }
-            + (e.stretch + e.summon) as f32 * t;
+            // Setup waiting to be used counts for the card that uses it.
+            + if p.shoots { (self.aim * p.aim_multiplier) as f32 } else { 0.0 }
+            + if e.damage > 0 && p.card_type == CardType::Attack { (self.vigor * e.hits) as f32 } else { 0.0 };
+        let defend = if e.block > 0 { (e.block + self.dexterity + self.stretch).max(0) as f32 * t } else { 0.0 }
+            + (e.stretch as f32 * self.s.worth[2] + e.summon as f32) * t;
         let (main, side) = match lean {
             Lean::Damage => (attack, defend * 0.1),
             Lean::Block => (defend, attack * 0.1),
@@ -829,6 +910,8 @@ impl<'a> Fight<'a> {
         if p.shoots {
             self.arrows -= 1;
             self.stuck += 1;
+            self.spend(Store::Arrows, 1);
+            self.log.stores[Store::Arrows as usize].plays += 1.0;
             return;
         }
         if self.stuck == 0 {
@@ -836,14 +919,14 @@ impl<'a> Fight<'a> {
         }
         if p.dislodges {
             self.stuck -= 1;
-            self.arrows += 1;
+            self.gain(Store::Arrows, 1);
         } else if p.card_type == CardType::Attack && p.now.damage > 0 {
             let per = self.s.rules.arrow_return_hits.max(1) as i32;
             self.hits_toward_return += p.now.hits * times;
             while self.hits_toward_return >= per && self.stuck > 0 {
                 self.hits_toward_return -= per;
                 self.stuck -= 1;
-                self.arrows += 1;
+                self.gain(Store::Arrows, 1);
             }
         }
     }
@@ -857,6 +940,10 @@ impl<'a> Fight<'a> {
         let times = if p.x { self.energy } else { 1 };
         self.energy -= if p.x { self.energy } else { self.cost_of(p).unwrap_or(0) };
         self.stars -= p.star_cost;
+        if p.star_cost > 0 {
+            self.spend(Store::Stars, p.star_cost);
+            self.log.stores[Store::Stars as usize].plays += 1.0;
+        }
         self.log.cards += 1.0;
         if p.card_type == CardType::Skill {
             self.log.skills += 1.0;
@@ -921,6 +1008,16 @@ impl<'a> Fight<'a> {
             let Some((h, _)) = best else { break };
             let i = self.hand.remove(h);
             self.play(i);
+        }
+        // Cards left waiting on an Arrow or on Stars.
+        for &i in &self.hand {
+            let p = &self.s.plays[i];
+            if p.shoots && self.arrows <= 0 {
+                self.log.stores[Store::Arrows as usize].waiting += 1.0;
+            }
+            if p.star_cost > self.stars {
+                self.log.stores[Store::Stars as usize].waiting += 1.0;
+            }
         }
     }
 
@@ -1072,6 +1169,7 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
         relic_rules: relics.iter().flat_map(|(_, m)| m.triggers.iter()).collect(),
         relic_mods,
         rules,
+        worth: setup_worth(&plays),
     };
 
     let turns = rules.turns as usize;
@@ -1084,6 +1182,7 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
     let (mut hits, mut hit_damage, mut area, mut all_damage) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
     let (mut cards, mut skills, mut debuffs) = (0.0f32, 0.0f32, 0.0f32);
     let mut resources = [0.0f32; 6];
+    let mut stores = [Flow::default(); 5];
     for trial in 0..rules.trials {
         let seed = 0x5EED_0000 ^ u64::from(trial);
         let attack = Fight::new(&setup, seed).run(Lean::Damage);
@@ -1104,6 +1203,15 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
             stranded += a.stranded;
             for (k, r) in resources.iter_mut().enumerate() {
                 *r += (a.resources[k] + d.resources[k]) / 2.0;
+            }
+            for store in Store::ALL {
+                // Stretch is spent by Block cards: read it playing for block.
+                let from = if store == Store::Stretch { d } else { a };
+                let (f, to) = (&from.stores[store as usize], &mut stores[store as usize]);
+                to.gained += f.gained;
+                to.spent += f.spent;
+                to.waiting += f.waiting;
+                to.plays += f.plays;
             }
         }
         turnover += attack.turnover;
@@ -1152,6 +1260,12 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
             skills: skills / turn_count,
             debuffs: debuffs / turn_count,
         },
+        stores: stores.map(|f| Flow {
+            gained: f.gained / turn_count,
+            spent: f.spent / turn_count,
+            waiting: f.waiting / turn_count,
+            plays: f.plays / turn_count,
+        }),
         relics_simulated: simulated.into_iter().map(|(n, _)| n).collect(),
         relics_not_simulated: not.into_iter().map(|(n, _)| n).collect(),
     }

@@ -87,6 +87,9 @@ kit, so old runs replay even after a data update.
 - `rules`: fight rules read from monster powers' text (Slippery, Intangible,
   Hardened Shell, Personal Hive, Slow, Enrage…), each with what it asks of
   the deck (many hits, few big hits, few Skills…).
+- `balance`: setup piling up (Aim, Vigor, Stretch made faster than used, or
+  never used) and the Fool's Arrows or the Regent's Stars running short, from
+  the simulator's per-turn flows; the lines are the playbook's `balance`.
 - `survival`: whether a deck is on track against a fight, and which way wins
   it. It plays the fight out on the simulator's average damage and block
   against the lineup's expected damage per turn four ways (Race, Wall,
