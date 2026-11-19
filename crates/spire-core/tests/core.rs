@@ -1187,3 +1187,20 @@ fn the_current_floor_is_the_one_being_played() {
     run.push(RunEvent::End { outcome: Outcome::Died { encounter: None }, at: None });
     assert_eq!(run.state().current_floor(), 0, "an ended run shows the floors it reached");
 }
+
+#[test]
+fn the_next_act_is_offered_only_after_this_acts_boss() {
+    let cat = catalog();
+    let mut run = started(&cat);
+    let floor = |kind| RunEvent::Node(NodeReport { kind, encounter: None, event: None, changes: vec![] });
+    run.push(floor(NodeKind::Monster));
+    assert!(!run.state().act_boss_beaten());
+    run.push(floor(NodeKind::Boss));
+    assert!(run.state().act_boss_beaten(), "the boss is beaten: offer the next act");
+    // Entered the next act, nothing logged in it yet: the last act's boss
+    // must not offer the act after (Act 3 straight after Act 1's boss).
+    run.push(RunEvent::EnterAct { act: ActId::new("ACT1"), index: 1, boss: None });
+    assert!(!run.state().act_boss_beaten());
+    run.push(floor(NodeKind::Ancient));
+    assert!(!run.state().act_boss_beaten());
+}

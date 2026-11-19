@@ -2,7 +2,7 @@
 
 use eframe::egui::{self, RichText, Ui};
 use spire_core::analysis::Severity;
-use spire_core::run::{NodeKind, RunEvent};
+use spire_core::run::RunEvent;
 
 use crate::actions::Action;
 use crate::app::ViewCtx;
@@ -14,7 +14,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
     let s = v.state;
     let act = s.act.as_ref().and_then(|a| v.catalog.acts.get(a));
 
-    if s.nodes.last() == Some(&NodeKind::Boss) && s.act_index < v.catalog.max_act_index() {
+    if s.act_boss_beaten() && s.act_index < v.catalog.max_act_index() {
         start::act_picker(ui, v, s.act_index + 1, out);
         ui.add_space(crate::style::space::m());
     }

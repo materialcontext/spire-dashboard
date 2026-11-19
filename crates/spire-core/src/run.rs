@@ -228,6 +228,13 @@ impl RunState {
         self.character.is_some()
     }
 
+    /// The current act's boss has been beaten: a boss is the last floor
+    /// logged in this act. Right after entering the next act, no floor is
+    /// logged in it yet, so the last act's boss doesn't count.
+    pub fn act_boss_beaten(&self) -> bool {
+        self.act_floor > 0 && self.nodes.last() == Some(&NodeKind::Boss)
+    }
+
     /// The floor being played: one past the floors recorded while the run
     /// is on (a floor is recorded as the next one is entered, which is when
     /// the game saves), and the last floor once it's over.
