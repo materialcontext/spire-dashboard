@@ -3,7 +3,7 @@
   "name": "Spire Dashboard Link",
   "author": "Spire Dashboard",
   "description": "Lets Spire Dashboard follow your run. Read-only: changes nothing in the game.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "has_pck": false,
   "has_dll": true,
   "dependencies": [],

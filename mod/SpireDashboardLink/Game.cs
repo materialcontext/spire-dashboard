@@ -36,7 +36,7 @@ internal static class Game
             : null;
 
         return new LinkFile(
-            Schema: 1,
+            Schema: 2,
             ModVersion: Link.Version,
             GameVersion: GameVersion(),
             InProgress: inProgress,
@@ -48,7 +48,69 @@ internal static class Game
             ActIndex: Get(state, "CurrentActIndex") as int?,
             Act: Entry(Get(act, "Id")),
             Boss: Entry(Get(Get(act, "BossEncounter"), "Id")),
-            SecondBoss: Entry(Get(Get(act, "SecondBossEncounter"), "Id")));
+            SecondBoss: Entry(Get(Get(act, "SecondBossEncounter"), "Id")),
+            Room: Room(Get(state, "CurrentRoom")));
+    }
+
+    /// <summary>
+    /// The room the player is in: its kind (<c>CombatRoom</c>, <c>EventRoom</c>,
+    /// <c>MapRoom</c>…), its type (Monster, Elite, Boss), and what's in it.
+    /// The game's run save only records a room once it's finished, so this is
+    /// the only place the room being played shows up.
+    /// </summary>
+    private static RoomLink? Room(object? room)
+    {
+        if (room == null)
+        {
+            return null;
+        }
+        return new RoomLink(
+            Kind: room.GetType().Name,
+            Type: Get(room, "RoomType")?.ToString(),
+            Encounter: EncounterOf(room),
+            Event: Entry(Get(Get(room, "CanonicalEvent"), "Id")),
+            Monsters: room.GetType().Name == "CombatRoom" ? Enemies() : null);
+    }
+
+    /// <summary>
+    /// A combat room's encounter: whichever of its members is a model whose id
+    /// is an <c>ENCOUNTER.</c> id. Found by looking rather than by name, so a
+    /// renamed member still reads.
+    /// </summary>
+    private static string? EncounterOf(object room)
+    {
+        foreach (var p in room.GetType().GetProperties(Any))
+        {
+            if (p.GetIndexParameters().Length > 0)
+            {
+                continue;
+            }
+            var id = Entry(Get(Get(room, p.Name), "Id"));
+            if (id != null && id.StartsWith("ENCOUNTER.", StringComparison.Ordinal))
+            {
+                return id;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>The enemies in the fight, by monster id (the encounter's lineup).</summary>
+    private static string[]? Enemies()
+    {
+        var combat = Call(Static("MegaCrit.Sts2.Core.Combat.CombatManager", "Instance"), "DebugOnlyGetState");
+        if (Get(combat, "Enemies") is not System.Collections.IEnumerable enemies)
+        {
+            return null;
+        }
+        var ids = new List<string>();
+        foreach (var creature in enemies)
+        {
+            if (Entry(Get(Get(creature, "Monster"), "Id")) is { } id)
+            {
+                ids.Add(id);
+            }
+        }
+        return ids.Count == 0 ? null : ids.ToArray();
     }
 
     /// <summary>

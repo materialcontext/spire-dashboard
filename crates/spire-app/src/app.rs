@@ -33,6 +33,8 @@ pub struct ViewCtx<'a> {
     pub following: bool,
     /// The fight the game is in, when following and it isn't a boss.
     pub current_fight: Option<&'a spire_core::analysis::threats::ThreatPreview>,
+    /// The event the game is in, when following.
+    pub current_event: Option<&'a spire_core::catalog::Event>,
 }
 
 /// The live deck's simulation and how it fares against this act's elites
@@ -712,6 +714,13 @@ impl SpireApp {
                 combat: self.combat.as_ref(),
                 following: self.following(),
                 current_fight: self.current_fight.as_ref().filter(|_| self.following()).map(|(_, p)| p),
+                current_event: self
+                    .ui
+                    .follow
+                    .current_event
+                    .as_ref()
+                    .filter(|_| self.following())
+                    .and_then(|e| self.catalog.events.get(e)),
             };
             let (store, settings) = (&self.store, &self.settings);
             let mut page = |ui: &mut egui::Ui, st: &mut UiState, out: &mut Vec<Action>| {
@@ -761,6 +770,7 @@ impl SpireApp {
         };
         self.ui.follow.no_link = false;
         let read = crate::follow::read(&link, json, &self.catalog);
+        let (fight, event) = crate::follow::current_room(&link, &self.catalog);
         self.ui.follow.link = Some(link);
         let game = match read {
             Ok(game) => game,
@@ -772,14 +782,12 @@ impl SpireApp {
         // another profile's save as the newest. File ours first.
         let game = self.finished_followed(&game).unwrap_or(game);
         let after = self.ui.follow.filed_start;
-        let current = game.current_fight.clone();
         let step = crate::follow::step(game, &self.run, self.state.started(), &self.ui.follow.filed, after);
-        // The fight in progress belongs to the run being followed.
-        self.ui.follow.current_fight = match &step {
-            Step::Advance { ended: false, .. } => current,
-            Step::Adopt(g) if !g.ended => current,
-            _ => None,
-        };
+        // The room in progress belongs to the run being followed.
+        let followed =
+            matches!(&step, Step::Advance { ended: false, .. }) || matches!(&step, Step::Adopt(g) if !g.ended);
+        (self.ui.follow.current_fight, self.ui.follow.current_event) =
+            if followed { (fight, event) } else { (None, None) };
         match step {
             Step::Nothing => {}
             Step::Advance { events, ended } => {
