@@ -21,6 +21,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
     });
     hairline(ui);
     ui.label(caption("Right-click a card to upgrade, enchant or remove it."));
+    strip_key(ui, v);
 
     // Rows are grouped once per run change (Dashboard::rows), not per frame.
     let mut current = None;
@@ -44,15 +45,16 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
         ui.horizontal(|ui| {
             let text = v.catalog.relics.get(r).map_or("", |x| x.text.as_str());
             let name = RichText::new(v.catalog.relic_name(r));
-            if crate::widgets::link(ui, name).on_hover_ui(|ui| relic_tip(ui, text, roles)).clicked() {
+            let room = ui.available_width() - TRAILING;
+            if crate::widgets::link_within(ui, name, room).on_hover_ui(|ui| relic_tip(ui, text, roles)).clicked() {
                 out.push(Action::Open(crate::actions::Link::Relic(r.clone())));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.add(row_button("x")).on_hover_text("Lose relic").clicked() {
-                    out.push(Action::Draft(Change::RemoveRelic(r.clone())));
-                }
-                ui.add_space(crate::style::space::xs());
-                role_marks(ui, roles);
+                trailing(ui, v, has(roles, &[]), |ui| {
+                    if ui.add(row_button("x")).on_hover_text("Lose relic").clicked() {
+                        out.push(Action::Draft(Change::RemoveRelic(r.clone())));
+                    }
+                });
             });
         });
     }
@@ -111,7 +113,9 @@ fn card_row(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
             text()
         };
         // Tooltip text is only built while hovered.
-        let r = crate::widgets::link(ui, RichText::new(name).color(color)).on_hover_ui(|ui| card_tooltip(ui, v, row));
+        let room = ui.available_width() - TRAILING;
+        let r = crate::widgets::link_within(ui, RichText::new(name).color(color), room)
+            .on_hover_ui(|ui| card_tooltip(ui, v, row));
         if r.clicked() {
             out.push(Action::Open(crate::actions::Link::Card(row.card.card.clone())));
         }
@@ -134,32 +138,127 @@ fn card_row(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
             ui.label(RichText::new(v.catalog.enchantment_name(e)).small().color(info()));
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.spacing_mut().item_spacing.x = 2.0;
-            // Frameless until hovered: framed buttons on every row were ~70
-            // filled rects per frame for little visual value.
-            if row.eternal {
-                // Eternal: can't be removed or transformed.
-                ui.label(caption("Eternal")).on_hover_text("Can't be removed or transformed");
-            } else if ui.add(row_button("x")).on_hover_text("Remove from deck").clicked() {
-                out.push(Action::Draft(Change::RemoveCard(row.card.clone())));
-            }
-            if !row.card.upgraded && ui.add(row_button("+")).on_hover_text("Upgrade").clicked() {
-                out.push(Action::Draft(Change::UpgradeCard(row.card.clone())));
-            }
-            ui.add_space(crate::style::space::xs());
-            role_marks(ui, &row.roles);
-            tag_marks(ui, &row.tags);
+            trailing(ui, v, has(&row.roles, &row.tags), |ui| {
+                // Frameless until hovered: framed buttons on every row were
+                // ~70 filled rects per frame for little visual value.
+                if row.eternal {
+                    // Eternal: can't be removed or transformed.
+                    ui.label(caption("Eternal")).on_hover_text("Can't be removed or transformed");
+                } else if ui.add(row_button("x")).on_hover_text("Remove from deck").clicked() {
+                    out.push(Action::Draft(Change::RemoveCard(row.card.clone())));
+                }
+                if !row.card.upgraded && ui.add(row_button("+")).on_hover_text("Upgrade").clicked() {
+                    out.push(Action::Draft(Change::UpgradeCard(row.card.clone())));
+                }
+            });
         });
     });
 }
 
-/// "D" and "E" for cards that draw or gain energy, beside the role marks
-/// (they aren't roles: they keep every role working on bad draws).
-fn tag_marks(ui: &mut Ui, tags: &[Tagged]) {
-    for t in tags.iter().rev().filter(|t| matches!(t.tag, Tag::Draw | Tag::Energy)) {
-        let letter = &t.tag.label()[..1];
-        ui.label(secondary(letter)).on_hover_text(t.tag.describe());
+/// The strip's columns, left to right: the six roles, then Draw and
+/// Energy (not roles: they keep every role working on bad draws).
+#[derive(Clone, Copy)]
+enum Slot {
+    Role(Role),
+    Tag(Tag),
+}
+
+const SLOTS: [Slot; 8] = [
+    Slot::Role(Role::Mitigation),
+    Slot::Role(Role::Survival),
+    Slot::Role(Role::FastDamage),
+    Slot::Role(Role::ScalingDamage),
+    Slot::Role(Role::Aoe),
+    Slot::Role(Role::Chip),
+    Slot::Tag(Tag::Draw),
+    Slot::Tag(Tag::Energy),
+];
+
+/// Width of one column, and the gap before Draw and Energy.
+const SLOT: f32 = 9.0;
+const SLOT_GAP: f32 = 5.0;
+/// Width kept for a row's buttons, so the strips line up.
+const BUTTONS: f32 = 52.0;
+/// The whole right end (strip, gap, buttons) and a little air before it.
+const TRAILING: f32 = 8.0 * SLOT + SLOT_GAP + 6.0 + BUTTONS - 8.0;
+
+/// A row's right end at fixed offsets, so every row's strip lines up: the
+/// strip, then the buttons (laid out right to left in a fixed width).
+fn trailing(ui: &mut Ui, v: &ViewCtx, has: impl Fn(Slot) -> bool, add: impl FnOnce(&mut Ui)) {
+    let strip = slot_x(SLOTS.len() - 1) + SLOT;
+    let (rect, _) = ui.allocate_exact_size(vec2(strip + 6.0 + BUTTONS, 24.0), Sense::hover());
+    let strip_rect = egui::Rect::from_min_size(rect.min, vec2(strip, rect.height()));
+    strip_at(ui, strip_rect, v, has);
+    let buttons = egui::Rect::from_min_max(egui::pos2(rect.max.x - BUTTONS, rect.min.y), rect.max);
+    let mut b =
+        ui.new_child(egui::UiBuilder::new().max_rect(buttons).layout(egui::Layout::right_to_left(egui::Align::Center)));
+    b.spacing_mut().item_spacing.x = 2.0;
+    add(&mut b);
+}
+
+fn slot_x(i: usize) -> f32 {
+    i as f32 * SLOT + if i >= 6 { SLOT_GAP } else { 0.0 }
+}
+
+/// One mark system for every row: a fixed strip of columns on a faint rail,
+/// a filled square where the card (or relic) has the role or tag. Position says which; colour backs it up. Hover a column for
+/// its name and how a card gets it.
+fn has<'a>(roles: &'a [Role], tags: &'a [Tagged]) -> impl Fn(Slot) -> bool + 'a {
+    move |s: Slot| match s {
+        Slot::Role(r) => roles.contains(&r),
+        Slot::Tag(t) => tags.iter().any(|x| x.tag == t),
     }
+}
+
+/// Paints the strip into `rect` (no layout of its own: it's on every row).
+fn strip_at(ui: &mut Ui, rect: egui::Rect, v: &ViewCtx, has: impl Fn(Slot) -> bool) {
+    let resp = ui.interact(rect, ui.next_auto_id(), Sense::hover());
+    if ui.is_rect_visible(rect) {
+        let painter = ui.painter();
+        // One faint rail under the columns (one shape a row, not a dot per
+        // empty column: the deck list is in every frame).
+        let y = rect.center().y.round();
+        let rail = egui::Rect::from_min_max(egui::pos2(rect.min.x, y), egui::pos2(rect.max.x, y + 1.0));
+        painter.rect_filled(rail, 0.0, border());
+        for (i, s) in SLOTS.iter().enumerate().filter(|(_, s)| has(**s)) {
+            let c = egui::pos2(rect.min.x + slot_x(i) + SLOT / 2.0, rect.center().y);
+            painter.rect_filled(egui::Rect::from_center_size(c, vec2(7.0, 7.0)), 0.0, slot_color(*s));
+        }
+    }
+    // The column under the pointer, named only while hovered.
+    if let Some(p) = resp.hover_pos() {
+        let i = SLOTS.iter().enumerate().position(|(i, _)| p.x < rect.min.x + slot_x(i) + SLOT);
+        if let Some(i) = i {
+            resp.on_hover_ui_at_pointer(|ui| {
+                ui.set_max_width(360.0);
+                match SLOTS[i] {
+                    Slot::Role(r) => ui.label(v.playbook.role_criteria(r)),
+                    Slot::Tag(t) => ui.label(format!(
+                        "{}: {}. Not a role: it keeps every role working on bad draws.",
+                        t.label(),
+                        t.describe()
+                    )),
+                };
+            });
+        }
+    }
+}
+
+fn slot_color(s: Slot) -> egui::Color32 {
+    match s {
+        Slot::Role(r) => style::role_color(r),
+        Slot::Tag(_) => style::tag_color(),
+    }
+}
+
+/// The strip's key, over the deck: every column filled, named on hover.
+fn strip_key(ui: &mut Ui, v: &ViewCtx) {
+    ui.horizontal(|ui| {
+        ui.label(caption("Roles")).on_hover_text("One column each, always in this order: Mitigation, Survival, Fast Damage, Scaling Damage, AoE, Chip, then Draw and Energy. Hover a column for how a card gets it.");
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            trailing(ui, v, |_| true, |_| {});
+        });
+    });
 }
 
 /// A relic's text, and the roles it plays when it plays any.
@@ -171,15 +270,6 @@ fn relic_tip(ui: &mut Ui, text: &str, roles: &[Role]) {
                 ui.label(RichText::new(r.label()).small().color(style::role_color(*r)));
             }
         });
-    }
-}
-
-/// One small square per role the card or relic fills, in that role's colour.
-fn role_marks(ui: &mut Ui, roles: &[Role]) {
-    for r in roles.iter().rev() {
-        let (rect, resp) = ui.allocate_exact_size(vec2(7.0, 7.0), Sense::hover());
-        ui.painter().rect_filled(rect, 0.0, style::role_color(*r));
-        resp.on_hover_text(r.label());
     }
 }
 

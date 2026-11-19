@@ -18,8 +18,9 @@ the card you took, HP and gold after. Then it re-analyses the run.
   Damage, AoE and Chip, against per-act targets. Under each role, how well
   the deck actually does it, simulated: Block on an ordinary and a defending
   turn, damage over the first turns, how damage grows, how much hits every
-  enemy, hits a turn. Cards that draw or gain energy are tagged (D and E in
-  the deck), and the deck's output on a bad draw is noted. Starter
+  enemy, hits a turn. Each deck row has a strip of fixed columns (the six
+  roles, then Draw and Energy), filled where the card has one; hover a column
+  for how a card gets it. The deck's output on a bad draw is noted. Starter
   Strikes/Defends are shown separately: targets count what you've *added*.
   Under that, the deck **next to community decks that cleared this act**
   (same character, or every character's when there are too few): each
