@@ -307,7 +307,10 @@ Clean-Up limit. `audit --tags` lists the 62 class cards no tag describes
 
 Since F4, a card costing more than 1 energy (or X) isn't Mitigation,
 whatever its tags (the playbook's `role_max_cost`); a big Block card can
-still be Survival. Intangible and Buffer are Survival only, at any cost.
+still be Survival (from 9 Block, so Leap counts). Intangible and Buffer
+are Survival only, at any cost. Starter Strikes fill no role at all, and a
+card that deals 6 damage or less, or 6 or less per energy, isn't Fast
+Damage (the playbook's `role_exclusions`).
 
 One change from the table below: **Energy gives no role.** Draw and Energy
 keep every role working on bad draws, the note that isn't a role (D2), so

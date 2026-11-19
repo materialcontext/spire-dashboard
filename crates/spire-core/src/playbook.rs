@@ -96,6 +96,14 @@ pub enum Condition {
     HitsAtLeast(u32),
     /// Costs at most this much energy (X-cost and unplayable cards don't).
     CostAtMost(u8),
+    /// Deals damage, at most this much in all (per hit × hits).
+    TotalDamageAtMost(u32),
+    /// Deals damage, at most this much per energy it costs (X: per energy
+    /// spent; free cards never match).
+    DamagePerEnergyAtMost(u32),
+    Rarity(crate::catalog::Rarity),
+    /// One of the data's own card tags ("Strike", "Defend").
+    SourceTag(String),
     /// Case-insensitive substring match on the card text.
     TextContains(String),
     Keyword(String),
@@ -111,6 +119,11 @@ pub enum Condition {
 pub fn contains_ci(haystack: &str, needle: &str) -> bool {
     let (h, n) = (haystack.as_bytes(), needle.as_bytes());
     n.is_empty() || h.windows(n.len()).any(|w| w.eq_ignore_ascii_case(n))
+}
+
+/// Damage per hit × hits, for a card that deals damage by its numbers.
+fn total_damage(card: &Card) -> Option<u32> {
+    card.damage.filter(|d| *d > 0).map(|d| d * card.hits.unwrap_or(1).max(1))
 }
 
 /// Where a card's roles come from.
@@ -138,6 +151,10 @@ impl Condition {
             Condition::DamageAtMost(n) => format!("deals at most {n} a hit"),
             Condition::HitsAtLeast(n) => format!("hits {n}+ times"),
             Condition::CostAtMost(n) => format!("costs {n} or less"),
+            Condition::TotalDamageAtMost(n) => format!("deals {n} damage or less"),
+            Condition::DamagePerEnergyAtMost(n) => format!("deals {n} damage or less per energy"),
+            Condition::Rarity(r) => format!("is {r:?}"),
+            Condition::SourceTag(t) => format!("is a {t}"),
             Condition::TextContains(t) => format!("mentions \"{t}\""),
             Condition::Keyword(k) => format!("has {k}"),
             Condition::CardType(t) => format!("is a {}", t.label()),
@@ -159,6 +176,14 @@ impl Condition {
             Condition::DamageAtMost(n) => card.damage.is_some_and(|d| d <= *n),
             Condition::HitsAtLeast(n) => card.hits.unwrap_or(1) >= *n,
             Condition::CostAtMost(n) => !card.x_cost && card.cost.is_some_and(|c| c <= *n),
+            Condition::TotalDamageAtMost(n) => total_damage(card).is_some_and(|d| d <= *n),
+            Condition::DamagePerEnergyAtMost(n) => total_damage(card).is_some_and(|d| match card.cost {
+                _ if card.x_cost => d <= *n,
+                Some(c) if c > 0 => d <= *n * u32::from(c),
+                _ => false,
+            }),
+            Condition::Rarity(r) => card.rarity == *r,
+            Condition::SourceTag(t) => card.tags.iter().any(|x| x.eq_ignore_ascii_case(t)),
             Condition::TextContains(s) => contains_ci(&card.text, s),
             Condition::Keyword(k) => card.keywords.iter().any(|x| x.eq_ignore_ascii_case(k)),
             Condition::CardType(t) => card.card_type == *t,
@@ -186,7 +211,17 @@ pub struct TagRule {
     pub when: Condition,
 }
 
-/// A role a tag gives, from its number up ("Block 10+ is Survival").
+/// Cards that don't fill a role, however they'd get it ("starter Strikes
+/// fill none"; "6 damage or less isn't Fast Damage").
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct RoleExclusion {
+    /// `None`: every role.
+    #[serde(default)]
+    pub role: Option<Role>,
+    pub when: Condition,
+}
+
+/// A role a tag gives, from its number up ("Block 9+ is Survival").
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TagRole {
     pub role: Role,
@@ -327,6 +362,10 @@ pub struct Playbook {
     /// X-cost cards count as over any cap. Hand-set roles aren't capped.
     #[serde(default)]
     pub role_max_cost: BTreeMap<Role, u8>,
+    /// Roles cards don't fill, however they'd get them. Hand-set roles
+    /// aren't excluded.
+    #[serde(default)]
+    pub role_exclusions: Vec<RoleExclusion>,
     /// Hand-set tags for specific cards; these replace the reading.
     #[serde(default)]
     pub card_tags: BTreeMap<CardId, Vec<Tag>>,
@@ -510,6 +549,7 @@ impl Playbook {
         matched.extend(self.role_rules.iter().filter(|r| r.when.matches(card)).map(|r| (r.role, r.when.describe())));
         matched.retain(|(role, _)| {
             self.role_max_cost.get(role).is_none_or(|max| Condition::CostAtMost(*max).matches(card))
+                && !self.role_exclusions.iter().any(|x| x.role.is_none_or(|r| r == *role) && x.when.matches(card))
         });
         matched.sort_by_key(|(r, _)| *r);
         matched.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1);

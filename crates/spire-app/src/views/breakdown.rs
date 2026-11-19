@@ -69,17 +69,6 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
         // Draw and energy aren't roles: they help every role on bad draws.
         bar(ui, "Draw", d.tag(Tag::Draw), 0, max_role, None, style::tag_color());
         bar(ui, "Energy gain", d.tag(Tag::Energy), 0, max_role, None, style::tag_color());
-        // What the deck is made of, by tag (starter cards included).
-        let shares: Vec<String> = Tag::ALL
-            .iter()
-            .filter(|t| !matches!(t, Tag::Draw | Tag::Energy))
-            .filter(|t| d.tag(**t) > 0)
-            .map(|t| format!("{} {}", t.label(), d.tag(*t)))
-            .collect();
-        if !shares.is_empty() {
-            ui.label(caption(format!("Tags: {}", shares.join(" · "))));
-        }
-
         let counts: Vec<String> = [(d.upgraded, "upgraded"), (d.no_role, "with no role"), (d.unknown, "unknown")]
             .into_iter()
             .filter(|(n, _)| *n > 0)

@@ -313,7 +313,7 @@
     {
       "role": "survival",
       "tag": "block",
-      "min": 10
+      "min": 9
     },
     {
       "role": "survival",
@@ -360,6 +360,33 @@
   "role_max_cost": {
     "mitigation": 1
   },
+  "role_exclusions": [
+    {
+      "when": {
+        "all": [
+          {
+            "rarity": "basic"
+          },
+          {
+            "source_tag": "Strike"
+          }
+        ]
+      }
+    },
+    {
+      "role": "fast_damage",
+      "when": {
+        "any": [
+          {
+            "total_damage_at_most": 6
+          },
+          {
+            "damage_per_energy_at_most": 6
+          }
+        ]
+      }
+    }
+  ],
   "role_rules": [
     {
       "role": "mitigation",
