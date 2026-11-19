@@ -65,15 +65,17 @@ pub fn preview_body(
     // Turns where runs end are marked for elites and bosses only.
     let boss_or_elite = t.room != RoomType::Monster;
     crate::views::turns::strip(ui, (key, &t.encounter), &t.plans, t.stats.as_ref().filter(|_| boss_or_elite));
-    // Elites and bosses: when runs end here, and whether this deck is on track.
+    // Elites and bosses: when runs end here.
     if boss_or_elite {
         // Once monsters join mid-fight, a turn number no longer says whose
         // move it is, so the deadly turns go unnamed.
         let named: &[spire_core::analysis::threats::MonsterPlan] = if t.spawns.is_empty() { &t.plans } else { &[] };
         crate::views::turns::deaths(ui, (key, &t.encounter), named, t.stats.as_ref());
-        if let Some(o) = outlook {
-            crate::views::turns::outlook(ui, o, t.stats.as_ref());
-        }
+    }
+    // Whether this deck is on track: elites and bosses, and the fight being
+    // played (a hallway fight gets its outlook then).
+    if let Some(o) = outlook {
+        crate::views::turns::outlook(ui, o, t.stats.as_ref());
     }
     if let Some(s) = &t.stats {
         ui.label(caption(format!(
