@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::analysis::tags::{self, Tag, Tagged};
 use crate::catalog::{Card, CardType, Target};
-use crate::ids::CardId;
+use crate::ids::{CardId, CharacterId};
 
 /// The problems a deck solves: what the player sees, on the deck and on
 /// each card. Each is measured by a job (`analysis::jobs`).
@@ -104,6 +104,8 @@ pub enum Condition {
     Rarity(crate::catalog::Rarity),
     /// One of the data's own card tags ("Strike", "Defend").
     SourceTag(String),
+    /// Costs Stars.
+    StarCost,
     /// Case-insensitive substring match on the card text.
     TextContains(String),
     Keyword(String),
@@ -155,6 +157,7 @@ impl Condition {
             Condition::DamagePerEnergyAtMost(n) => format!("deals {n} damage or less per energy"),
             Condition::Rarity(r) => format!("is {r:?}"),
             Condition::SourceTag(t) => format!("is a {t}"),
+            Condition::StarCost => "costs Stars".into(),
             Condition::TextContains(t) => format!("mentions \"{t}\""),
             Condition::Keyword(k) => format!("has {k}"),
             Condition::CardType(t) => format!("is a {}", t.label()),
@@ -184,6 +187,7 @@ impl Condition {
             }),
             Condition::Rarity(r) => card.rarity == *r,
             Condition::SourceTag(t) => card.tags.iter().any(|x| x.eq_ignore_ascii_case(t)),
+            Condition::StarCost => card.star_cost.is_some_and(|n| n > 0),
             Condition::TextContains(s) => contains_ci(&card.text, s),
             Condition::Keyword(k) => card.keywords.iter().any(|x| x.eq_ignore_ascii_case(k)),
             Condition::CardType(t) => card.card_type == *t,
@@ -483,7 +487,7 @@ pub struct RelicRoleRule {
 }
 
 /// What the deck simulator assumes where the game data is silent.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SimAssumptions {
     /// Cards drawn at the start of each turn.
@@ -503,6 +507,28 @@ pub struct SimAssumptions {
     /// data marks the move ("Status" intent) but not the card or how many,
     /// so this is an assumption; the survival check uses it.
     pub status_cards: u32,
+    /// Cards that do nothing without something the deck must supply
+    /// (Growth without Sadness, Dualcast without orbs). Unmet, they're dead
+    /// cards: unplayable in the simulator, no roles in the deck.
+    pub requirements: Vec<Requirement>,
+}
+
+/// What a kind of card needs to do anything at all, and what supplies it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Requirement {
+    /// What's needed, in words ("Sadness", "orbs").
+    pub what: String,
+    /// The cards that need it (cards that also supply it don't).
+    pub needs: Condition,
+    /// Deck cards that supply it.
+    #[serde(default)]
+    pub met_by: Option<Condition>,
+    /// Relics whose text has any of these supply it.
+    #[serde(default)]
+    pub relics: Vec<String>,
+    /// Characters that have it built in (the Fool's Arrows).
+    #[serde(default)]
+    pub characters: Vec<CharacterId>,
 }
 
 impl Default for SimAssumptions {
@@ -515,6 +541,7 @@ impl Default for SimAssumptions {
             arrow_return_hits: 3,
             max_orb_slots: 10,
             status_cards: 2,
+            requirements: Vec::new(),
         }
     }
 }

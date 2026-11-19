@@ -69,7 +69,7 @@ pub fn timeline(run: &Run, catalog: &Catalog, playbook: &Playbook) -> Timeline {
         let before = state.hp;
         state = apply(state, event);
         let RunEvent::Node(node) = event else { continue };
-        let profile = deck::profile(&deck::classify(&state.deck, catalog, playbook));
+        let profile = deck::run_profile(&state, catalog, playbook);
         points.push(FloorPoint {
             floor: state.floor,
             act_index: state.act_index,

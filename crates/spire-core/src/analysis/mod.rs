@@ -9,6 +9,7 @@ pub mod floors;
 pub mod healing;
 pub mod jobs;
 pub mod pattern;
+pub mod requirements;
 pub mod rules;
 pub mod shape;
 pub mod sim;
@@ -47,7 +48,7 @@ pub struct Dashboard {
 
 impl Dashboard {
     pub fn compute(state: &RunState, catalog: &Catalog, playbook: &Playbook) -> Dashboard {
-        let classified = deck::classify(&state.deck, catalog, playbook);
+        let classified = deck::classify_run(state, catalog, playbook);
         let deck = deck::profile(&classified);
         let rows = deck::deck_rows(&classified);
         let needs = events::needs(state, &deck, playbook);

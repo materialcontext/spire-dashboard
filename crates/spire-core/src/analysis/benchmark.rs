@@ -13,7 +13,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::analysis::deck::{DeckProfile, deck_profile};
+use crate::analysis::deck::{DeckProfile, run_profile};
 use crate::analysis::jobs::{self, Jobs};
 use crate::analysis::sim::simulate;
 use crate::analysis::tags::Tag;
@@ -43,7 +43,7 @@ struct Measured {
 }
 
 fn measured(state: &RunState, catalog: &Catalog, playbook: &Playbook) -> Measured {
-    let p = deck_profile(&state.deck, catalog, playbook);
+    let p = run_profile(state, catalog, playbook);
     let n = p.total.max(1) as f32;
     Measured {
         size: p.total as f32,

@@ -1165,6 +1165,8 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
     let orbs: Vec<&Orb> = catalog.orbs.values().collect();
     let all_orbs: Vec<Orb> = catalog.orbs.values().cloned().collect();
 
+    // Cards whose need nothing in the run supplies do nothing: dead.
+    let unmet = crate::analysis::requirements::unmet(state, catalog, &rules.requirements);
     let mut groups: Vec<(DeckCard, String, u32)> = Vec::new();
     let mut plays = Vec::new();
     for d in &state.deck {
@@ -1181,7 +1183,11 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
                 groups.len() - 1
             }
         };
-        plays.push(play_of(card, d.upgraded, group, &orbs, &all_orbs));
+        let mut play = play_of(card, d.upgraded, group, &orbs, &all_orbs);
+        if unmet.contains_key(&d.card) {
+            play.cost = None;
+        }
+        plays.push(play);
     }
     if plays.is_empty() || rules.trials == 0 || rules.turns == 0 {
         return DeckSim::default();

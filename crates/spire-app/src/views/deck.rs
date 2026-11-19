@@ -103,7 +103,13 @@ fn card_row(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
         let cost = v.catalog.cards.get(&row.card.card).map_or("?".to_string(), |c| c.cost_label_at(row.card.upgraded));
         ui.add_sized([14.0, 18.0], egui::Label::new(secondary(cost)));
         let name = if row.count > 1 { format!("{}× {}", row.count, row.name) } else { row.name.clone() };
-        let color = if row.card.upgraded { good() } else { text() };
+        let color = if row.unmet.is_some() {
+            text_dim()
+        } else if row.card.upgraded {
+            good()
+        } else {
+            text()
+        };
         // Tooltip text is only built while hovered.
         let r = crate::widgets::link(ui, RichText::new(name).color(color)).on_hover_ui(|ui| card_tooltip(ui, v, row));
         if r.clicked() {
@@ -117,6 +123,12 @@ fn card_row(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
             }
         } else {
             r.context_menu(|ui| card_menu(ui, v, row, out));
+        }
+        if let Some(what) = &row.unmet {
+            ui.label(RichText::new(format!("needs {what}")).small().color(warn())).on_hover_text(format!(
+                "Nothing in this run supplies {what}, so this card does nothing: it counts as a dead card \
+                 and fills no role."
+            ));
         }
         if let Some(e) = &row.card.enchantment {
             ui.label(RichText::new(v.catalog.enchantment_name(e)).small().color(info()));

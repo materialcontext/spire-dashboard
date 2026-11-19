@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use crate::analysis::tags::{self, Tag, Tagged};
 use crate::catalog::{Card, CardType, Catalog, Rarity};
 use crate::playbook::{ActPlan, Playbook, Role};
-use crate::run::DeckCard;
+use crate::run::{DeckCard, RunState};
 
 /// One deck card with its catalog entry and derived roles.
 #[derive(Clone, Debug)]
@@ -15,6 +15,9 @@ pub struct ClassifiedCard<'a> {
     pub roles: Vec<Role>,
     /// Tags with the upgrade applied.
     pub tags: Vec<Tagged>,
+    /// What it needs that nothing in the run supplies: it does nothing, so
+    /// it's a dead card with no roles.
+    pub unmet: Option<String>,
 }
 
 impl ClassifiedCard<'_> {
@@ -37,6 +40,7 @@ pub fn classify<'a>(deck: &'a [DeckCard], catalog: &'a Catalog, playbook: &Playb
                 card,
                 roles: card.map(|c| playbook.roles_of(c)).unwrap_or_default(),
                 tags: card.map(|c| tags::tags(c, d.upgraded, playbook)).unwrap_or_default(),
+                unmet: None,
             }
         })
         .collect()
@@ -56,6 +60,8 @@ pub struct DeckRow {
     /// Cannot be removed or transformed.
     pub eternal: bool,
     pub tags: Vec<Tagged>,
+    /// What it needs that nothing in the run supplies (a dead card).
+    pub unmet: Option<String>,
 }
 
 pub fn deck_rows(cards: &[ClassifiedCard<'_>]) -> Vec<DeckRow> {
@@ -73,6 +79,7 @@ pub fn deck_rows(cards: &[ClassifiedCard<'_>]) -> Vec<DeckRow> {
                 known: c.card.is_some(),
                 eternal: c.card.is_some_and(|k| k.is_eternal()),
                 tags: c.tags.clone(),
+                unmet: c.unmet.clone(),
             })
             .count += 1;
     }
@@ -150,13 +157,33 @@ pub fn profile(cards: &[ClassifiedCard<'_>]) -> DeckProfile {
         let eternal = c.card.is_some_and(|k| k.is_eternal());
         p.eternal += u32::from(eternal);
         p.removable_curses += u32::from(c.card_type() == CardType::Curse && !eternal);
-        p.dead += u32::from(c.card.is_some_and(|k| k.is_dead_draw()));
+        p.dead += u32::from(c.card.is_some_and(|k| k.is_dead_draw()) || c.unmet.is_some());
         p
     })
 }
 
 pub fn deck_profile(deck: &[DeckCard], catalog: &Catalog, playbook: &Playbook) -> DeckProfile {
     profile(&classify(deck, catalog, playbook))
+}
+
+/// The run's deck classified, with the cards whose need nothing in the run
+/// supplies (its relics and character count) marked dead.
+pub fn classify_run<'a>(state: &'a RunState, catalog: &'a Catalog, playbook: &Playbook) -> Vec<ClassifiedCard<'a>> {
+    let unmet = crate::analysis::requirements::unmet(state, catalog, &playbook.simulation.requirements);
+    let mut cards = classify(&state.deck, catalog, playbook);
+    for c in &mut cards {
+        if let Some(what) = unmet.get(&c.deck.card) {
+            c.unmet = Some(what.clone());
+            c.roles.clear();
+            c.tags.clear();
+        }
+    }
+    cards
+}
+
+/// The run's deck profile (see [`classify_run`]).
+pub fn run_profile(state: &RunState, catalog: &Catalog, playbook: &Playbook) -> DeckProfile {
+    profile(&classify_run(state, catalog, playbook))
 }
 
 /// How well a deck covers something a fight or act demands.

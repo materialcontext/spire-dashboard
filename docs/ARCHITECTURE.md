@@ -92,6 +92,13 @@ kit, so old runs replay even after a data update.
 - `rules`: fight rules read from monster powers' text (Slippery, Intangible,
   Hardened Shell, Personal Hive, Slow, Enrage…), each with what it asks of
   the deck (many hits, few big hits, few Skills…).
+- `requirements`: cards that do nothing without something the run must
+  supply (Growth without Sadness, Dualcast without orbs, Shoot cards
+  without the Fool's Arrows, Star cards without a Star maker), from the
+  playbook's `simulation.requirements`. Unmet, they're dead: unplayable in
+  the simulator, no roles or tags in the deck (`deck::classify_run`).
+  Cards that answer junk a fight adds (exhausting Status cards) aren't
+  listed.
 - `balance`: setup piling up (Aim, Vigor, Stretch made faster than used, or
   never used) and the Fool's Arrows or the Regent's Stars running short, from
   the simulator's per-turn flows; the lines are the playbook's `balance`.
