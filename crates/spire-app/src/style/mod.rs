@@ -33,6 +33,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use eframe::egui::{self, Color32, CornerRadius, FontFamily, FontId, Shadow, Stroke, TextStyle};
+use spire_core::analysis::tags::Tag;
 use spire_core::catalog::CardType;
 use spire_core::playbook::Role;
 
@@ -570,6 +571,15 @@ pub fn role_color(r: Role) -> Color32 {
 /// What a card does beside its roles (draw, energy): a tag, not a role.
 pub fn tag_color() -> Color32 {
     adapt(rgb(186, 146, 232))
+}
+
+/// One tag's colour: Energy has its own, so it reads apart from Draw where
+/// the two sit side by side; every other tag shares [`tag_color`].
+pub fn tag_color_of(t: Tag) -> Color32 {
+    match t {
+        Tag::Energy => adapt(rgb(164, 212, 84)),
+        _ => tag_color(),
+    }
 }
 
 /// Accent per character, matching their in-game card colours.

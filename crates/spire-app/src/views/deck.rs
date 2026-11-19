@@ -200,8 +200,7 @@ fn slot_x(i: usize) -> f32 {
     i as f32 * SLOT + if i >= 6 { SLOT_GAP } else { 0.0 }
 }
 
-/// One mark system for every row: a fixed strip of columns on a faint rail,
-/// a filled square where the card (or relic) has the role or tag. Position says which; colour backs it up. Hover a column for
+/// One mark system for every row: a fixed strip of columns, a filled square where the card (or relic) has the role or tag. Position says which; colour backs it up. Hover a column for
 /// its name and how a card gets it.
 fn has<'a>(roles: &'a [Role], tags: &'a [Tagged]) -> impl Fn(Slot) -> bool + 'a {
     move |s: Slot| match s {
@@ -215,11 +214,6 @@ fn strip_at(ui: &mut Ui, rect: egui::Rect, v: &ViewCtx, has: impl Fn(Slot) -> bo
     let resp = ui.interact(rect, ui.next_auto_id(), Sense::hover());
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
-        // One faint rail under the columns (one shape a row, not a dot per
-        // empty column: the deck list is in every frame).
-        let y = rect.center().y.round();
-        let rail = egui::Rect::from_min_max(egui::pos2(rect.min.x, y), egui::pos2(rect.max.x, y + 1.0));
-        painter.rect_filled(rail, 0.0, border());
         for (i, s) in SLOTS.iter().enumerate().filter(|(_, s)| has(**s)) {
             let c = egui::pos2(rect.min.x + slot_x(i) + SLOT / 2.0, rect.center().y);
             painter.rect_filled(egui::Rect::from_center_size(c, vec2(7.0, 7.0)), 0.0, slot_color(*s));
@@ -247,7 +241,7 @@ fn strip_at(ui: &mut Ui, rect: egui::Rect, v: &ViewCtx, has: impl Fn(Slot) -> bo
 fn slot_color(s: Slot) -> egui::Color32 {
     match s {
         Slot::Role(r) => style::role_color(r),
-        Slot::Tag(_) => style::tag_color(),
+        Slot::Tag(t) => style::tag_color_of(t),
     }
 }
 
