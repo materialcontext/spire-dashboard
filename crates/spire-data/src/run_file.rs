@@ -162,6 +162,18 @@ pub(crate) struct WRun {
     pub(crate) killed_by_encounter: Option<String>,
     /// Custom-run modifiers (community runs with any are left out).
     pub(crate) modifiers: Option<serde_json::Value>,
+    /// The room being played (live saves): it joins `map_point_history`
+    /// only once it's finished.
+    pub(crate) pre_finished_room: Option<WCurrentRoom>,
+}
+
+/// The room a live save was written in.
+#[derive(Deserialize, Default)]
+#[serde(default)]
+pub(crate) struct WCurrentRoom {
+    #[serde(deserialize_with = "lenient::opt_id")]
+    pub(crate) encounter_id: Option<String>,
+    pub(crate) room_type: Option<String>,
 }
 
 #[derive(Deserialize, Default)]

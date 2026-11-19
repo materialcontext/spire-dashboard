@@ -123,25 +123,41 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
         for t in list {
             culled(ui, ("threat", v.generation, v.combat.map(|c| c.generation), st.threat_tab, &t.encounter), |ui| {
                 ui.add_space(crate::style::space::s());
-                ui.horizontal(|ui| {
-                    let name = RichText::new(&t.name).family(crate::style::strong_family()).color(if t.seen {
-                        text_dim()
-                    } else {
-                        text()
-                    });
-                    if link(ui, name).on_hover_text("Open in Enemies").clicked() {
-                        out.push(Action::Open(Link::Encounter(t.encounter.clone())));
-                    }
-                    if t.seen {
-                        ui.label(caption("fought"));
-                    }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let (word, color) = status_word(t.worst());
-                        ui.label(RichText::new(word).small().strong().color(color));
-                    });
-                });
-                preview_body(ui, v.generation, t, v.combat.and_then(|c| c.outlook(&t.encounter)));
+                fight_card(ui, v, t, out);
             });
         }
     });
+}
+
+/// The fight the game is in, above Next fight (following only, not for
+/// bosses: those have the act panel).
+pub fn current(ui: &mut Ui, v: &ViewCtx, t: &ThreatPreview, out: &mut Vec<Action>) {
+    let room = match t.room {
+        RoomType::Elite => "Elite",
+        _ => "Enemy",
+    };
+    panel(ui, "Current fight", Some(room), |ui| fight_card(ui, v, t, out));
+}
+
+/// One fight: its name (opens it in Enemies), whether it's covered, and
+/// its preview with the deck's outlook.
+fn fight_card(ui: &mut Ui, v: &ViewCtx, t: &ThreatPreview, out: &mut Vec<Action>) {
+    ui.horizontal(|ui| {
+        let name = RichText::new(&t.name).family(crate::style::strong_family()).color(if t.seen {
+            text_dim()
+        } else {
+            text()
+        });
+        if link(ui, name).on_hover_text("Open in Enemies").clicked() {
+            out.push(Action::Open(Link::Encounter(t.encounter.clone())));
+        }
+        if t.seen {
+            ui.label(caption("fought"));
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let (word, color) = status_word(t.worst());
+            ui.label(RichText::new(word).small().strong().color(color));
+        });
+    });
+    preview_body(ui, v.generation, t, v.combat.and_then(|c| c.outlook(&t.encounter)));
 }

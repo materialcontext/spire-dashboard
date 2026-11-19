@@ -31,6 +31,8 @@ pub struct ViewCtx<'a> {
     pub combat: Option<&'a Combat>,
     /// The run follows the game (monitored): floors log themselves.
     pub following: bool,
+    /// The fight the game is in, when following and it isn't a boss.
+    pub current_fight: Option<&'a spire_core::analysis::threats::ThreatPreview>,
 }
 
 /// The live deck's simulation and how it fares against this act's elites
@@ -117,6 +119,9 @@ const COMBAT_SETTLE: f64 = 0.15;
 const TOAST_SECONDS: f64 = 6.0;
 
 pub struct SpireApp {
+    /// The fight being played (following only): its preview, with the
+    /// generation it was built for.
+    current_fight: Option<(u64, spire_core::analysis::threats::ThreatPreview)>,
     store: Store,
     saver: RunSaver,
     catalog: Catalog,
@@ -163,6 +168,7 @@ impl SpireApp {
             Source::PackUrl { url } => url.clone(),
         };
         Self {
+            current_fight: None,
             draft: NodeDraft::for_next(&state, &loaded.catalog),
             saver: store.run_saver(),
             store,
@@ -677,6 +683,7 @@ impl SpireApp {
                 analytics: self.analytics.as_ref().filter(|(g, _)| *g == self.generation).map(|(_, a)| a),
                 combat: self.combat.as_ref(),
                 following: self.following(),
+                current_fight: self.current_fight.as_ref().filter(|_| self.following()).map(|(_, p)| p),
             };
             let (store, settings) = (&self.store, &self.settings);
             let mut page = |ui: &mut egui::Ui, st: &mut UiState, out: &mut Vec<Action>| {
@@ -737,7 +744,15 @@ impl SpireApp {
         // another profile's save as the newest. File ours first.
         let game = self.finished_followed(&game).unwrap_or(game);
         let after = self.ui.follow.filed_start;
-        match crate::follow::step(game, &self.run, self.state.started(), &self.ui.follow.filed, after) {
+        let current = game.current_fight.clone();
+        let step = crate::follow::step(game, &self.run, self.state.started(), &self.ui.follow.filed, after);
+        // The fight in progress belongs to the run being followed.
+        self.ui.follow.current_fight = match &step {
+            Step::Advance { ended: false, .. } => current,
+            Step::Adopt(g) if !g.ended => current,
+            _ => None,
+        };
+        match step {
             Step::Nothing => {}
             Step::Advance { events, ended } => {
                 if self.run.events != events {
@@ -815,6 +830,44 @@ impl SpireApp {
         self.run_changed();
     }
 
+    /// The fight the game is in (following, not a boss): its preview, and
+    /// its outlook beside the others. The game can enter a fight without
+    /// the run changing (the fight joins the history once it's over), so
+    /// this keys on the fight as well as the generation.
+    fn prepare_current_fight(&mut self) {
+        let enc = self
+            .ui
+            .follow
+            .current_fight
+            .as_ref()
+            .filter(|_| self.following())
+            .and_then(|id| self.catalog.encounters.get(id))
+            .filter(|e| e.room != spire_core::catalog::RoomType::Boss);
+        let Some(enc) = enc else {
+            self.current_fight = None;
+            return;
+        };
+        if self.current_fight.as_ref().is_none_or(|(g, p)| *g != self.generation || p.encounter != enc.id) {
+            let scaling = spire_core::analysis::threats::Scaling::for_run(&self.state, &self.catalog);
+            let preview = spire_core::analysis::threats::preview(
+                enc,
+                &self.catalog,
+                &self.playbook,
+                self.state.act_index,
+                scaling,
+                &self.dash.deck,
+                false,
+            );
+            self.current_fight = Some((self.generation, preview));
+        }
+        if let Some(c) = self.combat.as_mut()
+            && !c.outlooks.iter().any(|(e, _)| *e == enc.id)
+            && let Some(o) = survival::for_encounter(&c.sim, enc, &self.catalog, &self.state, &self.playbook)
+        {
+            c.outlooks.push((enc.id.clone(), o));
+        }
+    }
+
     /// Builds what the open tab needs and nothing else: analytics for the
     /// live run, or the archived runs read from disk.
     fn prepare_tab(&mut self, ctx: &egui::Context) {
@@ -856,6 +909,7 @@ impl SpireApp {
             let balance = spire_core::analysis::balance::warnings(&sim, &self.state, &self.catalog, &self.playbook);
             self.combat = Some(Combat { generation: self.generation, sim, jobs, outlooks, bench, balance });
         }
+        self.prepare_current_fight();
         match self.ui.tab {
             Tab::Analytics if self.analytics.as_ref().is_none_or(|(g, _)| *g != self.generation) => {
                 let sim = match &self.combat {

@@ -30,6 +30,8 @@ pub struct Status {
     /// Waiting for the next run: the game's latest run ended before we
     /// followed it.
     pub waiting: bool,
+    /// The fight the game is in, while following (from its live save).
+    pub current_fight: Option<spire_core::EncounterId>,
 }
 
 /// The app's name for a game run, kept as the followed run's `source`.
@@ -102,7 +104,15 @@ mod tests {
     use super::*;
 
     fn game(key: &str, ended: bool) -> GameRun {
-        GameRun { key: key.into(), start_time: None, events: Vec::new(), floors: 0, ended, unknown: Vec::new() }
+        GameRun {
+            key: key.into(),
+            start_time: None,
+            events: Vec::new(),
+            floors: 0,
+            ended,
+            unknown: Vec::new(),
+            current_fight: None,
+        }
     }
 
     #[test]
