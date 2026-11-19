@@ -860,6 +860,41 @@ pub struct Event {
     pub acts: Vec<ActId>,
     #[serde(default)]
     pub options: Vec<EventOption>,
+    /// What the game checks before offering it, as the data words it
+    /// ("Act 2 only", "Requires 150+ gold").
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requires: Vec<String>,
+    /// The 0-based acts it's limited to (first, last), read from
+    /// `requires`; `None` when any act will do.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub act_span: Option<(u8, u8)>,
+    /// Event relics it can give: named in an option, or seen given in
+    /// community runs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relics: Vec<EventRelic>,
+    /// Share of community runs that met it in each act they played.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub met: BTreeMap<ActId, f32>,
+}
+
+impl Event {
+    /// Whether it can appear in an act with this 0-based index, by its
+    /// `requires` (its act list is checked by [`Catalog::events_in`]).
+    pub fn in_act_index(&self, index: u8) -> bool {
+        self.act_span.is_none_or(|(first, last)| (first..=last).contains(&index))
+    }
+}
+
+/// A relic an event gives.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EventRelic {
+    pub relic: RelicId,
+    /// The option that gives it, when one names it (or lets you choose it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub option: Option<String>,
+    /// It's one of this many the event gives at random; 1 when an option
+    /// gives it outright or lets you choose it.
+    pub one_of: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -888,6 +923,14 @@ pub struct Act {
     /// Floors whose room never varies, measured from community runs.
     #[serde(default)]
     pub fixed_rooms: Vec<FixedRoom>,
+    /// Share of community runs in which a `?` room turned into a treasure
+    /// room in this act.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unknown_treasure: Option<f32>,
+    /// Share of treasure-room relics of each rarity in this act, from
+    /// community runs.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub chest_rarity: BTreeMap<Rarity, f32>,
 }
 
 /// A floor whose room type is always the same.
@@ -1050,6 +1093,14 @@ pub struct DataPack {
     /// What community decks that cleared each act had (from community runs).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub benchmarks: Vec<Benchmark>,
+    /// Card lines that beat each act's bosses, per character (from
+    /// community runs).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub card_lines: Vec<ActLines>,
+    /// How much picking each card lifts high-skill players' win rate (from
+    /// the source's card metrics).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub card_lift: BTreeMap<CardId, CardLift>,
 }
 
 /// The middle half and median of a measure across community decks.
@@ -1098,6 +1149,59 @@ pub struct Benchmark {
     pub tags: BTreeMap<crate::analysis::tags::Tag, Quartiles>,
     /// Each role's job (`analysis::jobs::Jobs::value`).
     pub jobs: BTreeMap<crate::playbook::Role, Quartiles>,
+    /// Max HP gained since the start of the run (negative when lost).
+    #[serde(default)]
+    pub max_hp_gained: Quartiles,
+}
+
+/// Boss fights, and those won.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Record {
+    pub fights: u32,
+    pub wins: u32,
+}
+
+/// Card lines for one character in one act: sets of cards community decks
+/// beat the act's boss with more often together than apart
+/// (`analysis::lines`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ActLines {
+    pub character: CharacterId,
+    /// 0-based act whose boss the decks fought.
+    pub act: u8,
+    /// Every boss fight in the sample.
+    pub all: Record,
+    /// Per boss.
+    #[serde(default)]
+    pub bosses: BTreeMap<EncounterId, Record>,
+    /// Share of runs offered each card as a reward in this act.
+    #[serde(default)]
+    pub offered: BTreeMap<CardId, f32>,
+    pub lines: Vec<CardLine>,
+}
+
+/// Cards that won together.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CardLine {
+    /// Two or three cards, sorted.
+    pub cards: Vec<CardId>,
+    /// Boss fights with all of them in the deck.
+    pub record: Record,
+    /// The best win rate among its smaller sets (each card alone, or each
+    /// pair of three), shrunk like the line's.
+    pub apart: f32,
+    /// Per boss, where it was fought often enough to say.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub bosses: BTreeMap<EncounterId, Record>,
+}
+
+/// A card's win-rate lift among high-skill players: their win rate with it
+/// minus what they'd expect from the floor they took it on, in points.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CardLift {
+    pub lift: f32,
+    /// Seats it's measured over.
+    pub n: u32,
 }
 
 impl DataPack {
@@ -1144,6 +1248,10 @@ pub struct Catalog {
     pub rules: GameRules,
     /// From the last layer that has any.
     pub benchmarks: Vec<Benchmark>,
+    /// From the last layer that has any.
+    pub card_lines: Vec<ActLines>,
+    /// From the last layer that has any.
+    pub card_lift: BTreeMap<CardId, CardLift>,
 }
 
 fn merge<K: Ord, V>(map: &mut BTreeMap<K, V>, items: Vec<V>, key: impl Fn(&V) -> K) {
@@ -1177,6 +1285,12 @@ impl Catalog {
             }
             if !pack.benchmarks.is_empty() {
                 cat.benchmarks = pack.benchmarks;
+            }
+            if !pack.card_lines.is_empty() {
+                cat.card_lines = pack.card_lines;
+            }
+            if !pack.card_lift.is_empty() {
+                cat.card_lift = pack.card_lift;
             }
             cat
         })
@@ -1235,12 +1349,16 @@ impl Catalog {
     }
 
     /// Non-ancient events that can appear in an act: the act's own events
-    /// plus shared ones.
+    /// plus shared ones the act's number allows.
     pub fn events_in<'a>(&'a self, act: &'a ActId) -> impl Iterator<Item = &'a Event> + 'a {
-        self.events.values().filter(move |e| match e.kind {
-            EventKind::Shared => true,
-            EventKind::Act => e.acts.is_empty() || e.acts.contains(act),
-            EventKind::Ancient => false,
+        let index = self.acts.get(act).map(|a| a.index);
+        self.events.values().filter(move |e| {
+            let listed = match e.kind {
+                EventKind::Shared => true,
+                EventKind::Act => e.acts.is_empty() || e.acts.contains(act),
+                EventKind::Ancient => false,
+            };
+            listed && index.is_none_or(|i| e.in_act_index(i))
         })
     }
 }

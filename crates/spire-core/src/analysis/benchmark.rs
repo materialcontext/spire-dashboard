@@ -37,6 +37,7 @@ pub struct Sample {
 /// One deck's measures.
 struct Measured {
     size: f32,
+    max_hp_gained: f32,
     starter: f32,
     tags: BTreeMap<Tag, f32>,
     jobs: Jobs,
@@ -47,6 +48,7 @@ fn measured(state: &RunState, catalog: &Catalog, playbook: &Playbook) -> Measure
     let n = p.total.max(1) as f32;
     Measured {
         size: p.total as f32,
+        max_hp_gained: (state.max_hp - state.start_max_hp) as f32,
         starter: p.starter_basics as f32 / n,
         tags: Tag::ALL.iter().map(|t| (*t, p.tag(*t) as f32 / n)).collect(),
         jobs: jobs::measure(&simulate(state, catalog, &playbook.simulation)),
@@ -63,6 +65,7 @@ fn benchmark(character: Option<CharacterId>, act: u8, decks: &[&Measured]) -> Be
         starter: q(&|m| m.starter),
         tags: Tag::ALL.iter().map(|t| (*t, q(&|m| m.tags[t]))).collect(),
         jobs: Role::ALL.iter().map(|r| (*r, q(&|m| m.jobs.value(*r)))).collect(),
+        max_hp_gained: q(&|m| m.max_hp_gained),
     }
 }
 
@@ -192,6 +195,7 @@ mod tests {
             jobs: [(Role::Mitigation, q(6.0, 8.0, 10.0)), (Role::FastDamage, q(30.0, 40.0, 50.0))]
                 .into_iter()
                 .collect(),
+            max_hp_gained: q(0.0, 5.0, 10.0),
         };
         let profile = DeckProfile {
             total: 10,

@@ -1,8 +1,9 @@
 //! Strategy knowledge, kept as data.
 //!
 //! The playbook is everything the dashboard *believes* about good play: how to
-//! classify a card's deck role, what each act demands, which event options are
-//! opportunities, and the thresholds that turn monster stats into threats.
+//! classify a card's deck role, what each act demands, which event relics are
+//! crucial to which decks, and the thresholds that turn monster stats into
+//! threats.
 //! It ships as `data/playbook.json` and can be overridden by the user without
 //! touching code. Nothing here is a game fact; facts live in the catalog.
 
@@ -267,59 +268,99 @@ impl Default for TagLines {
     }
 }
 
-/// What an event option can give (or cost) the player.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Opportunity {
-    CardRemoval,
-    Upgrade,
-    Transform,
-    Enchant,
-    NewCard,
-    Relic,
-    Potion,
-    Gold,
-    MaxHp,
-    Heal,
-    Fight,
-    CurseRisk,
-    HpCost,
-    #[serde(other)]
-    Other,
+/// When a relic is crucial to a deck, by its cards (`cards`, counted at
+/// `at_least`, dead cards left out), by a shortfall the relic fixes
+/// (`short_of`), or both.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct RelicFit {
+    pub relic: crate::ids::RelicId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cards: Option<Condition>,
+    #[serde(default)]
+    pub at_least: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub short_of: Option<Shortfall>,
+    /// The cards counted, plural ("Powers"); unused for a shortfall.
+    #[serde(default)]
+    pub what: String,
+    /// What the relic does for the deck ("each deals 8 damage to ALL
+    /// enemies when played").
+    pub why: String,
 }
 
-impl Opportunity {
+/// What a deck can be desperately short of, next to decks that cleared
+/// the previous act.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Shortfall {
+    /// Share of the deck that gains Block.
+    Block,
+    /// Max HP gained since the start of the run.
+    MaxHp,
+}
+
+impl Shortfall {
     pub fn label(self) -> &'static str {
         match self {
-            Opportunity::CardRemoval => "Card removal",
-            Opportunity::Upgrade => "Upgrade",
-            Opportunity::Transform => "Transform",
-            Opportunity::Enchant => "Enchant",
-            Opportunity::NewCard => "New card",
-            Opportunity::Relic => "Relic",
-            Opportunity::Potion => "Potion",
-            Opportunity::Gold => "Gold",
-            Opportunity::MaxHp => "Max HP",
-            Opportunity::Heal => "Heal",
-            Opportunity::Fight => "Fight",
-            Opportunity::CurseRisk => "Curse risk",
-            Opportunity::HpCost => "HP cost",
-            Opportunity::Other => "Other",
+            Shortfall::Block => "Block",
+            Shortfall::MaxHp => "max HP",
         }
-    }
-
-    /// Costs rather than rewards.
-    pub fn is_risk(self) -> bool {
-        matches!(self, Opportunity::CurseRisk | Opportunity::HpCost)
     }
 }
 
-/// Tags an event option with an opportunity when its text contains any of
-/// the given phrases (case-insensitive).
+/// What card-reward suggestions show (`analysis::lines`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct OpportunityRule {
-    pub opportunity: Opportunity,
-    pub any_text: Vec<String>,
+#[serde(default)]
+pub struct PickLines {
+    /// Suggestions shown at most.
+    pub max: u32,
+    /// A line is within reach when this many of its cards are missing, at
+    /// most (and at least one is held).
+    pub max_missing: u32,
+    /// The missing card is offered in at least this share of runs in the act.
+    pub min_offered: f32,
+    /// The line beats the boss (or the act's bosses) by this much over the
+    /// character's decks, in win rate.
+    pub min_gain: f32,
+    /// Roles the deck lacks against the boss that get a filler, at most.
+    pub filler_roles: u32,
+    /// Cards tried per role in the simulator, best lift first.
+    pub filler_candidates: u32,
+    /// A filler saves at least this much HP against the boss (or improves
+    /// the verdict).
+    pub min_hp_saved: u32,
+}
+
+impl Default for PickLines {
+    fn default() -> Self {
+        PickLines {
+            max: 3,
+            max_missing: 1,
+            min_offered: 0.15,
+            min_gain: 0.05,
+            filler_roles: 2,
+            filler_candidates: 5,
+            min_hp_saved: 3,
+        }
+    }
+}
+
+/// When a deck counts as desperately short (`analysis::events`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShortLines {
+    /// Block cards under this share of what 3 in 4 decks had entering the
+    /// act (their 25th percentile).
+    pub block_share: f32,
+    /// Max HP gained this many points under what 3 in 4 decks had gained
+    /// entering the act (in act 1: lost since the start).
+    pub max_hp_points: f32,
+}
+
+impl Default for ShortLines {
+    fn default() -> Self {
+        ShortLines { block_share: 0.75, max_hp_points: 5.0 }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -350,17 +391,6 @@ pub struct RoomThresholds {
     pub monster: u32,
     pub elite: u32,
     pub boss: u32,
-}
-
-/// Thresholds for reading the run state into needs.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct NeedThresholds {
-    /// HP fraction below which healing is a priority.
-    pub low_hp: f32,
-    /// Starter Strikes/Defends at or above which removal is a priority.
-    pub starter_cards: u32,
-    /// Fraction of upgraded cards below which upgrades are a priority.
-    pub low_upgrades: f32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -403,9 +433,16 @@ pub struct Playbook {
     /// list each distinct monster once, so `Many Corpse Slugs` looks like one.
     #[serde(default)]
     pub multi_enemy_names: Vec<String>,
-    pub opportunity_rules: Vec<OpportunityRule>,
     pub acts: Vec<ActPlan>,
-    pub needs: NeedThresholds,
+    /// When a relic is worth fishing `?` rooms for.
+    #[serde(default)]
+    pub relic_fits: Vec<RelicFit>,
+    /// When a deck counts as desperately short of Block or max HP.
+    #[serde(default)]
+    pub short: ShortLines,
+    /// What card-reward suggestions show (`analysis::lines`).
+    #[serde(default)]
+    pub picks: PickLines,
     #[serde(default)]
     pub simulation: SimAssumptions,
     /// Which roles a relic plays, from what the deck simulator reads in its
@@ -694,18 +731,5 @@ impl Playbook {
 
     pub fn sounds_like_group(&self, encounter_name: &str) -> bool {
         self.multi_enemy_names.iter().any(|w| contains_ci(encounter_name, w))
-    }
-
-    /// Opportunities found in a piece of event text.
-    pub fn opportunities_in(&self, text: &str) -> Vec<Opportunity> {
-        let mut found: Vec<Opportunity> = self
-            .opportunity_rules
-            .iter()
-            .filter(|r| r.any_text.iter().any(|p| contains_ci(text, p)))
-            .map(|r| r.opportunity)
-            .collect();
-        found.sort();
-        found.dedup();
-        found
     }
 }

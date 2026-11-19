@@ -244,6 +244,10 @@ pub(crate) struct WRoom {
     #[serde(deserialize_with = "lenient::ids")]
     pub(crate) monster_ids: Vec<String>,
     pub(crate) turns_taken: Option<u32>,
+    /// What the room turned out to be (a `?` room's event, fight, shop or
+    /// treasure).
+    #[serde(deserialize_with = "lenient::opt_id")]
+    pub(crate) room_type: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -251,6 +255,13 @@ pub(crate) struct WRoom {
 pub(crate) struct WChoice {
     #[serde(deserialize_with = "lenient::id")]
     pub(crate) choice: String,
+    pub(crate) was_picked: bool,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+pub(crate) struct WCardChoice {
+    pub(crate) card: WCard,
     pub(crate) was_picked: bool,
 }
 
@@ -284,6 +295,8 @@ pub(crate) struct WStats {
     pub(crate) cards_enchanted: Vec<WEnchanted>,
     pub(crate) cards_transformed: Vec<WTransformed>,
     pub(crate) relic_choices: Vec<WChoice>,
+    /// Card rewards offered on the floor, and whether each was taken.
+    pub(crate) card_choices: Vec<WCardChoice>,
     #[serde(deserialize_with = "lenient::ids")]
     pub(crate) relics_removed: Vec<String>,
     pub(crate) potion_choices: Vec<WChoice>,

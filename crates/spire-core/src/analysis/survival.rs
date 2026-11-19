@@ -54,7 +54,8 @@ pub const MAX_TURNS: usize = 20;
 /// Lost HP below this share of current HP reads as on track.
 const SAFE_SHARE: f32 = 0.6;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Best first: a smaller verdict is a better one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Verdict {
     /// Expected to win with HP to spare.
     OnTrack,

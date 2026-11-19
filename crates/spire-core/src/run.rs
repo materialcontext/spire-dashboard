@@ -171,6 +171,9 @@ pub struct RunState {
     pub act_floor: u32,
     pub hp: i32,
     pub max_hp: i32,
+    /// Max HP the run started with.
+    #[serde(default)]
+    pub start_max_hp: i32,
     pub gold: i32,
     pub deck: Vec<DeckCard>,
     pub relics: Vec<RelicId>,
@@ -199,6 +202,7 @@ impl Default for RunState {
             act_floor: 0,
             hp: 0,
             max_hp: 0,
+            start_max_hp: 0,
             gold: 0,
             deck: Vec::new(),
             relics: Vec::new(),
@@ -311,6 +315,7 @@ pub fn apply(s: RunState, event: &RunEvent) -> RunState {
             ascension: *ascension,
             hp: hp.unwrap_or(*max_hp),
             max_hp: *max_hp,
+            start_max_hp: *max_hp,
             gold: *gold,
             deck: deck.iter().cloned().map(DeckCard::new).collect(),
             relics: relics.clone(),

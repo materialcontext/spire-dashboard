@@ -162,6 +162,21 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
         let card = DeckCard { card: id.into(), upgraded: d.add_upgraded, enchantment: None };
         d.changes.push(Change::AddCard(card));
     }
+    // The cards the suggestions look for: one click adds the one taken.
+    let wanted: Vec<&spire_core::ids::CardId> =
+        v.combat.map(|c| c.picks.iter().flat_map(|p| p.missing()).collect()).unwrap_or_default();
+    if !wanted.is_empty() {
+        ui.horizontal_wrapped(|ui| {
+            ui.label(caption("Looking for:"));
+            for id in wanted {
+                let name = v.catalog.card_name(id);
+                if ui.small_button(name).on_hover_text("Add to this floor's changes").clicked() {
+                    let card = DeckCard { card: id.clone(), upgraded: d.add_upgraded, enchantment: None };
+                    d.changes.push(Change::AddCard(card));
+                }
+            }
+        });
+    }
     ui.label(RichText::new("Relic").color(text_dim()));
     let relics = v.catalog.relics.values().map(|r| (r.id.as_str(), r.name.as_str(), r.text.as_str()));
     if let Some(id) = search_pick(ui, &mut d.relic_query, "Search relics", relics) {

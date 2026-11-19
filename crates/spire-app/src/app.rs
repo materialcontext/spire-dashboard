@@ -50,6 +50,9 @@ pub struct Combat {
     pub bench: Option<Bench>,
     /// Setup piling up, Arrows or Stars running short.
     pub balance: Vec<spire_core::analysis::balance::Warning>,
+    /// What to look for in card rewards (lines within reach, then cards for
+    /// what the deck lacks against the boss).
+    pub picks: Vec<spire_core::analysis::lines::Suggestion>,
 }
 
 /// The deck against a benchmark: which decks, and each measure.
@@ -927,7 +930,13 @@ impl SpireApp {
                 })
             });
             let balance = spire_core::analysis::balance::warnings(&sim, &self.state, &self.catalog, &self.playbook);
-            self.combat = Some(Combat { generation: self.generation, sim, jobs, outlooks, bench, balance });
+            // The act's boss and how the deck fares against it, for the fillers.
+            let boss = self.dash.bosses.iter().find(|b| self.state.boss.as_ref() == Some(&b.encounter)).and_then(|b| {
+                let o = outlooks.iter().find(|(e, _)| *e == b.encounter).map(|(_, o)| o)?;
+                Some((b, o))
+            });
+            let picks = spire_core::analysis::lines::suggest(&self.state, &self.catalog, &self.playbook, boss);
+            self.combat = Some(Combat { generation: self.generation, sim, jobs, outlooks, bench, balance, picks });
         }
         self.prepare_current_fight();
         match self.ui.tab {

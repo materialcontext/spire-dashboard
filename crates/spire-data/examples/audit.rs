@@ -12,6 +12,11 @@
 //! turn (12 turns), its HP, and the community's turns and damage taken.
 //! `--tags` counts each tag per character and lists every class card the
 //! reader leaves untagged.
+//! `--lines` prints the card lines in the catalog: per character and act,
+//! the boss fights behind them and the best lines.
+//! `--lookout <page.gz>...` rebuilds community decks at the end of each act
+//! they cleared (run export pages) and counts, per `relic_fits` rule, the
+//! share that qualify: a lookout warning should be rare.
 
 use std::collections::BTreeMap;
 
@@ -41,6 +46,15 @@ fn main() {
     }
     if std::env::args().any(|a| a == "--mechanics") {
         mechanics(&cat);
+        return;
+    }
+    if std::env::args().any(|a| a == "--lines") {
+        lines(&cat);
+        return;
+    }
+    if std::env::args().any(|a| a == "--lookout") {
+        let pages: Vec<String> = std::env::args().skip_while(|a| a != "--lookout").skip(1).collect();
+        lookout(&cat, &pb, &pages);
         return;
     }
 
@@ -271,4 +285,75 @@ fn tags(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
     for u in &untagged {
         println!("  {u}");
     }
+}
+
+fn lookout(cat: &Catalog, pb: &spire_core::Playbook, paths: &[String]) {
+    use spire_core::analysis::deck::{classify_run, profile};
+    use spire_core::analysis::events::fit_holds;
+    let mut samples = Vec::new();
+    for p in paths {
+        let bytes = std::fs::read(p).unwrap_or_else(|e| panic!("{p}: {e}"));
+        let text = spire_data::fetch::decode_maybe_gzip(&bytes).unwrap_or_else(|e| panic!("{p}: {e}"));
+        samples.extend(spire_data::benchmarks::samples(&text, cat));
+    }
+    println!("== relic_fits against {} community decks at the end of acts they cleared", samples.len());
+    println!("   (a shortfall is measured against decks that cleared the act before)");
+    let mut acts: BTreeMap<u8, usize> = BTreeMap::new();
+    for s in &samples {
+        *acts.entry(s.act).or_default() += 1;
+    }
+    let mut hits: BTreeMap<(usize, u8), usize> = BTreeMap::new();
+    for s in &samples {
+        let deck = classify_run(&s.state, cat, pb);
+        let prof = profile(&deck);
+        for (i, fit) in pb.relic_fits.iter().enumerate() {
+            if fit_holds(fit, &s.state, &deck, &prof, cat, pb).is_some() {
+                *hits.entry((i, s.act)).or_default() += 1;
+            }
+        }
+    }
+    for (i, fit) in pb.relic_fits.iter().enumerate() {
+        let name = cat.relics.get(&fit.relic).map_or(fit.relic.to_string(), |r| r.name.clone());
+        let rule = match (fit.short_of, &fit.cards) {
+            (Some(short), _) => format!("short of {}", short.label()),
+            (None, _) => format!("{} {}", fit.at_least, fit.what),
+        };
+        let mut line = format!("{name:<22} {rule:<36}");
+        for (act, n) in &acts {
+            let h = hits.get(&(i, *act)).copied().unwrap_or(0);
+            line.push_str(&format!("  act {}: {:>5.1}%", act + 1, h as f32 * 100.0 / (*n).max(1) as f32));
+        }
+        println!("{line}");
+    }
+}
+
+fn lines(cat: &Catalog) {
+    use spire_core::analysis::lines::shrunk;
+    let rate = |r: spire_core::catalog::Record| r.wins as f32 / r.fights.max(1) as f32;
+    for a in &cat.card_lines {
+        let base = rate(a.all);
+        println!(
+            "== {} act {}: {} boss fights, {:.0}% won, {} lines",
+            a.character,
+            a.act + 1,
+            a.all.fights,
+            base * 100.0,
+            a.lines.len()
+        );
+        for l in a.lines.iter().take(8) {
+            let names: Vec<String> = l.cards.iter().map(|c| cat.card_name(c)).collect();
+            let offered: Vec<String> =
+                l.cards.iter().map(|c| format!("{:.0}%", a.offered.get(c).copied().unwrap_or(0.0) * 100.0)).collect();
+            println!(
+                "   {:<48} {:>4} decks  {:>3.0}% (shrunk {:.0}%) vs {:.0}% apart  offered {}",
+                names.join(" + "),
+                l.record.fights,
+                rate(l.record) * 100.0,
+                shrunk(l.record, base) * 100.0,
+                l.apart * 100.0,
+                offered.join("/")
+            );
+        }
+    }
+    println!("== card lift: {} cards", cat.card_lift.len());
 }

@@ -12,7 +12,9 @@
 //! Updates only happen when the user presses the button: see [`fetch`].
 
 pub mod benchmarks;
+pub mod card_lines;
 pub mod codex;
+pub mod codex_events;
 pub mod codex_runs;
 pub mod curated;
 pub mod fetch;
@@ -172,6 +174,19 @@ mod tests {
         let pb = bundled_playbook();
         for id in pb.card_roles.keys().chain(pb.card_tags.keys()) {
             assert!(cat.cards.contains_key(id), "playbook card_roles or card_tags names unknown card {id}");
+        }
+    }
+
+    #[test]
+    fn relic_fits_name_relics_a_question_room_can_give() {
+        let cat = spire_core::Catalog::from_layers([bundled_pack()]);
+        for fit in &bundled_playbook().relic_fits {
+            let relic =
+                cat.relics.get(&fit.relic).unwrap_or_else(|| panic!("relic_fits names unknown relic {}", fit.relic));
+            let chest = cat.acts.values().any(|a| a.chest_rarity.contains_key(&relic.rarity));
+            let event = cat.events.values().any(|e| e.relics.iter().any(|r| r.relic == fit.relic));
+            assert!(chest || event, "neither a chest nor an event gives {} ({:?})", fit.relic, relic.rarity);
+            assert!(fit.cards.is_some() || fit.short_of.is_some(), "{} has neither cards nor short_of", fit.relic);
         }
     }
 

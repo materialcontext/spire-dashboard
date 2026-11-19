@@ -45,7 +45,8 @@ still there.
   applies Vulnerable.
 - Per-card tag and role overrides; the player's own overrides of both are
   saved apart (`my_tags.json`, `my_roles.json`).
-- Event opportunity tags.
+- When a relic is crucial to a deck (`relic_fits`), and what counts as
+  desperately short of Block or max HP (`short`).
 - Per-act targets and thresholds.
 
 None of this is a game fact, so it is kept apart from the catalog. It can be
@@ -111,8 +112,28 @@ kit, so old runs replay even after a data update.
   monsters an on-death power summons (`threats::lineup_waves`) fight as a
   later stage. The lead way loses least HP unless a clocked fight runs past
   the community's pace; `limits` name the roles that would help.
-- `events`: run `needs` (removal, heal, upgrade…), and a `watchlist` of
-  act events ranked by how well they meet those needs.
+- `events`: the relic `lookout`: relics a playbook `relic_fits` rule says are
+  crucial to this deck, by its cards (one warning per relic) or by a
+  shortfall (Block share or max HP gained, under decks that cleared the
+  previous act by the `short` lines; one warning per shortfall naming every
+  relic that fixes it). Sources are the `?` rooms still possible this act:
+  events (not seen this run, allowed by the act) with the option that gives
+  the relic, and a `?` room turned treasure room, whose chest gives a relic
+  by the act's rarity shares at random among the character's pool. Each
+  carries how often community runs come to it in the act. `fit_holds` is
+  the test, shared with `audit --lookout`. Empty unless something qualifies.
+- `lines`: card lines and card-reward suggestions. `measure` (at data
+  refresh) finds, per character and act, sets of two or three cards whose
+  community decks beat the act's boss more often together than with any
+  smaller part and than the character's decks overall, rates shrunk toward
+  the act's (`PRIOR`). `suggest` (in the combat preparation, after the deck
+  simulation) gives at most `picks.max`: lines the deck holds part of whose
+  missing card is offered often enough this act, ranked by the line's
+  record against the boss being faced when there is one; then `fillers`,
+  class cards for the roles the deck lacks against the boss (its outlook's
+  limits, then the boss check's gaps), ranked by high-skill card lift and
+  kept only when the simulator loses less HP to the boss with them. On
+  held-out runs mined lines beat the baseline by a few points on average.
 - `advice`: act targets, boss gaps, area damage and removable curses (run-specific only).
 - `healing`: the rest heal (rules percent plus "heal an additional N" relics); the Ancient heal and starting HP are `GameRules` methods.
 - `tags`: what each card does, in 14 tags (Damage, Chip Damage,
@@ -261,6 +282,8 @@ only a fallback.
 
 - `/api/{acts,characters,cards,relics,potions,enchantments,monsters,encounters,events,ascensions}?channel=beta`
 - `/api/beta/version` (or `/api/versions` on stable), for the game version label
+- `/api/runs/metrics/cards?bracket=wr50`, card lift among high-skill players
+  (optional: the update goes on without it)
 
 The dashboard follows the **beta** branch by default (`Channel::Beta`, which
 sends `?channel=beta`). Wire structs name only the fields used, every field is
@@ -277,6 +300,10 @@ Notes:
   `multi_enemy_names` is only a fallback for encounters with no run data.
 - Keyless use allows 15 requests per minute per endpoint. One update makes one
   call per endpoint.
+- Events keep their `preconditions` as `Event::requires`. "Act 2 only",
+  "Act 1–2 only" and "Act 2+" become `act_span`, which `Catalog::events_in`
+  applies to shared events. Event relics named in any option, first screen or
+  later (`pages`), become `Event::relics`.
 
 ## Community runs: exact lineups
 
@@ -310,8 +337,25 @@ them into `Catalog::benchmarks` (quartiles per character and act, plus all
 characters), and `benchmark::compare` lines the run's deck up against them
 for the deck panel.
 
+`spire-data/src/codex_events.rs` reads them a third way, for events: the
+event relics picked up on each event's floor fill in the relics no option
+names (Trash Heap's "random forgotten Relic" is one of five, Doll Room lets
+you choose one of three), and the share of runs that met each event in each
+act (by act id, so Overgrowth and Underdocks stay apart) goes into
+`Event::met`. Relics from the general pools are left out: no one can fish an
+event for them. The same replay that builds benchmarks takes each deck going into every
+boss fight, with whether the run got past it; with the card rewards offered
+per act (`card_lines.rs`), `analysis::lines::measure` turns them into
+`Catalog::card_lines`. The adapter also reads the source's card metrics for
+high-skill players (`runs/metrics/cards?bracket=wr50`) into
+`Catalog::card_lift`. Per act, it also measures how often a `?` room turns into a
+treasure room (`Act::unknown_treasure`, share of runs) and the rarity of the
+relics treasure rooms give (`Act::chest_rarity`), and `benchmarks.rs` adds
+the max HP decks had gained by the end of each act they cleared
+(`Benchmark::max_hp_gained`).
+
 Results land in `Encounter::lineups`, `spawns` and `stats`. The update reads
-`run_pages` pages (default 3, about 3,000 runs) from the last 14 days, so
+`run_pages` pages (default 12, about 12,000 runs) from the last 14 days, so
 lineups track the current game version. The export's own budget is 120
 credits per hour, and one page costs 1 credit. If this step fails, the rest of
 the update still applies.

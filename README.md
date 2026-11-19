@@ -2,7 +2,7 @@
 
 A desktop companion for **Slay the Spire 2** (beta branch) that helps you learn
 and play the *macro* game: what your deck is missing, what the next fight will ask of it,
-which `?` events to hope for, and what the act boss demands.
+which event relics are worth fishing `?` rooms for, and what the act boss demands.
 
 It never reads the game. After each node you tell it what happened: the fight,
 the card you took, HP and gold after. Then it re-analyses the run.
@@ -44,8 +44,26 @@ the card you took, HP and gold after. Then it re-analyses the run.
   you've already had this act are left out, and so is the elite you just
   fought: community runs show neither comes straight back. Each is checked
   against your deck.
-- **`?` event watchlist**: events possible in this act, ranked by how well
-  they answer what the run needs (removal for curses, healing when low…).
+- **Relic lookout**: shown only when a `?` room this act can still give a
+  relic that's crucial to your deck. A relic is crucial when your cards call
+  for it (Lost Wisp with six or more Powers, The Boot with many small hits),
+  or when your deck is desperately short of Block or max HP next to decks
+  that cleared the act before (Orichalcum, Anchor; Strawberry, Pear, Mango).
+  A `?` room is an event or, now and then, a treasure room: the lookout names
+  the event and the option that gives the relic (with its cost), or the
+  treasure room and how often its chest gives one of those relics, and how
+  often community runs come to each in this act. Events you've had this run,
+  and those the act doesn't allow, are left out.
+- **Look for in card rewards**: up to three suggestions, from the cards you
+  already have. First, *lines within reach*: two or three cards that
+  community decks beat this act's boss with more often together than apart,
+  where you hold part of the line and the rest is offered often enough in
+  this act. Next, *cards for what your deck lacks against the boss*: for the
+  roles its outlook and boss check find missing, your class's cards that
+  high-skill players win more with, kept only when the simulator shows the
+  deck doing better against the boss with the card (a card that needs a
+  partner, like a Shiv payoff, comes with one). The floor log's card step
+  lists the cards they look for, one click each.
 - **Macro advice** about your run only: role gaps for this act, boss gaps,
   missing area damage and removable curses. There are no general tips.
 - **Enemies seen** this run.
@@ -235,7 +253,12 @@ Everything the dashboard *believes* lives in `data/playbook.json`, not in code:
 - per-card tag and role overrides
 - per-act role targets
 - thresholds for "big hit" and "long fight"
-- the words that mark event options as removal, upgrade, relic and so on
+- when a relic is crucial to a deck (`relic_fits`: the cards it counts and
+  how many, or the shortfall it fixes) and when a deck counts as desperately
+  short of Block or max HP (`short`)
+- what card-reward suggestions show (`picks`): how many, how much of a line
+  may be missing, how often its missing card must be offered, and how much
+  better a line or filler must do
 - what the deck simulator assumes where the game data is silent (`simulation`):
   cards drawn per turn, hand limit, turns and fights simulated, and hits that
   bring back a shot Arrow

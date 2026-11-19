@@ -13,9 +13,10 @@ pub mod data;
 pub mod deck;
 pub mod dialogs;
 pub mod enemies;
-pub mod events;
 pub mod history;
 pub mod log;
+pub mod lookout;
+pub mod picks;
 pub mod relics;
 pub mod start;
 pub mod threats;
@@ -202,43 +203,49 @@ pub fn root(
             if boss_floor {
                 culled(ui, ("act-wide", g, v.combat.map(|c| c.generation)), |ui| act::show(ui, v, out));
                 ui.add_space(GAP);
+                // No `?` rooms are left, so no relic lookout.
                 if ui.available_width() > 680.0 {
                     ui.columns(2, |cols| {
                         culled(&mut cols[0], ("breakdown", g, v.combat.map(|c| c.generation)), |ui| {
                             breakdown::show(ui, v)
                         });
-                        events::show(&mut cols[1], v);
                     });
                 } else {
                     breakdown::show(ui, v);
-                    ui.add_space(GAP);
-                    events::show(ui, v);
                 }
             } else if ui.available_width() > 680.0 {
                 ui.columns(2, |cols| {
                     culled(&mut cols[0], ("act", g, v.combat.map(|c| c.generation)), |ui| act::show(ui, v, out));
                     cols[0].add_space(GAP);
                     culled(&mut cols[0], ("breakdown", g, v.combat.map(|c| c.generation)), |ui| breakdown::show(ui, v));
+                    if lookout::show(&mut cols[1], v, out) {
+                        cols[1].add_space(GAP);
+                    }
+                    if picks::show(&mut cols[1], v, out) {
+                        cols[1].add_space(GAP);
+                    }
                     if let Some(t) = v.current_fight {
                         threats::current(&mut cols[1], v, t, out);
                         cols[1].add_space(GAP);
                     }
                     culled(&mut cols[1], ("threats", g, st.threat_tab), |ui| threats::show(ui, v, st, out));
-                    cols[1].add_space(GAP);
-                    events::show(&mut cols[1], v);
                 });
             } else {
                 act::show(ui, v, out);
                 ui.add_space(GAP);
                 breakdown::show(ui, v);
                 ui.add_space(GAP);
+                if lookout::show(ui, v, out) {
+                    ui.add_space(GAP);
+                }
+                if picks::show(ui, v, out) {
+                    ui.add_space(GAP);
+                }
                 if let Some(t) = v.current_fight {
                     threats::current(ui, v, t, out);
                     ui.add_space(GAP);
                 }
                 threats::show(ui, v, st, out);
-                ui.add_space(GAP);
-                events::show(ui, v);
             }
         });
     });
