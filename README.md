@@ -98,7 +98,7 @@ the game's own save after each floor.
 While following:
 
 - **Logging:** floors log themselves, and the floor log is locked.
-- **When the run ends:** it's filed in History.
+- **When the run ends:** it's filed in History, and History opens on it.
 - **If you're already logging a different run by hand:** the dashboard asks
   before switching.
 - **Modded profile:** with mods on, the game plays in its separate *modded*
@@ -123,7 +123,7 @@ Linux needs the usual X11/Wayland runtime libraries (e.g. `libxkbcommon-x11-0`).
 3. After a boss, choose the next act.
 4. **Undo** reverts the last step. **Apply as correction** fixes a mistake
    without advancing the floor.
-5. **End run** files the run in History.
+5. **End run** files the run in History and opens it there.
 
 Keys are optional shortcuts: 1–8 pick the room, Ctrl+Enter commits, Ctrl+Z
 undoes, Ctrl+1–6 switch tabs and Esc closes dialogs.
