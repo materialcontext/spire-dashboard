@@ -251,9 +251,15 @@ Limits (`survival::Limit`) name the role that would help: Survival when a
 certain spike tops a defending turn's Block, Mitigation when the pressure
 tops an ordinary turn's, Fast Damage when the kill is over the community's
 pace by more than 1.5 turns, Chip when a hit rule meets fewer than 3 hits a
-turn, AoE when enemies join and little damage hits them all. Not built yet:
-scoring spike turns against bad draws (the Survival limit uses the high end
-of a defending turn's Block instead).
+turn, AoE when enemies join and little damage hits them all.
+
+Spike turns count bad draws: the simulator keeps each turn's whole spread
+of Block (its value at every 5% of fights, `TurnOutput::block_steps`). A
+turn a way spends wholly on Block loses the average shortfall over that
+spread, not the shortfall of the average, and each certain spike gets the
+share of hands that block it in full (`Outlook::spikes`). The Survival
+limit names the spike least often blocked, under half the hands (the
+playbook's `fights.spike_odds`).
 
 
 Each line is played out against the shape, phase by phase:

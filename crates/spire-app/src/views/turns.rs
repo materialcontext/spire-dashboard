@@ -336,6 +336,19 @@ fn outlook_detail(ui: &mut Ui, o: &Outlook, stats: Option<&EncounterStats>) {
         };
         ui.label(secondary(format!("{}: {result}", l.way.label())));
     }
+    if !o.spikes.is_empty() {
+        let shown: Vec<String> = o
+            .spikes
+            .iter()
+            .take(4)
+            .map(|s| format!("turn {} ({:.0}): {:.0}%", s.turn, s.damage, s.odds * 100.0))
+            .collect();
+        let more = if o.spikes.len() > 4 { ", …" } else { "" };
+        ui.label(format!(
+            "Spikes blocked in full by a turn spent defending, counting bad draws: {}{more}.",
+            shown.join(", ")
+        ));
+    }
     for r in &o.rules {
         ui.label(look_for(&format!("{}.", r.text), &r.tags));
     }

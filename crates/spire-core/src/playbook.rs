@@ -395,11 +395,22 @@ pub struct FightThresholds {
     pub chip_hits: f32,
     /// Junk at or over this share of the deck is worth cleaning up.
     pub junk_share: f32,
+    /// A spike blocked in full on fewer hands than this holds the deck back
+    /// (Survival).
+    pub spike_odds: f32,
 }
 
 impl Default for FightThresholds {
     fn default() -> Self {
-        FightThresholds { spike: 1.5, quiet: 0.35, ramp: 1.3, slower_by: 1.5, chip_hits: 3.0, junk_share: 0.3 }
+        FightThresholds {
+            spike: 1.5,
+            quiet: 0.35,
+            ramp: 1.3,
+            slower_by: 1.5,
+            chip_hits: 3.0,
+            junk_share: 0.3,
+            spike_odds: 0.5,
+        }
     }
 }
 
