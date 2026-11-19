@@ -293,7 +293,7 @@ Each line is played out against the shape, phase by phase:
 ### 4. Tags (card vocabulary)
 
 As built (F4): `analysis::tags`. Scaling and Setup are split by side
-(Scaling · damage, Scaling · block, Setup · attack, Setup · block), so the
+(Scaling (damage), Scaling (block), Setup (attack), Setup (block)), so the
 roles can follow them; that makes 14 tags. A tag carries the card's number
 (per hit for Multi-Hit, with its hits). The playbook holds the judgement
 calls: `tag_rules` (channelling Lightning is Damage, Forge is Damage,
@@ -304,6 +304,10 @@ follow them. Limits and fight rules name the tags that answer them
 ("Look for: Multi-Hit, Chip Damage"); junk piling past 30% of the deck is a
 Clean-Up limit. `audit --tags` lists the 62 class cards no tag describes
 (copies, card plays, Stars, random cards).
+
+Since F4, a card costing more than 1 energy (or X) isn't Mitigation,
+whatever its tags (the playbook's `role_max_cost`); a big Block card can
+still be Survival. Intangible and Buffer are Survival only, at any cost.
 
 One change from the table below: **Energy gives no role.** Draw and Energy
 keep every role working on bad draws, the note that isn't a role (D2), so

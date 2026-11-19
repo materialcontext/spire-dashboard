@@ -996,6 +996,14 @@ fn roles_come_from_tags_and_overrides_replace_them() {
     defend.block = Some(5);
     assert_eq!(pb.roles_of(&defend), vec![Role::Mitigation], "5 Block is under the Survival line");
     assert_eq!(pb.tags_for(Role::Survival), vec![Tag::Block]);
+    // Costing more than 1 rules Mitigation out, whatever gives it.
+    pb.role_max_cost.insert(Role::Mitigation, 1);
+    let mut wall2 = card("WALL2", CardType::Skill, Rarity::Common, "Gain 12 Block.");
+    (wall2.block, wall2.cost) = (Some(12), Some(2));
+    assert_eq!(pb.roles_of(&wall2), vec![Role::Survival]);
+    wall2.x_cost = true;
+    assert_eq!(pb.roles_of(&wall2), vec![Role::Survival], "X costs count as over the cap");
+    assert_eq!(pb.roles_of(&defend), vec![Role::Mitigation], "1 energy is within it");
     pb.personal_tags.insert(wall.id.clone(), vec![Tag::Weak]);
     let (t, source) = of(&wall, false, &pb);
     assert_eq!((t.iter().map(|t| t.tag).collect::<Vec<_>>(), source), (vec![Tag::Weak], TagSource::Personal));

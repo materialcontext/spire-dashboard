@@ -74,7 +74,10 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
             };
             ui.horizontal(|ui| {
                 stripe(ui, color, 18.0);
-                ui.add(egui::Label::new(RichText::new(&a.text).color(text_color)).wrap());
+                let line = ui.add(egui::Label::new(RichText::new(&a.text).color(text_color)).wrap());
+                if !a.detail.is_empty() {
+                    line.on_hover_text(&a.detail);
+                }
             });
         }
         if !s.encounters_seen.is_empty() {

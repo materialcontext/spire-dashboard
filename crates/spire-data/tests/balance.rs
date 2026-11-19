@@ -45,7 +45,7 @@ fn nock_is_worth_what_the_shoot_cards_make_of_it() {
         stores_and_warnings(&bare).0[Store::Aim as usize].gained,
         "Nock is left in hand"
     );
-    assert!(w.iter().any(|(s, t)| *s == Store::Aim && t.contains("no Shoot cards")), "{w:?}");
+    assert!(w.iter().any(|(s, t)| *s == Store::Aim && t.contains("never used: 3 Aim cards, no Shoot cards")), "{w:?}");
 }
 
 #[test]

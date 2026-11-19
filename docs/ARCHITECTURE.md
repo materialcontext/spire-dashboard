@@ -36,8 +36,10 @@ still there.
   reader can't map by itself, and the chip line (`tag_lines`).
 - Tag roles (`tag_roles`): which roles each tag gives, from a number up
   ("Block 10+ is Survival").
-- Direct role rules (`role_rules`) for what no tag says (Intangible,
-  Buffer, summons).
+- Direct role rules (`role_rules`) for what no tag says (Intangible and
+  Buffer are Survival; summons and healing, Mitigation).
+- Cost caps per role (`role_max_cost`): Mitigation is for cards costing 1
+  or less.
 - Per-card tag and role overrides; the player's own overrides of both are
   saved apart (`my_tags.json`, `my_roles.json`).
 - Event opportunity tags.

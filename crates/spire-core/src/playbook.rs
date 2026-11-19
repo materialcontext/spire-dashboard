@@ -322,6 +322,11 @@ pub struct Playbook {
     pub tag_roles: Vec<TagRole>,
     #[serde(default)]
     pub tag_lines: TagLines,
+    /// The most a card may cost and still fill a role read from its tags or
+    /// the role rules ("anything costing more than 1 is not Mitigation").
+    /// X-cost cards count as over any cap. Hand-set roles aren't capped.
+    #[serde(default)]
+    pub role_max_cost: BTreeMap<Role, u8>,
     /// Hand-set tags for specific cards; these replace the reading.
     #[serde(default)]
     pub card_tags: BTreeMap<CardId, Vec<Tag>>,
@@ -503,6 +508,9 @@ impl Playbook {
             }
         }
         matched.extend(self.role_rules.iter().filter(|r| r.when.matches(card)).map(|r| (r.role, r.when.describe())));
+        matched.retain(|(role, _)| {
+            self.role_max_cost.get(role).is_none_or(|max| Condition::CostAtMost(*max).matches(card))
+        });
         matched.sort_by_key(|(r, _)| *r);
         matched.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1);
         matched

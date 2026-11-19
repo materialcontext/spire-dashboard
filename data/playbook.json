@@ -357,39 +357,10 @@
       "tag": "chip_damage"
     }
   ],
+  "role_max_cost": {
+    "mitigation": 1
+  },
   "role_rules": [
-    {
-      "role": "mitigation",
-      "when": {
-        "applies_power": "Intangible"
-      }
-    },
-    {
-      "role": "mitigation",
-      "when": {
-        "applies_power": "Buffer"
-      }
-    },
-    {
-      "role": "mitigation",
-      "when": {
-        "all": [
-          {
-            "card_type": "power"
-          },
-          {
-            "any": [
-              {
-                "text_contains": "intangible"
-              },
-              {
-                "text_contains": "heal"
-              }
-            ]
-          }
-        ]
-      }
-    },
     {
       "role": "mitigation",
       "when": {
