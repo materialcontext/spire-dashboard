@@ -465,11 +465,8 @@ mod tests {
             typical: 0.85,
             decks: 100.0,
         }];
-        let mut state = RunState {
-            character: Some(CharacterId::new("IRONCLAD")),
-            act: Some(act),
-            ..Default::default()
-        };
+        let mut state =
+            RunState { character: Some(CharacterId::new("IRONCLAD")), act: Some(act), ..Default::default() };
         let block = |v: f32| -> BTreeMap<Measure, f32> { [(Measure::Job(Role::Mitigation), v)].into_iter().collect() };
         let start = block(6.0);
         // Floor 0: the range is the starting deck's own value.

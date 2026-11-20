@@ -210,7 +210,9 @@ fn update(ui: &mut egui::Ui, settings: &Settings, st: &mut UiState, out: &mut Ve
 fn playbook(ui: &mut egui::Ui, out: &mut Vec<Action>) {
     ui.label(eyebrow("Playbook"));
     hairline(ui);
-    ui.label(secondary("Role rules, composition settings and event rules live in editable JSON. Export, edit, then reload."));
+    ui.label(secondary(
+        "Role rules, composition settings and event rules live in editable JSON. Export, edit, then reload.",
+    ));
     ui.horizontal(|ui| {
         if ui.button("Export playbook").clicked() {
             out.push(Action::ExportPlaybook);
