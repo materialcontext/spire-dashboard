@@ -1,6 +1,7 @@
 //! Potential next fights by room type.
 
 use eframe::egui::{self, RichText, Ui};
+use spire_core::EncounterId;
 use spire_core::analysis::survival::Outlook;
 use spire_core::analysis::{Coverage, ThreatPreview};
 use spire_core::catalog::RoomType;
@@ -116,8 +117,8 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
         let tabs = [(NodeKind::Monster, "Enemy"), (NodeKind::Elite, "Elite"), (NodeKind::Boss, "Boss")];
         segmented(ui, &mut st.threat_tab, &tabs);
         ui.add_space(crate::style::space::xs());
-        let list =
-            v.dash.threats.iter().find(|(k, _)| *k == st.threat_tab).map(|(_, l)| l.as_slice()).unwrap_or_default();
+        let all = v.dash.threats.iter().find(|(k, _)| *k == st.threat_tab).map_or(&[][..], |(_, l)| l.as_slice());
+        let list = next(all, v.current_fight.map(|c| &c.encounter));
         if list.is_empty() {
             ui.label(RichText::new("Nothing known for this act.").color(text_dim()));
         }
@@ -137,6 +138,12 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
             },
         );
     });
+}
+
+/// The fights that can come next: all but the one being played (when
+/// following, it's shown above Next fight).
+fn next<'a>(all: &'a [ThreatPreview], playing: Option<&EncounterId>) -> Vec<&'a ThreatPreview> {
+    all.iter().filter(|t| Some(&t.encounter) != playing).collect()
 }
 
 /// Next fight's list takes at most this share of the window's height (and
@@ -175,4 +182,29 @@ fn fight_card(ui: &mut Ui, v: &ViewCtx, t: &ThreatPreview, out: &mut Vec<Action>
         });
     });
     preview_body(ui, v.generation, t, v.combat.and_then(|c| c.outlook(&t.encounter)));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use spire_core::analysis::{deck::deck_profile, threats::next_threats};
+    use spire_core::run::{Run, RunEvent};
+
+    #[test]
+    fn the_fight_being_played_is_not_a_next_fight() {
+        let (cat, pb) = (spire_data::bundled_catalog(), spire_data::bundled_playbook());
+        let mut run = Run::default();
+        let character = cat.characters.keys().next().unwrap().clone();
+        run.push(RunEvent::start(&cat, &character, 0).unwrap());
+        let act = cat.acts.values().find(|a| a.index == 0).unwrap().id.clone();
+        run.push(RunEvent::EnterAct { act, index: 0, boss: None });
+        let s = run.state();
+        let all = next_threats(&s, NodeKind::Monster, &cat, &pb, &deck_profile(&s.deck, &cat, &pb));
+        assert!(all.len() > 1);
+        let playing = &all[0].encounter;
+        let shown = next(&all, Some(playing));
+        assert_eq!(shown.len(), all.len() - 1);
+        assert!(shown.iter().all(|t| &t.encounter != playing));
+        assert_eq!(next(&all, None).len(), all.len());
+    }
 }
