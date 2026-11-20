@@ -276,6 +276,13 @@ existing analysis later:
     - `SaveManager.Instance.CurrentProfileId` and
       `ProgressSaveManager.GetProgressPathForProfile`: the profile's
       `saves` folder, which is under `modded/` while mods are on.
+    - The run state's `CurrentRoom` (mod 0.2.0, link schema 2): its class
+      (`CombatRoom`, `EventRoom`…), `RoomType`, the event
+      (`CanonicalEvent.Id`), the encounter (any member whose id is an
+      `ENCOUNTER.` id), and the live enemies' monster ids from
+      `CombatManager.Instance.DebugOnlyGetState().Enemies`. The run save
+      can't give this: it records a room only once it's finished, and its
+      `pre_finished_room` is the room just finished, not the one entered.
   - When anything changed, it writes `game-link.json` in
     `<local app data>/SpireDashboard/`, atomically.
   - It builds without the game: `mod/Sts2Stub` stands in for `sts2.dll`'s
@@ -293,6 +300,10 @@ existing analysis later:
   - Files the run in history when it ends.
   - Asks before replacing a hand-logged run.
   - Locks the floor log while following.
+  - Shows the room being played from the link (`follow::current_room`):
+    a fight above Next fight (its encounter, or the one its enemies make
+    up), or an event with its options, flagging any that gives a relic the
+    lookout wants. Boss fights keep the act panel.
   - Leaves HP, including Ancient heals, to the game.
 
 ## Earlier options (for the record)

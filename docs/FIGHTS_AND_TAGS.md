@@ -296,7 +296,8 @@ As built (F4): `analysis::tags`. Scaling and Setup are split by side
 (Scaling (damage), Scaling (block), Setup (attack), Setup (block)), so the
 roles can follow them; that makes 14 tags. A tag carries the card's number
 (per hit for Multi-Hit, with its hits). The playbook holds the judgement
-calls: `tag_rules` (channelling Lightning is Damage, Forge is Damage,
+calls: `tag_rules` (channelling Lightning is Damage; Forge is Scaling
+(damage), since it grows Sovereign Blade for the rest of the fight;
 exhausting your hand is Clean-Up…), `tag_lines` (Chip Damage: at most 4 a
 hit on a card costing 0–1, as the old Chip rule had it) and `tag_roles`.
 The player's own tags (`my_tags.json`) replace the reading, and roles

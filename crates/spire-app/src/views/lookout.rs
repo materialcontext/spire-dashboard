@@ -109,3 +109,29 @@ fn source(ui: &mut Ui, v: &ViewCtx, l: &Lookout, s: &RelicSource) {
         }
     }
 }
+
+/// The event the game is in, above Next fight (following only): its
+/// options, with any that give a relic the lookout flags as crucial.
+pub fn current_event(ui: &mut Ui, v: &ViewCtx, e: &spire_core::catalog::Event, out: &mut Vec<Action>) {
+    panel(ui, "Current event", None, |ui| {
+        ui.label(RichText::new(&e.name).family(crate::style::strong_family()).color(text()));
+        for o in &e.options {
+            ui.add_space(crate::style::space::xs());
+            ui.label(RichText::new(&o.title).strong().color(text()));
+            if !o.text.is_empty() {
+                ui.label(secondary(&o.text));
+            }
+            // A relic this option gives that the lookout wants.
+            let crucial = e
+                .relics
+                .iter()
+                .filter(|r| r.option.as_deref() == Some(o.title.as_str()))
+                .filter(|r| v.dash.lookout.iter().any(|l| l.relics.contains(&r.relic)));
+            for r in crucial {
+                let text =
+                    RichText::new(format!("{}: crucial for this deck", relic_name(v, &r.relic))).small().color(warn());
+                relic_link(ui, v, &r.relic, text, out);
+            }
+        }
+    });
+}

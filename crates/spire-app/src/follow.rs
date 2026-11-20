@@ -30,8 +30,44 @@ pub struct Status {
     /// Waiting for the next run: the game's latest run ended before we
     /// followed it.
     pub waiting: bool,
-    /// The fight the game is in, while following (from its live save).
+    /// The fight the game is in, while following (from the mod's link).
     pub current_fight: Option<spire_core::EncounterId>,
+    /// The event the game is in, while following (from the mod's link).
+    pub current_event: Option<spire_core::ids::EventId>,
+}
+
+/// The room the game is in, from the mod's link: the fight (its encounter,
+/// or the encounter whose monsters the enemies are, preferring the act being
+/// played) or the event. Nothing outside a run or in other rooms.
+pub fn current_room(
+    link: &Link,
+    catalog: &Catalog,
+) -> (Option<spire_core::EncounterId>, Option<spire_core::ids::EventId>) {
+    use spire_core::ids::{EncounterId, EventId, MonsterId};
+    let entry = |id: &str| id.split_once('.').map_or(id, |(_, rest)| rest).to_string();
+    let Some(room) = link.room.as_ref().filter(|_| link.in_progress) else { return (None, None) };
+    let event = room.event.as_deref().map(|e| EventId::new(entry(e))).filter(|e| catalog.events.contains_key(e));
+    if room.kind != "CombatRoom" {
+        return (None, event);
+    }
+    let named =
+        room.encounter.as_deref().map(|e| EncounterId::new(entry(e))).filter(|e| catalog.encounters.contains_key(e));
+    let fight = named.or_else(|| {
+        let enemies: Vec<MonsterId> = room.monsters.iter().flatten().map(|m| MonsterId::new(entry(m))).collect();
+        if enemies.is_empty() {
+            return None;
+        }
+        let act = link.act.as_deref().map(|a| spire_core::ids::ActId::new(entry(a)));
+        // Every enemy is one of the encounter's monsters (those that join
+        // mid-fight included); the act's own, and the smallest, first.
+        catalog
+            .encounters
+            .values()
+            .filter(|e| enemies.iter().all(|m| e.monsters.contains(m)))
+            .min_by_key(|e| (e.act != act, e.monsters.len()))
+            .map(|e| e.id.clone())
+    });
+    (fight, event)
 }
 
 /// The app's name for a game run, kept as the followed run's `source`.
@@ -104,15 +140,7 @@ mod tests {
     use super::*;
 
     fn game(key: &str, ended: bool) -> GameRun {
-        GameRun {
-            key: key.into(),
-            start_time: None,
-            events: Vec::new(),
-            floors: 0,
-            ended,
-            unknown: Vec::new(),
-            current_fight: None,
-        }
+        GameRun { key: key.into(), start_time: None, events: Vec::new(), floors: 0, ended, unknown: Vec::new() }
     }
 
     #[test]
@@ -138,5 +166,41 @@ mod tests {
             followed_start(&Run { source: Some("game:1700000000:SEED".into()), ..Run::default() }),
             Some(1_700_000_000)
         );
+    }
+
+    #[test]
+    fn the_room_in_progress_comes_from_the_link() {
+        use spire_data::game_link::Room;
+        let cat = spire_data::bundled_catalog();
+        let link = |room: Room| Link {
+            in_progress: true,
+            act: Some("ACT.UNDERDOCKS".into()),
+            room: Some(room),
+            ..Link::default()
+        };
+        let fight = |kind: &str, encounter: Option<&str>, monsters: &[&str]| Room {
+            kind: kind.into(),
+            room_type: Some("Monster".into()),
+            encounter: encounter.map(Into::into),
+            monsters: Some(monsters.iter().map(|m| m.to_string()).collect()),
+            ..Room::default()
+        };
+        // The mod named the encounter.
+        let named = link(fight("CombatRoom", Some("ENCOUNTER.TOADPOLES_WEAK"), &[]));
+        assert_eq!(current_room(&named, &cat).0, Some(spire_core::EncounterId::new("TOADPOLES_WEAK")));
+        // Only the enemies: the encounter they make up.
+        let enemies = link(fight("CombatRoom", None, &["MONSTER.TOADPOLE", "MONSTER.TOADPOLE"]));
+        assert!(
+            current_room(&enemies, &cat)
+                .0
+                .is_some_and(|e| cat.encounters[&e].monsters.iter().all(|m| m.0 == "TOADPOLE"))
+        );
+        // An event.
+        let event = link(Room { kind: "EventRoom".into(), event: Some("EVENT.TEA_MASTER".into()), ..Room::default() });
+        assert_eq!(current_room(&event, &cat), (None, Some(spire_core::ids::EventId::new("TEA_MASTER"))));
+        // The map, or no run: nothing.
+        assert_eq!(current_room(&link(Room { kind: "MapRoom".into(), ..Room::default() }), &cat), (None, None));
+        let over = Link { in_progress: false, ..named };
+        assert_eq!(current_room(&over, &cat), (None, None));
     }
 }

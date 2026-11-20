@@ -218,6 +218,10 @@ pub fn root(
                     culled(&mut cols[0], ("act", g, v.combat.map(|c| c.generation)), |ui| act::show(ui, v, out));
                     cols[0].add_space(GAP);
                     culled(&mut cols[0], ("breakdown", g, v.combat.map(|c| c.generation)), |ui| breakdown::show(ui, v));
+                    if let Some(e) = v.current_event {
+                        lookout::current_event(&mut cols[1], v, e, out);
+                        cols[1].add_space(GAP);
+                    }
                     if let Some(t) = v.current_fight {
                         threats::current(&mut cols[1], v, t, out);
                         cols[1].add_space(GAP);
@@ -234,6 +238,10 @@ pub fn root(
                 ui.add_space(GAP);
                 breakdown::show(ui, v);
                 ui.add_space(GAP);
+                if let Some(e) = v.current_event {
+                    lookout::current_event(ui, v, e, out);
+                    ui.add_space(GAP);
+                }
                 if let Some(t) = v.current_fight {
                     threats::current(ui, v, t, out);
                     ui.add_space(GAP);

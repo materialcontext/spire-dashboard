@@ -119,6 +119,10 @@ the game's own save after each floor.
 While following:
 
 - **Logging:** floors log themselves, and the floor log is locked.
+- **The room you're in:** the fight you're in shows above Next fight (boss
+  fights keep the act panel), and so does an event, with its options and
+  any that give a relic your deck needs. This needs mod 0.2.0 or later:
+  the game's save only records a room once it's done.
 - **When the run ends:** it's filed in History, and History opens on it.
 - **If you're already logging a different run by hand:** the dashboard asks
   before switching.

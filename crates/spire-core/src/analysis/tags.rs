@@ -11,7 +11,8 @@
 //! 2. from what the mechanics reader understands in its text (powers and
 //!    "next turn" effects only say it in prose);
 //! 3. from the playbook's `tag_rules`, for effects that only map to a tag
-//!    by judgement (channelling Lightning deals damage; Forge is damage).
+//!    by judgement (channelling Lightning deals damage; Forge grows Sovereign Blade, so it's
+//!    scaling damage).
 //!
 //! Hand-set tags replace the reading: the playbook's `card_tags`, and over
 //! those the player's own (`personal_tags`).

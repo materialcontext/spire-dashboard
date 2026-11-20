@@ -23,7 +23,7 @@ use serde::Deserialize;
 
 use crate::game_run::ActHint;
 
-/// The link file's contents (schema 1).
+/// The link file's contents (schema 2; schema 1 lacks `room`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct Link {
@@ -38,6 +38,26 @@ pub struct Link {
     pub act: Option<String>,
     pub boss: Option<String>,
     pub second_boss: Option<String>,
+    /// The room being played (mod 0.2.0 and later).
+    pub room: Option<Room>,
+}
+
+/// The room the player is in, as the mod reads it from the game. The run
+/// save only records a room once it's finished.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct Room {
+    /// The game's room class: `CombatRoom`, `EventRoom`, `MapRoom`…
+    pub kind: String,
+    /// Monster, Elite, Boss… for a fight.
+    #[serde(rename = "type")]
+    pub room_type: Option<String>,
+    /// `ENCOUNTER.X`, when the mod found it.
+    pub encounter: Option<String>,
+    /// `EVENT.X`, in an event.
+    pub event: Option<String>,
+    /// The enemies' monster ids (`MONSTER.X`), in a fight.
+    pub monsters: Option<Vec<String>>,
 }
 
 impl Link {

@@ -6,8 +6,9 @@ using MegaCrit.Sts2.Core.Modding;
 namespace SpireDashboardLink;
 
 /// <summary>
-/// Tells Spire Dashboard where the run in progress is saved and what the
-/// current act's boss is, by keeping a small JSON "link" file up to date.
+/// Tells Spire Dashboard where the run in progress is saved, what the
+/// current act's boss is and which room the player is in, by keeping a small
+/// JSON "link" file up to date.
 ///
 /// Read-only: it patches nothing and calls nothing that changes the game. It
 /// looks at the game's state about twice a second, on the main thread, and
@@ -23,7 +24,7 @@ namespace SpireDashboardLink;
 [ModInitializer(nameof(Initialize))]
 public static class Link
 {
-    public const string Version = "0.1.0";
+    public const string Version = "0.2.0";
 
     /// <summary>Frames between looks at the game (about half a second).</summary>
     private const int Every = 30;
@@ -104,4 +105,11 @@ public sealed record LinkFile(
     int? ActIndex,
     string? Act,
     string? Boss,
-    string? SecondBoss);
+    string? SecondBoss,
+    RoomLink? Room);
+
+/// <summary>
+/// The room being played. <c>Encounter</c> or <c>Monsters</c> name a fight,
+/// <c>Event</c> an event; any of them can be missing.
+/// </summary>
+public sealed record RoomLink(string Kind, string? Type, string? Encounter, string? Event, string[]? Monsters);
