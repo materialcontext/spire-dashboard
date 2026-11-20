@@ -19,7 +19,7 @@
       }
     },
     {
-      "tag": "damage",
+      "tag": "scaling_damage",
       "when": {
         "text_contains": "forge"
       }
