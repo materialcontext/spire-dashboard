@@ -5,6 +5,7 @@
 
 use eframe::egui::{self, RichText, Ui, vec2};
 use egui_plot::{Bar, BarChart, FilledArea, HoverPosition, Line, LineStyle, MarkerShape, Plot, Points, VLine};
+use spire_core::analysis::report::{Turning, TurningKind};
 use spire_core::analysis::sim::DeckSim;
 use spire_core::analysis::timeline::Timeline;
 use spire_core::catalog::{CardType, Catalog};
@@ -25,7 +26,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, a: &Analytics, st: &mut UiState) {
     }
     let wide = ui.available_width() > 900.0;
     let run = |ui: &mut Ui| {
-        run_section(ui, "live", v.catalog, v.playbook, &a.timeline, Some(v.state.act_index));
+        run_section(ui, "live", v.catalog, v.playbook, &a.timeline, Some(v.state.act_index), &[]);
     };
     let deck = |ui: &mut Ui, st: &mut UiState| deck_section(ui, "live", &a.sim, &mut st.show_all_odds);
     if wide {
@@ -43,15 +44,24 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, a: &Analytics, st: &mut UiState) {
 // ---------------------------------------------------------------- run
 
 /// Vitals, fights, role growth, dead cards and elites for one run.
-/// `act` picks which act's role targets to compare against.
-pub fn run_section(ui: &mut Ui, salt: &str, catalog: &Catalog, playbook: &Playbook, t: &Timeline, act: Option<u8>) {
+/// `act` picks which act's role targets to compare against; `marks` are
+/// turning points to mark on the HP chart.
+pub fn run_section(
+    ui: &mut Ui,
+    salt: &str,
+    catalog: &Catalog,
+    playbook: &Playbook,
+    t: &Timeline,
+    act: Option<u8>,
+    marks: &[Turning],
+) {
     if t.points.is_empty() {
         panel(ui, "This run", None, |ui| {
             ui.label(RichText::new("Log a floor to start the charts.").color(text_dim()));
         });
         return;
     }
-    panel(ui, "HP by floor", None, |ui| vitals(ui, salt, t));
+    panel(ui, "HP by floor", None, |ui| vitals(ui, salt, catalog, t, marks));
     ui.add_space(GAP);
     panel(ui, "Gold by floor", None, |ui| gold(ui, salt, t));
     ui.add_space(GAP);
@@ -98,23 +108,96 @@ fn floor_label(name: &str, unit: &str) -> impl Fn(&HoverPosition<'_>) -> Option<
     }
 }
 
-fn vitals(ui: &mut Ui, salt: &str, t: &Timeline) {
+fn vitals(ui: &mut Ui, salt: &str, catalog: &Catalog, t: &Timeline, marks: &[Turning]) {
     let hp: Vec<[f64; 2]> = t.points.iter().map(|p| [p.floor as f64, p.hp as f64]).collect();
     let max: Vec<[f64; 2]> = t.points.iter().map(|p| [p.floor as f64, p.max_hp as f64]).collect();
-    keys(
-        ui,
-        &[
-            Key { color: style::hp_color(1.0), name: "HP", dashed: false },
-            Key { color: text_dim(), name: "Max HP", dashed: true },
-        ],
-    );
-    plot(format!("{salt}-hp"), 160.0).include_y(0.0).label_formatter(floor_label("HP", "")).show(ui, |p| {
+    let marks: Vec<Mark> = marks.iter().filter_map(|m| mark(catalog, t, m)).collect();
+    let mut legend = vec![
+        Key { color: style::hp_color(1.0), name: "HP", dashed: false },
+        Key { color: text_dim(), name: "Max HP", dashed: true },
+    ];
+    for (shape, name) in [(MarkShape::Loss, "Big loss"), (MarkShape::Elite, "Elite"), (MarkShape::Rest, "Rest site")] {
+        if marks.iter().any(|m| m.shape == shape) {
+            legend.push(Key { color: shape.color(), name, dashed: false });
+        }
+    }
+    keys(ui, &legend);
+    // Marker names carry their own description; the lines read as "HP: 41".
+    let label = |pos: &HoverPosition<'_>| match pos {
+        HoverPosition::NearDataPoint { plot_name, .. } if plot_name.starts_with("Floor") => Some(plot_name.to_string()),
+        other => floor_label("HP", "")(other),
+    };
+    plot(format!("{salt}-hp"), 160.0).include_y(0.0).label_formatter(label).show(ui, |p| {
         for l in act_lines(t) {
             p.vline(l);
         }
         p.line(Line::new("Max HP", max).color(text_dim()).style(LineStyle::dashed_loose()).width(1.5));
         p.line(Line::new("HP", hp).color(style::hp_color(1.0)).width(2.0));
+        for m in marks {
+            let shape = m.shape;
+            p.points(
+                Points::new(m.text, vec![m.at]).shape(shape.marker()).color(shape.color()).radius(4.5).filled(true),
+            );
+        }
     });
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MarkShape {
+    Loss,
+    Elite,
+    Rest,
+}
+
+impl MarkShape {
+    fn color(self) -> egui::Color32 {
+        match self {
+            MarkShape::Loss => bad(),
+            MarkShape::Elite => warn(),
+            MarkShape::Rest => text(),
+        }
+    }
+    fn marker(self) -> MarkerShape {
+        match self {
+            MarkShape::Loss => MarkerShape::Down,
+            MarkShape::Elite => MarkerShape::Diamond,
+            MarkShape::Rest => MarkerShape::Circle,
+        }
+    }
+}
+
+/// A turning point on the HP chart, at the HP after its floor.
+struct Mark {
+    at: [f64; 2],
+    shape: MarkShape,
+    text: String,
+}
+
+fn mark(catalog: &Catalog, t: &Timeline, m: &Turning) -> Option<Mark> {
+    let p = t.points.iter().find(|p| p.floor == m.floor)?;
+    let floor = m.floor;
+    let (shape, text) = match &m.what {
+        TurningKind::BigLoss { encounter, lost, typical } => (
+            MarkShape::Loss,
+            format!(
+                "Floor {floor} · {}\nLost {lost} HP, players about {typical:.0}",
+                catalog.encounter_name(encounter)
+            ),
+        ),
+        TurningKind::Elite { encounter, lost } => {
+            let name = encounter.as_ref().map_or("Elite".into(), |e| catalog.encounter_name(e));
+            (MarkShape::Elite, format!("Floor {floor} · {name}\nLost {lost} HP"))
+        }
+        TurningKind::Rest { choice, hp, max_hp } => {
+            let word = match choice.as_str() {
+                "HEAL" => "Rested",
+                "SMITH" => "Smithed",
+                _ => "Rest site",
+            };
+            (MarkShape::Rest, format!("Floor {floor} · {word}\nat {hp}/{max_hp} HP"))
+        }
+    };
+    Some(Mark { at: [p.floor as f64, p.hp as f64], shape, text })
 }
 
 fn gold(ui: &mut Ui, salt: &str, t: &Timeline) {
@@ -275,7 +358,7 @@ fn per_turn(ui: &mut Ui, salt: &str, sim: &DeckSim) {
     let (blk, blk_lo, blk_hi) = series(|t| t.block);
     let first = sim.turns[0];
     let last = sim.turns[sim.turns.len() - 1];
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         stat(ui, "Damage, turn 1", format!("{:.0}", first.damage.mean), text());
         ui.add_space(crate::style::space::l());
         stat(ui, &format!("Damage, turn {}", sim.turns.len()), format!("{:.0}", last.damage.mean), text());

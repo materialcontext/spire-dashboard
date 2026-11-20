@@ -25,7 +25,9 @@ use spire_core::Catalog;
 
 use crate::run_file::{WCard, WPlayer, WPoint, WRun, WStats, entry, lenient, node_kind};
 use spire_core::ids::*;
-use spire_core::run::{Change, DeckCard, NodeKind, NodeReport, Outcome, RunEvent, RunState, apply};
+use spire_core::run::{
+    Change, Choice, DeckCard, FloorRecord, NodeKind, NodeReport, Outcome, RunEvent, RunState, apply,
+};
 
 fn none_id(id: &Option<String>) -> Option<&str> {
     id.as_deref().map(entry).filter(|e| !e.is_empty() && *e != "NONE")
@@ -76,6 +78,34 @@ pub struct GameRun {
     pub ended: bool,
     /// Ids the catalog doesn't know (kept in the log as they are).
     pub unknown: Vec<String>,
+}
+
+/// A floor's decisions from its stats: what was offered (card rewards or a
+/// shop's shelf, relic and potion choices) and taken, the rest site's
+/// choice, potions used and discarded, and gold spent.
+fn record(s: &WStats) -> FloorRecord {
+    let choices = |list: &[crate::run_file::WChoice]| -> Vec<(String, bool)> {
+        list.iter().map(|c| (entry(&c.choice).to_string(), c.was_picked)).collect()
+    };
+    FloorRecord {
+        cards: s
+            .card_choices
+            .iter()
+            .map(|c| Choice { id: CardId::new(entry(&c.card.id)), taken: c.was_picked })
+            .collect(),
+        relics: choices(&s.relic_choices)
+            .into_iter()
+            .map(|(id, taken)| Choice { id: RelicId::new(id), taken })
+            .collect(),
+        potions: choices(&s.potion_choices)
+            .into_iter()
+            .map(|(id, taken)| Choice { id: PotionId::new(id), taken })
+            .collect(),
+        rest: s.rest_site_choices.clone(),
+        potions_used: s.potion_used.iter().map(|p| PotionId::new(entry(p))).collect(),
+        potions_discarded: s.potion_discarded.iter().map(|p| PotionId::new(entry(p))).collect(),
+        gold_spent: s.gold_spent.unwrap_or(0).max(0),
+    }
 }
 
 /// Why a run save couldn't be read.
@@ -211,6 +241,7 @@ pub fn read(json: &str, catalog: &Catalog, hint: &ActHint) -> Result<GameRun, Un
                 encounter,
                 event,
                 changes,
+                record: stats.map(record).filter(|r| !r.is_empty()).map(Box::new),
             };
             push(&mut events, &mut state, RunEvent::Node(report));
             floors += 1;
@@ -380,6 +411,32 @@ mod tests {
         let d = deck_card(&c);
         assert_eq!((d.card.as_str(), d.upgraded), ("BASH", true));
         assert_eq!(d.enchantment.as_ref().map(|e| e.as_str()), Some("SHARP"));
+    }
+
+    #[test]
+    fn floors_record_what_was_offered_and_chosen() {
+        let cat = catalog();
+        let run = read(include_str!("../tests/fixtures/finished.run"), &cat, &ActHint::default()).expect("reads");
+        let records: Vec<(NodeKind, &FloorRecord)> = run
+            .events
+            .iter()
+            .filter_map(|e| if let RunEvent::Node(n) = e { Some((n.kind, n.record.as_deref()?)) } else { None })
+            .collect();
+        // Rest sites keep their choice (the first act: Smith, Heal, Smith).
+        let rests: Vec<&str> = records
+            .iter()
+            .filter(|(k, _)| *k == NodeKind::Rest)
+            .flat_map(|(_, r)| &r.rest)
+            .map(String::as_str)
+            .collect();
+        assert_eq!(rests[..3], ["SMITH", "HEAL", "SMITH"]);
+        // The first shop: its shelf of cards and relics, and 146 gold spent.
+        let (_, shop) = records.iter().find(|(k, _)| *k == NodeKind::Shop).expect("a shop");
+        assert_eq!(shop.cards.len(), 5);
+        assert_eq!(shop.relics.len(), 3);
+        assert_eq!(shop.gold_spent, 146);
+        // Card rewards after fights: what was offered, one taken at most.
+        assert!(records.iter().any(|(k, r)| *k == NodeKind::Monster && r.cards.len() >= 3));
     }
 
     #[test]

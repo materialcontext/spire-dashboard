@@ -552,6 +552,12 @@ pub fn card_type_color(t: CardType) -> Color32 {
     })
 }
 
+/// Stars (the Regent's resource): a pale star-white, apart from Scaling
+/// Damage's gold.
+pub fn star_color() -> Color32 {
+    adapt(rgb(238, 228, 160))
+}
+
 /// Gold's own colour (the in-game coin), for gold amounts.
 pub fn gold() -> Color32 {
     adapt(rgb(232, 186, 72))

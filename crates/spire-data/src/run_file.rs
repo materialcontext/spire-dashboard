@@ -292,6 +292,10 @@ pub(crate) struct WStats {
     pub(crate) potion_used: Vec<String>,
     #[serde(deserialize_with = "lenient::ids")]
     pub(crate) potion_discarded: Vec<String>,
+    /// What the player did at a rest site: HEAL, SMITH, LIFT…
+    #[serde(deserialize_with = "lenient::ids")]
+    pub(crate) rest_site_choices: Vec<String>,
+    pub(crate) gold_spent: Option<i32>,
 }
 
 /// `CARD.SNAP` → `SNAP`.

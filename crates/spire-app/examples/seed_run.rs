@@ -1,7 +1,8 @@
 //! Writes a sample run into a data folder, for screenshots and manual
 //! testing: `seed_run <data-dir> <mid|late|fool|boss|history>`. `boss` is
 //! the mid run logged on to its act's boss floor. `history` files
-//! three finished runs in the run history and leaves the current run alone.
+//! three finished runs in the run history and leaves the current run alone;
+//! `game <file.run>` files a game's run file in the history.
 
 use spire_core::catalog::{Catalog, RoomType};
 use spire_core::ids::*;
@@ -18,7 +19,7 @@ fn boss_floor_run(cat: &Catalog) -> Run {
             break;
         }
         let kind = expected_room(&run.state(), cat).unwrap_or(NodeKind::Unknown);
-        run.push(RunEvent::Node(NodeReport { kind, encounter: None, event: None, changes: vec![] }));
+        run.push(RunEvent::Node(NodeReport { kind, encounter: None, event: None, changes: vec![], record: None }));
     }
     run
 }
@@ -64,6 +65,7 @@ fn fool_run(cat: &Catalog) -> Run {
                 encounter: Some(e),
                 event: None,
                 changes: vec![],
+                record: None,
             }));
         }
         if index < 2 {
@@ -72,6 +74,7 @@ fn fool_run(cat: &Catalog) -> Run {
                 encounter: bosses.first().cloned(),
                 event: None,
                 changes: vec![],
+                record: None,
             }));
         } else {
             run.push(RunEvent::SetSecondBoss(bosses[1].clone()));
@@ -85,6 +88,14 @@ fn main() {
     let (dir, kind) = (args.get(1).expect("data dir"), args.get(2).map_or("late", String::as_str));
     let store = Store::at(dir);
     let cat = store.load().catalog;
+    if kind == "game" {
+        let path = args.get(3).expect("a game run file");
+        let json = std::fs::read_to_string(path).expect("read the run file");
+        let g = spire_data::game_run::read(&json, &cat, &Default::default()).expect("a game run");
+        store.archive_run(&Run { events: g.events, ..Default::default() }).expect("archive run");
+        println!("filed {path} in {dir}");
+        return;
+    }
     if kind == "history" {
         for run in spire_app::bench::archived_runs(&cat) {
             store.archive_run(&run).expect("archive run");

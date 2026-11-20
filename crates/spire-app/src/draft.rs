@@ -3,7 +3,7 @@
 use spire_core::Catalog;
 use spire_core::analysis::floors::expected_room;
 use spire_core::ids::*;
-use spire_core::run::{Change, NodeKind, NodeReport, RunEvent, RunState};
+use spire_core::run::{Change, FloorRecord, NodeKind, NodeReport, RunEvent, RunState};
 
 #[derive(Clone, Debug)]
 pub struct NodeDraft {
@@ -20,6 +20,8 @@ pub struct NodeDraft {
     pub add_upgraded: bool,
     /// The room this floor always has, when the act layout fixes it.
     pub expected: Option<NodeKind>,
+    /// At a rest site: what the player did (HEAL, SMITH, OTHER), when chosen.
+    pub rest: Option<&'static str>,
 }
 
 impl NodeDraft {
@@ -37,6 +39,7 @@ impl NodeDraft {
             relic_query: String::new(),
             potion_query: String::new(),
             add_upgraded: false,
+            rest: None,
             expected: None,
         }
     }
@@ -93,7 +96,25 @@ impl NodeDraft {
             encounter: self.encounter.clone().filter(|_| fight),
             event: self.event.clone().filter(|_| matches!(self.kind, NodeKind::Unknown | NodeKind::Ancient)),
             changes: self.all_changes(s),
+            record: Some(self.record(s)).filter(|r| !r.is_empty()).map(Box::new),
         })
+    }
+
+    /// What the floor log knows of the floor's decisions: the rest site's
+    /// choice (as picked, else read from the floor: an upgrade is Smith,
+    /// HP gained is Heal) and the gold spent at a shop.
+    fn record(&self, s: &RunState) -> FloorRecord {
+        let changes = self.all_changes(s);
+        let rest = match (self.kind, self.rest) {
+            (NodeKind::Rest, Some(choice)) => vec![choice.to_string()],
+            (NodeKind::Rest, None) if changes.iter().any(|c| matches!(c, Change::UpgradeCard(_))) => {
+                vec!["SMITH".into()]
+            }
+            (NodeKind::Rest, None) if self.hp > s.hp => vec!["HEAL".into()],
+            _ => Vec::new(),
+        };
+        let gold_spent = if self.kind == NodeKind::Shop { (s.gold - self.gold).max(0) } else { 0 };
+        FloorRecord { rest, gold_spent, ..FloorRecord::default() }
     }
 
     pub fn to_adjustment(&self, s: &RunState) -> RunEvent {
@@ -108,6 +129,31 @@ mod tests {
 
     fn state() -> RunState {
         RunState { hp: 50, max_hp: 80, gold: 100, ..RunState::default() }
+    }
+
+    #[test]
+    fn rest_sites_and_shops_record_their_decisions() {
+        let s = state();
+        let record = |d: &NodeDraft| match d.to_node(&s) {
+            RunEvent::Node(n) => n.record.map(|r| *r).unwrap_or_default(),
+            _ => unreachable!(),
+        };
+        // A rest site with an upgrade and no choice picked: Smith.
+        let mut d = NodeDraft::from_state(&s);
+        d.kind = NodeKind::Rest;
+        d.changes.push(Change::UpgradeCard(DeckCard::new("BASH".into())));
+        assert_eq!(record(&d).rest, vec!["SMITH"]);
+        // Picked: as picked.
+        d.rest = Some("OTHER");
+        assert_eq!(record(&d).rest, vec!["OTHER"]);
+        // A shop: the gold spent.
+        let mut d = NodeDraft::from_state(&s);
+        d.kind = NodeKind::Shop;
+        d.gold = 40;
+        assert_eq!(record(&d).gold_spent, 60);
+        // A fight records nothing extra.
+        let d = NodeDraft::from_state(&s);
+        assert!(matches!(d.to_node(&s), RunEvent::Node(n) if n.record.is_none()));
     }
 
     #[test]

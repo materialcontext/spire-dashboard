@@ -108,8 +108,13 @@ pub fn threat_profile(enc: &Encounter, catalog: &Catalog, playbook: &Playbook, s
         t.group = playbook.sounds_like_group(&enc.name);
         t
     } else {
-        let profiles: Vec<ThreatProfile> =
-            enc.lineups.iter().map(|l| lineup_profile(&resolve(&l.monsters), scaling, vulnerable, turns)).collect();
+        let profiles: Vec<ThreatProfile> = enc
+            .lineups
+            .iter()
+            .map(|l| {
+                lineup_profile(&resolve(&without_replacements(enc, &l.monsters, catalog)), scaling, vulnerable, turns)
+            })
+            .collect();
         profiles.iter().fold(ThreatProfile { hp_min: u32::MAX, ..Default::default() }, |acc, p| ThreatProfile {
             enemies: acc.enemies.max(p.enemies),
             group: false,
@@ -127,6 +132,31 @@ pub fn threat_profile(enc: &Encounter, catalog: &Catalog, playbook: &Playbook, s
     };
     t.summons |= !enc.spawns.is_empty();
     t
+}
+
+/// A lineup as it stands on the field: a monster that replaces itself when
+/// killed ("a new Axebot is summoned in its place") has its replacements
+/// recorded in the fight's monsters too, but they come one at a time, so
+/// its copies count as in the lineup where it has the fewest.
+fn without_replacements(
+    enc: &Encounter,
+    monsters: &[crate::ids::MonsterId],
+    catalog: &Catalog,
+) -> Vec<crate::ids::MonsterId> {
+    let replaces_itself = |id: &crate::ids::MonsterId| {
+        catalog.monsters.get(id).is_some_and(|m| m.death_summons.is_some()) && enc.spawns.iter().all(|s| s == id)
+    };
+    let fewest = |id: &crate::ids::MonsterId| {
+        enc.lineups.iter().map(|l| l.monsters.iter().filter(|m| *m == id).count()).filter(|n| *n > 0).min().unwrap_or(1)
+    };
+    let mut out: Vec<crate::ids::MonsterId> = Vec::new();
+    for id in monsters {
+        let kept = out.iter().filter(|m| *m == id).count();
+        if !replaces_itself(id) || kept < fewest(id) {
+            out.push(id.clone());
+        }
+    }
+    out
 }
 
 /// One monster type in a lineup and what it does each turn.

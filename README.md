@@ -89,8 +89,14 @@ the card you took, HP and gold after. Then it re-analyses the run.
   your run and whether the simulator uses it. Each relic shows what the
   simulator reads from it and what it leaves out.
 - **History**: every run you end or abandon here, filtered by character and
-  outcome, with the same charts, plus a floor-by-floor replay of the deck and
-  relics. **Edit run…** fixes a filed run: its ascension, result, notes, each
+  outcome. Each run opens on **How it ended** (the likely causes of a death,
+  ranked, and the deciding fight with the deck's outlook there) and a row per
+  act (HP in and out, damage against other players', deck changes, gaps, the
+  boss). Below are the same charts, with big losses, elites and rest sites
+  marked on HP, a floor-by-floor replay, and the **Decisions** log: what each
+  floor offered and what you took, rest-site choices, gold spent and potions
+  used (click a floor to replay it). Monitored runs record every offer;
+  logged runs record what you took, your rest-site choice and shop spending. **Edit run…** fixes a filed run: its ascension, result, notes, each
   floor's fight, or a floor logged by mistake; or deletes it.
 
 ## Monitored runs (follow the game)
@@ -266,6 +272,9 @@ Everything the dashboard *believes* lives in `data/playbook.json`, not in code:
 - what card-reward suggestions show (`picks`): how many, how much of a line
   may be missing, how often its missing card must be offered, and how much
   better a line or filler must do
+- what the run report counts as a likely cause (`report`): how many causes,
+  low HP, an act's damage against players', a big loss, smithing on low HP
+  and gold left unspent
 - what the deck simulator assumes where the game data is silent (`simulation`):
   cards drawn per turn, hand limit, turns and fights simulated, and hits that
   bring back a shot Arrow

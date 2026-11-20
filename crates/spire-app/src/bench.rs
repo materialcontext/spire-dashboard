@@ -173,6 +173,7 @@ impl Scenario {
                         encounter: None,
                         event: None,
                         changes: vec![Change::SetGold(500)],
+                        record: None,
                     }))
                 } else {
                     Action::Undo
@@ -238,7 +239,7 @@ fn character_cards<'a>(cat: &'a Catalog, color: &'a str) -> impl Iterator<Item =
 }
 
 fn node(kind: NodeKind, encounter: Option<&EncounterId>, changes: Vec<Change>) -> RunEvent {
-    RunEvent::Node(NodeReport { kind, encounter: encounter.cloned(), event: None, changes })
+    RunEvent::Node(NodeReport { kind, encounter: encounter.cloned(), event: None, changes, record: None })
 }
 
 /// Ironclad, act 1 (Overgrowth), four nodes in, 12 cards.

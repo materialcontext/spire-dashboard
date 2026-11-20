@@ -76,3 +76,19 @@ fn star_cards_wait_without_stars_to_spend() {
     let (_, w) = stores_and_warnings(&starter);
     assert!(!w.iter().any(|(st, _)| *st == Store::Stars), "{w:?}");
 }
+
+#[test]
+fn the_regents_star_makers_are_counted_for_the_deck_panel() {
+    use spire_core::analysis::deck::deck_profile;
+    let cat = spire_data::bundled_catalog();
+    let pb = spire_data::bundled_playbook();
+    let starter = |character: &str| {
+        let start = RunEvent::start(&cat, &CharacterId::new(character), 0).expect("character starts");
+        apply(RunState::default(), &start)
+    };
+    // The Regent starts with a card that makes Stars; the Ironclad has none.
+    let regent = starter("REGENT");
+    assert!(deck_profile(&regent.deck, &cat, &pb).star_makers > 0);
+    let ironclad = starter("IRONCLAD");
+    assert_eq!(deck_profile(&ironclad.deck, &cat, &pb).star_makers, 0);
+}

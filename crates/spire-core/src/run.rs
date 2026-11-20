@@ -68,6 +68,51 @@ pub struct NodeReport {
     pub event: Option<EventId>,
     #[serde(default)]
     pub changes: Vec<Change>,
+    /// What the floor offered and what was chosen, beyond its changes (not
+    /// in runs saved before it was recorded).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub record: Option<Box<FloorRecord>>,
+}
+
+/// An offer and whether it was taken.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Choice<T> {
+    pub id: T,
+    pub taken: bool,
+}
+
+/// A floor's decisions: what was on offer (card rewards or a shop's shelf,
+/// relic and potion choices), the rest site's choice, potions used, gold
+/// spent. Monitored runs fill it from the game's run files; the floor log
+/// fills the rest choice and gold spent.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FloorRecord {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub cards: Vec<Choice<CardId>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub relics: Vec<Choice<RelicId>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub potions: Vec<Choice<PotionId>>,
+    /// Rest-site choices as the game names them: HEAL, SMITH, LIFT…
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub rest: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub potions_used: Vec<PotionId>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub potions_discarded: Vec<PotionId>,
+    #[serde(skip_serializing_if = "is_zero")]
+    pub gold_spent: i32,
+}
+
+fn is_zero(n: &i32) -> bool {
+    *n == 0
+}
+
+impl FloorRecord {
+    pub fn is_empty(&self) -> bool {
+        *self == FloorRecord::default()
+    }
 }
 
 /// How a run ended.

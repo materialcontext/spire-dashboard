@@ -89,3 +89,22 @@ fn the_curated_fixes_fill_the_gaps() {
     // Entomancer grows by 1 Strength per Pheromone Spit (wiki), not 3.
     assert_eq!(e.turns[3].expected, 28.0);
 }
+
+#[test]
+fn axebots_replace_each_other_so_they_need_no_area_damage() {
+    use spire_core::analysis::threats::{demands, threat_profile};
+    use spire_core::catalog::RoomType;
+    use spire_core::playbook::Role;
+    let cat = spire_data::bundled_catalog();
+    let pb = spire_data::bundled_playbook();
+    let wants_aoe = |id: &str| {
+        let enc = cat.encounters.get(&EncounterId::new(id)).unwrap_or_else(|| panic!("{id} in the bundle"));
+        let t = threat_profile(enc, &cat, &pb, Scaling::default());
+        demands(&t, RoomType::Monster, None).iter().any(|d| d.role == Role::Aoe)
+    };
+    // Stock: "When killed, a new Axebot is summoned in its place". Runs
+    // record the replacement in the fight's monsters, but it comes alone.
+    assert!(!wants_aoe("AXEBOTS_NORMAL"));
+    // Monsters that do stand together still ask for it.
+    assert!(wants_aoe("TOADPOLES_WEAK"));
+}
