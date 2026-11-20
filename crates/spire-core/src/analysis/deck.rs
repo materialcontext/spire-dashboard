@@ -110,6 +110,8 @@ pub struct DeckProfile {
     pub dead: u32,
     /// Cards carrying each tag, starter Strikes and Defends included.
     pub by_tag: BTreeMap<Tag, u32>,
+    /// Cards that gain Stars (the Regent's resource).
+    pub star_makers: u32,
 }
 
 impl DeckProfile {
@@ -158,8 +160,14 @@ pub fn profile(cards: &[ClassifiedCard<'_>]) -> DeckProfile {
         p.eternal += u32::from(eternal);
         p.removable_curses += u32::from(c.card_type() == CardType::Curse && !eternal);
         p.dead += u32::from(c.card.is_some_and(|k| k.is_dead_draw()) || c.unmet.is_some());
+        p.star_makers += u32::from(c.unmet.is_none() && c.card.is_some_and(|k| makes_stars(k, c.deck.upgraded)));
         p
     })
+}
+
+/// Whether a card gains Stars: it has a Star amount and its text says so.
+pub fn makes_stars(card: &Card, upgraded: bool) -> bool {
+    card.value("stars", upgraded) > 0 && crate::playbook::contains_ci(card.text_at(upgraded), "star")
 }
 
 pub fn deck_profile(deck: &[DeckCard], catalog: &Catalog, playbook: &Playbook) -> DeckProfile {

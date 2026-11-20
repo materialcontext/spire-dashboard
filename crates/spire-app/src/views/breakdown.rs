@@ -75,6 +75,10 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
         // Draw and energy aren't roles: they help every role on bad draws.
         bar(ui, "Draw", d.tag(Tag::Draw), 0, max_role, None, style::tag_color_of(Tag::Draw));
         bar(ui, "Energy gain", d.tag(Tag::Energy), 0, max_role, None, style::tag_color_of(Tag::Energy));
+        // Stars only matter to decks that make them (the Regent's).
+        if d.star_makers > 0 {
+            bar(ui, "Star gain", d.star_makers, 0, max_role, None, style::star_color());
+        }
         let counts: Vec<String> = [(d.upgraded, "upgraded"), (d.no_role, "with no role"), (d.unknown, "unknown")]
             .into_iter()
             .filter(|(n, _)| *n > 0)

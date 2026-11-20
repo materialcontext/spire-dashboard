@@ -37,7 +37,7 @@ fn makes(store: Store, c: &Card, up: bool) -> bool {
         Store::Vigor => any(&["vigor", "vigorpower"]),
         Store::Stretch => any(&["stretch", "stretchpower"]),
         Store::Arrows => contains_ci(&c.text, "dislodge") || contains_ci(&c.text, "additional arrow"),
-        Store::Stars => c.value("stars", up) > 0 && contains_ci(c.text_at(up), "star"),
+        Store::Stars => crate::analysis::deck::makes_stars(c, up),
     }
 }
 
