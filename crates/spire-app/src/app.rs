@@ -353,7 +353,13 @@ impl SpireApp {
 
     fn poll_update(&mut self) {
         let Some(rx) = &self.update_rx else { return };
-        let Ok(result) = rx.try_recv() else { return };
+        let result = match rx.try_recv() {
+            Ok(r) => r,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return,
+            // The update thread died without answering (a panic): don't
+            // leave the app waiting for it.
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => Err("the update stopped unexpectedly.".into()),
+        };
         self.update_rx = None;
         self.ui.updating = false;
         match result.and_then(|fetched| {
@@ -1160,5 +1166,23 @@ mod follow_tests {
         assert_eq!(app.ui.tab, crate::views::Tab::Run);
         assert!(!app.state.started());
         assert_eq!(app.store.archived_runs().len(), 2);
+    }
+}
+
+#[cfg(test)]
+mod update_tests {
+    use super::*;
+
+    #[test]
+    fn an_update_thread_that_dies_ends_the_update() {
+        let dir = std::env::temp_dir().join(format!("spire-update-{}", std::process::id()));
+        let mut app = SpireApp::from_store(Store::at(&dir));
+        let (tx, rx) = channel();
+        app.update_rx = Some(rx);
+        app.ui.updating = true;
+        drop(tx);
+        app.poll_update();
+        assert!(!app.ui.updating && app.update_rx.is_none(), "another update can start");
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

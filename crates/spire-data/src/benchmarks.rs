@@ -10,11 +10,9 @@
 //!
 //! Each run in the Spire Codex export is read the way monitored runs are
 //! ([`crate::game_run::read`]): its floors replay onto the character's
-//! starting deck, card by card. The deck is taken just before the run
-//! enters the next act, so it is the deck that beat that act's boss; a won
-//! run's last act counts too. For the lines, the deck is taken going into
-//! each boss fight, with whether the run got past it. Single-player runs
-//! without modifiers only, as for the encounter statistics.
+//! starting deck, card by card, and the deck is taken going into each boss
+//! fight, with whether the run got past it. Single-player runs without
+//! modifiers only, as for the encounter statistics.
 //!
 //! Pure: JSONL text and a catalog in, samples out.
 
@@ -50,12 +48,11 @@ pub struct BossDeck {
     pub won: bool,
 }
 
-/// One run's decks: at the end of each act it cleared, and going into each
-/// boss fight.
+/// One run's decks going into each boss fight: as samples for the
+/// benchmarks and risks, and as reward cards for the lines.
 #[derive(Default)]
 pub struct RunDecks {
     pub meta: RunMeta,
-    pub cleared: Vec<Sample>,
     pub bosses: Vec<BossFight>,
     pub boss_decks: Vec<BossDeck>,
 }
@@ -84,7 +81,6 @@ pub fn run_decks(line: &str, catalog: &Catalog) -> RunDecks {
     if run.players.len() != 1 || modded {
         return out;
     }
-    let won = run.win == Some(true);
     out.meta = RunMeta {
         hash: run.run_hash.clone(),
         player: run.player_token.clone(),
@@ -97,19 +93,6 @@ pub fn run_decks(line: &str, catalog: &Catalog) -> RunDecks {
     let last_node = read.events.iter().rposition(|e| matches!(e, RunEvent::Node(_)));
     let mut state = RunState::default();
     for (i, e) in read.events.iter().enumerate() {
-        // Entering a later act: the act before it was cleared.
-        if let RunEvent::EnterAct { index, .. } = e
-            && *index > 0
-            && state.act.is_some()
-            && let Some(character) = &state.character
-        {
-            out.cleared.push(Sample {
-                character: character.clone(),
-                act: state.act_index,
-                state: state.clone(),
-                weight: 1.0,
-            });
-        }
         // Going into a boss fight: lost only when the run died there, on
         // its last floor; a run abandoned there says nothing.
         if let RunEvent::Node(n) = e
@@ -139,42 +122,12 @@ pub fn run_decks(line: &str, catalog: &Catalog) -> RunDecks {
         }
         state = apply(state, e);
     }
-    if won
-        && state.act.is_some()
-        && let Some(character) = &state.character
-    {
-        out.cleared.push(Sample {
-            character: character.clone(),
-            act: state.act_index,
-            state: state.clone(),
-            weight: 1.0,
-        });
-    }
     out
-}
-
-/// The decks one run cleared acts with.
-fn run_samples(line: &str, catalog: &Catalog) -> Vec<Sample> {
-    run_decks(line, catalog).cleared
 }
 
 /// Every run in a page of the run export, with its decks.
 pub fn runs(jsonl: &str, catalog: &Catalog) -> Vec<RunDecks> {
-    jsonl
-        .lines()
-        .map(|line| run_decks(line, catalog))
-        .filter(|r| !r.cleared.is_empty() || !r.boss_decks.is_empty())
-        .collect()
-}
-
-/// Every boss fight's deck in a page of the run export.
-pub fn boss_fights(jsonl: &str, catalog: &Catalog) -> Vec<BossFight> {
-    jsonl.lines().flat_map(|line| run_decks(line, catalog).bosses).collect()
-}
-
-/// Every cleared act's deck in a page of the run export.
-pub fn samples(jsonl: &str, catalog: &Catalog) -> Vec<Sample> {
-    jsonl.lines().flat_map(|line| run_samples(line, catalog)).collect()
+    jsonl.lines().map(|line| run_decks(line, catalog)).filter(|r| !r.boss_decks.is_empty()).collect()
 }
 
 /// A game build's version numbers ("v0.107.1" is 0, 107, 1).
@@ -263,24 +216,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_won_run_gives_a_deck_per_act_and_a_lost_one_stops_short() {
+    fn a_deck_per_boss_fight_won_or_lost() {
         let catalog = crate::bundled_catalog();
         let run: serde_json::Value =
             serde_json::from_str(include_str!("../tests/fixtures/finished.run")).expect("fixture");
         let line = |v: &serde_json::Value| serde_json::to_string(v).unwrap();
-        let won = samples(&line(&run), &catalog);
-        assert_eq!(won.iter().map(|s| s.act).collect::<Vec<_>>(), vec![0, 1, 2]);
-        // Each act's deck is the deck going into the next act: it grows.
-        assert!(won[0].state.deck.len() < won[2].state.deck.len());
-        assert!(won.iter().all(|s| s.character.as_str() == "IRONCLAD"));
+        let decks = |v: &serde_json::Value| run_decks(&line(v), &catalog).boss_decks;
+        let won = decks(&run);
+        assert_eq!(won.iter().map(|d| d.sample.act).collect::<Vec<_>>(), vec![0, 1, 2]);
+        assert!(won.iter().all(|d| d.won && d.sample.character.as_str() == "IRONCLAD"));
+        // The deck grows from boss to boss.
+        assert!(won[0].sample.state.deck.len() < won[2].sample.state.deck.len());
         let mut lost = run.clone();
         lost["win"] = serde_json::Value::Bool(false);
-        assert_eq!(samples(&line(&lost), &catalog).len(), 2, "the last act wasn't cleared");
+        let lost = decks(&lost);
+        assert_eq!(lost.len(), 3);
+        assert!(lost[0].won && lost[1].won && !lost[2].won, "the run died at its last boss");
         let mut duo = run.clone();
         let p = duo["players"][0].clone();
         duo["players"].as_array_mut().unwrap().push(p);
-        assert!(samples(&line(&duo), &catalog).is_empty(), "multiplayer runs are skipped");
-        let two_runs = format!("{}\n{}", line(&run), line(&lost));
-        assert_eq!(samples(&two_runs, &catalog).len(), 5, "one run per line");
+        assert!(decks(&duo).is_empty(), "multiplayer runs are skipped");
+        let two_runs = format!("{}\n{}", line(&run), line(&run));
+        assert_eq!(runs(&two_runs, &catalog).len(), 2, "one run per line");
     }
 }

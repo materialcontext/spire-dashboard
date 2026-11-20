@@ -1190,7 +1190,8 @@ pub struct DataPack {
     pub orbs: Vec<Orb>,
     /// Game rules, when the source knows them; otherwise StS2 defaults.
     pub rules: Option<GameRules>,
-    /// What community decks that cleared each act had (from community runs).
+    /// Community decks that beat each act's boss, going into it (from
+    /// community runs).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub benchmarks: Vec<Benchmark>,
     /// Card lines that beat each act's bosses, per character (from
@@ -1425,15 +1426,24 @@ pub struct Catalog {
     pub ascensions: BTreeMap<u32, AscensionLevel>,
     pub orbs: BTreeMap<OrbId, Orb>,
     pub rules: GameRules,
-    /// From the last layer that has any.
+    /// From the layer measured on the most decks (see [`Catalog::from_layers`]).
     pub benchmarks: Vec<Benchmark>,
-    /// From the last layer that has any.
+    /// From the layer measured on the most boss fights.
     pub card_lines: Vec<ActLines>,
     /// From the last layer that has any.
     pub card_lift: BTreeMap<CardId, CardLift>,
-    /// From the last layer that has any benchmarks: risks are measured
-    /// with them.
+    /// From the same layer as `benchmarks`: risks are measured with them.
     pub risks: Vec<Risk>,
+}
+
+/// The decks a set of benchmarks was measured on: its sample size.
+pub fn benchmark_decks(benchmarks: &[Benchmark]) -> u64 {
+    benchmarks.iter().map(|b| u64::from(b.decks)).sum()
+}
+
+/// The boss fights a set of card lines was mined from: its sample size.
+pub fn line_fights(lines: &[ActLines]) -> u64 {
+    lines.iter().map(|l| u64::from(l.all.fights)).sum()
 }
 
 fn merge<K: Ord, V>(map: &mut BTreeMap<K, V>, items: Vec<V>, key: impl Fn(&V) -> K) {
@@ -1442,7 +1452,10 @@ fn merge<K: Ord, V>(map: &mut BTreeMap<K, V>, items: Vec<V>, key: impl Fn(&V) ->
 
 impl Catalog {
     /// Builds a catalog from packs in priority order: later packs override
-    /// earlier ones entity-by-entity.
+    /// earlier ones entity-by-entity. Benchmarks (with their risks) and card
+    /// lines come whole from the pack measured on the most decks, a later
+    /// pack winning ties, so a small download doesn't replace a larger
+    /// bundled sample.
     pub fn from_layers(packs: impl IntoIterator<Item = DataPack>) -> Catalog {
         packs.into_iter().fold(Catalog::default(), |mut cat, pack| {
             cat.layers.push(LayerInfo {
@@ -1465,11 +1478,11 @@ impl Catalog {
             if let Some(rules) = pack.rules {
                 cat.rules = rules;
             }
-            if !pack.benchmarks.is_empty() {
+            if !pack.benchmarks.is_empty() && benchmark_decks(&pack.benchmarks) >= benchmark_decks(&cat.benchmarks) {
                 cat.benchmarks = pack.benchmarks;
                 cat.risks = pack.risks;
             }
-            if !pack.card_lines.is_empty() {
+            if !pack.card_lines.is_empty() && line_fights(&pack.card_lines) >= line_fights(&cat.card_lines) {
                 cat.card_lines = pack.card_lines;
             }
             if !pack.card_lift.is_empty() {

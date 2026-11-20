@@ -775,7 +775,12 @@ fn fixed_rooms_are_predicted_from_the_act_floor() {
     run.push(RunEvent::start(&cat, &CharacterId::new("HERO"), 10).unwrap());
     run.push(RunEvent::EnterAct { act: ActId::new("ACT1"), index: 0, boss: None });
     let mut rooms = Vec::new();
-    for _ in 0..7 {
+    for i in 0..7 {
+        if i == 6 {
+            // The extra boss floor counts in the act's length.
+            let p = spire_core::analysis::composition::progress(&run.state(), &cat);
+            assert!((p - 6.0 / 7.0).abs() < 1e-6, "{p}");
+        }
         rooms.push(expected_room(&run.state(), &cat));
         run.push(RunEvent::Node(NodeReport {
             kind: NodeKind::Unknown,
@@ -1411,4 +1416,18 @@ fn the_next_act_is_offered_only_after_this_acts_boss() {
     assert!(!run.state().act_boss_beaten());
     run.push(floor(NodeKind::Ancient));
     assert!(!run.state().act_boss_beaten());
+}
+
+#[test]
+fn measured_layers_come_from_the_larger_sample() {
+    let pack = |decks: u32, act: u8| DataPack {
+        benchmarks: vec![Benchmark { act, decks, ..Default::default() }],
+        ..Default::default()
+    };
+    // A small download over a large bundle keeps the bundle's benchmarks.
+    let cat = Catalog::from_layers([pack(5000, 0), pack(800, 1)]);
+    assert_eq!(cat.benchmarks[0].act, 0);
+    // A sample as large or larger replaces it; a pack without any leaves it.
+    let cat = Catalog::from_layers([pack(5000, 0), pack(5000, 1), DataPack::default()]);
+    assert_eq!(cat.benchmarks[0].act, 1);
 }

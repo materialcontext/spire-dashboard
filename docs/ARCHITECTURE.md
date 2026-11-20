@@ -3,435 +3,119 @@
 ## Crates
 
 ```
-spire-app  ──►  spire-data  ──►  spire-core
-   (egui)        (IO, adapters)     (pure)
+spire-app ──► spire-data ──► spire-core
+    │            (IO)          (pure)
+    └──────► spire-platform (OS, native windows)
 ```
-
-Dependencies point one way. `spire-core` depends only on `serde`.
 
 | Crate | Owns | Must not |
 |---|---|---|
-| `spire-core` | Domain types, the run log, all analysis | Do IO, touch the network, know about egui |
-| `spire-data` | Bundled data, local files, Spire Codex adapter, fetching | Contain strategy logic or UI |
+| `spire-core` | Domain types, run log, all analysis. Depends only on `serde`. | Do IO, network, UI |
+| `spire-data` | Bundled data, local files, adapters, fetching | Hold strategy or UI |
+| `spire-platform` | OS preferences, appearance, menus, native window pieces | Depend on UI crates |
 | `spire-app` | Windows, panels, input | Change state outside `SpireApp::apply` |
 
-## The three domain ideas
+`unsafe` is forbidden workspace-wide, except `spire-platform`'s `window` and `menu` modules (`#[allow(unsafe_code)]`, each block with `// SAFETY:`).
 
-### Catalog: game facts
+## Domain
 
-`catalog.rs`. Cards, characters, relics, potions, enchantments, monsters,
-encounters, events and acts, in a source-agnostic shape. A `DataPack` is the
-serialized form. A `Catalog` is built by layering packs: **bundled →
-downloaded → curated → user**, where later layers override earlier ones by
-id. The curated layer (`data/patterns.json`, `spire-data::curated`) holds
-sourced fixes for gaps in the monster data, applied only while the gap is
-still there.
+**Catalog** (`catalog.rs`): game facts in a source-agnostic shape. A `DataPack` is the serialized form; a `Catalog` layers packs **bundled → downloaded → curated → user**, later winning by id. The curated layer (`data/patterns.json`) fixes sourced gaps in monster data, only while the gap remains. Measured layers come whole from one pack: `benchmarks` with their `risks`, and `card_lines`, from the pack measured on the most decks (later wins ties), so a small download never replaces a larger bundled sample; `card_lift` from the last pack that has it.
 
-### Playbook: strategy knowledge, as data
+**Playbook** (`playbook.rs`, `data/playbook.json`): strategy as data, editable without a rebuild.
 
-`playbook.rs` plus `data/playbook.json`. It holds:
+| Key | Holds |
+|---|---|
+| `tag_rules`, `tag_lines` | Conditions over card fields for effects the tag reader can't map |
+| `tag_roles`, `role_rules` | Tags (from a number up) or conditions that give each role |
+| `role_max_cost`, `role_exclusions` | Mitigation only at cost ≤ 1; starter Strikes fill no role; ≤ 6 damage isn't Fast Damage without Vulnerable |
+| `card_tags`, `card_roles` | Per-card overrides; the player's own are saved apart (`my_tags.json`, `my_roles.json`) |
+| `acts` | Weak-fight fallback, big-hit and long-fight thresholds |
+| `relic_fits`, `event_fits`, `short` | When a relic or event option is worth `?` rooms |
+| `composition` | Method settings for ranges and risks (ascension, min build, player cap, confidence, min gap) |
+| `simulation`, `fights`, `balance`, `picks`, `report` | Simulator assumptions and analysis thresholds |
 
-- Tag rules (`tag_rules`): composable `Condition`s over card fields
-  (`{"text_contains": "forge"}`, `{"all": [...]}`…) for effects the tag
-  reader can't map by itself, and the chip line (`tag_lines`).
-- Tag roles (`tag_roles`): which roles each tag gives, from a number up
-  ("Block 9+ is Survival").
-- Direct role rules (`role_rules`) for what no tag says (Intangible and
-  Buffer are Survival; summons and healing, Mitigation).
-- Cost caps per role (`role_max_cost`): Mitigation is for cards costing 1
-  or less.
-- Role exclusions (`role_exclusions`): starter Strikes fill no role; 6
-  damage or less, in all or per energy, isn't Fast Damage unless the card
-  applies Vulnerable.
-- Per-card tag and role overrides; the player's own overrides of both are
-  saved apart (`my_tags.json`, `my_roles.json`).
-- When an event option is worth looking for (`event_fits`).
-- When a relic is crucial to a deck (`relic_fits`), and what counts as
-  desperately short of Block or max HP (`short`).
-- Per-act thresholds, what the run report counts as a likely cause
-  (`report`), and how composition is measured (`composition`: ascension,
-  builds, player cap, confidence, smallest gap). There are no role targets:
-  ranges and warnings are measured from community runs.
+There are no role targets: ranges and warnings are measured from community runs.
 
-None of this is a game fact, so it is kept apart from the catalog. It can be
-tuned, or replaced by the user, without a rebuild.
+**Run** (`run.rs`): an event log. `RunEvent`: `Start`, `EnterAct`, `SetBoss`, `SetSecondBoss`, `Node(NodeReport)`, `Adjust`, `AncientHeal`, `End`. `RunState` is `events.fold(default, apply)`; undo pops, saving writes the log, replay is deterministic. `Start` stores the resolved starting kit, so old runs replay after data updates. A `NodeReport` may carry a `FloorRecord` (offers and choices, rest choice, potions used, gold spent) for the run report only; `apply` never reads it.
 
-### Run: an event log
+## Analysis (`spire-core/src/analysis`)
 
-`run.rs`. The player reports `RunEvent`s:
+Pure functions over (state, catalog, playbook).
 
-- `Start`
-- `EnterAct`
-- `SetBoss`
-- `Node(NodeReport)`
-- `Adjust`
+| Module | Does |
+|---|---|
+| `deck` | Cards → roles (Mitigation, Survival, Fast Damage, Scaling Damage, AoE, Chip); `DeckProfile` with starters apart; `coverage` (any card for a role a fight demands) |
+| `tags` | 14 tags with numbers, from card numbers, `mechanics` and `tag_rules`; roles come from tags |
+| `requirements` | Cards dead without something the run supplies (Growth without Sadness, Shoot without Arrows) |
+| `sim` | Deck simulator: seeded fights vs a passive target, a damage and a block policy sharing shuffles. Order of operations in `docs/SIMULATION.md` |
+| `jobs` | Each role's job from the sim (Block ordinary/defending turn, damage turns 1–3, growth, AoE share, hits a turn) |
+| `composition` | The deck's `Measure`s (jobs, role shares, damage to Block, size, dead draws) on the range of A10 decks that beat this act's boss, moving from act entry to the boss by floors played. Flags only on a `Risk`. `risks` (data refresh) keeps a side when its boss win-rate gap is ≥ `min_gap`, its player-resampled bootstrap interval stays below zero, and both player halves agree |
+| `benchmark` | Weighted quartiles of those decks per character and act; all-character fallback under `min_decks` |
+| `balance` | Setup piling up (Aim, Vigor, Stretch) and Arrows or Stars running short |
+| `threats` | `ThreatProfile` per encounter, the `demands` it makes, `next_threats`, turn plans |
+| `pattern` | A monster's turns from its move state machine; reachable moves once the order is lost |
+| `shape` | A fight's shape: pressure, spikes, quiet turns, ramp, clocks, stages, data gaps (`fights` thresholds) |
+| `rules` | Fight rules from monster power text (Slippery, Intangible, Hardened Shell…) and what each asks |
+| `survival` | Plays a fight out four ways (Race, Wall, Windows, Scale) on the sim's output against expected damage; verdict, lead way, `limits` (roles that would help) |
+| `floors` | Act length (double-boss extra floor) and which room the next floor must be |
+| `healing` | Rest heal (rules percent plus relics) |
+| `events` | `lookout`: relics (`relic_fits`) and event options (`event_fits`) a `?` room this act can still give, with odds, how often runs meet each, and costs. Rules share `When` and its test `holds` |
+| `lines` | Card lines that beat the boss together (`measure`, data refresh) and card-reward `suggest`ions: lines within reach, then sim-checked fillers |
+| `advice` | Boss demands the deck has no card for, removable curses, one line per composition warning |
+| `timeline` | The run floor by floor, for charts |
+| `report` | History's report: ending, ranked causes, deciding fight, act rows, turning points, per-floor decisions |
 
-`RunState` is `events.fold(default, apply)`. Undo pops the log, saving writes
-the log, and replay is deterministic. `Start` carries the resolved starting
-kit, so old runs replay even after a data update.
+`mechanics` (top level) reads power and relic text into triggers and passives, keeping what it can't read for the UI.
 
-A `NodeReport` may carry a `FloorRecord`: what the floor offered and what was
-taken (cards, relics, potions, each a `Choice`), the rest site's choice,
-potions used and discarded, and gold spent. Monitored runs fill it from the
-game's run file; logged rest sites and shops fill the choice and gold. It's
-for the run report only: `apply` never reads it.
-
-## Analysis
-
-`analysis/` holds pure functions over (state, catalog, playbook):
-
-- `deck`: classify cards into roles (Mitigation, Survival, Fast Damage,
-  Scaling Damage, AoE, Chip: the problems a deck solves); `DeckProfile` (by
-  type and by role, with starter cards counted separately); `coverage`
-  (whether the deck has any card for a role a fight demands; how much is
-  the survival outlook's question).
-- `composition`: the deck's `Measure`s (each role's job and share, damage
-  to Block, deck size, dead draws) on the range of decks that beat the act's
-  boss going into it, the range moving from entering the act to its boss by
-  floors played (act 1 starts from the starting deck). A measure is flagged
-  only when a `Risk` says that side loses the boss more often. `risks` (run
-  at data refresh) bands every deck going into a boss against its
-  character's range, pools characters, and keeps a side when its win-rate
-  gap to the middle half is at least `min_gap`, its bootstrap interval
-  (resampling players, not decks) stays below zero, and both halves of the
-  players agree.
-- `jobs`: how well the deck does each role, measured from the simulator's
-  spreads (Block on an ordinary and a defending turn, damage over turns
-  1–3, growth, area share, hits a turn), plus a bad-draw note.
-- `threats`: `ThreatProfile` per encounter (HP, peak turn, buffs, groups),
-  the `demands` it places on a deck, `next_threats` for a node type, and the
-  most common lineup's turn plans.
-- `pattern`: a monster's turns read from its move state machine (cycles,
-  weighted random picks, conditional picks), carrying its Strength and the
-  player's Vulnerable forward while the order is known. Where the order is
-  lost (a dead end, or a pick whose options go different ways), each later
-  turn lists the moves the pattern can still reach.
-- `shape`: a fight's shape from its lineup's patterns, keeping the spread
-  per turn: pressure (the typical turn that deals damage), spikes (certain
-  or possible), quiet turns, ramp, clocks (summons, blast, statuses, ramp,
-  revives), stages, gaps in the data, and its rules. Thresholds are in the
-  playbook's `fights`.
-- `rules`: fight rules read from monster powers' text (Slippery, Intangible,
-  Hardened Shell, Personal Hive, Slow, Enrage…), each with what it asks of
-  the deck (many hits, few big hits, few Skills…).
-- `requirements`: cards that do nothing without something the run must
-  supply (Growth without Sadness, Dualcast without orbs, Shoot cards
-  without the Fool's Arrows, Star cards without a Star maker), from the
-  playbook's `simulation.requirements`. Unmet, they're dead: unplayable in
-  the simulator, no roles or tags in the deck (`deck::classify_run`).
-  Cards that answer junk a fight adds (exhausting Status cards) aren't
-  listed.
-- `balance`: setup piling up (Aim, Vigor, Stretch made faster than used, or
-  never used) and the Fool's Arrows or the Regent's Stars running short, from
-  the simulator's per-turn flows; the lines are the playbook's `balance`.
-- `survival`: whether a deck is on track against a fight, and which way wins
-  it. It plays the fight out on the simulator's average damage and block
-  against the lineup's expected damage per turn four ways (Race, Wall,
-  Windows on the spike turns, Scale), with the fight rules (`Mods`, from
-  `rules` and the simulator's hits, cards and Skills) changing the damage
-  that lands. Status cards the enemies add thin the deck's output, and
-  monsters an on-death power summons (`threats::lineup_waves`) fight as a
-  later stage. The lead way loses least HP unless a clocked fight runs past
-  the community's pace; `limits` name the roles that would help.
-- `events`: the `lookout`: what a `?` room this act can still give that
-  the deck needs, in two kinds (`Wanted`). **Relics** a playbook
-  `relic_fits` rule says are crucial, by the deck's cards (one warning per
-  relic) or by a shortfall (Block share or max HP gained, under decks that
-  cleared the previous act by the `short` lines; one warning per shortfall
-  naming every relic that fixes it). **Event options** an `event_fits` rule
-  asks for: options whose measured effects include one of its `effects` and
-  none of its `unless` (one warning per rule). Both kinds share `When` (cards
-  counted, shortfall, HP under a share) and its test, `holds`, which
-  `audit --lookout` uses too. Sources are the `?` rooms still possible this
-  act: events (not seen this run, allowed by the act) with the option, and
-  for relics a `?` room turned treasure room, whose chest gives a relic by
-  the act's rarity shares at random among the character's pool. Each carries
-  how often community runs come to it in the act, how often the option
-  delivers, and what it costs (its cost effects). Empty unless something
-  qualifies.
-- `lines`: card lines and card-reward suggestions. `measure` (at data
-  refresh) finds, per character and act, sets of two or three cards whose
-  community decks beat the act's boss more often together than with any
-  smaller part and than the character's decks overall, rates shrunk toward
-  the act's (`PRIOR`). `suggest` (in the combat preparation, after the deck
-  simulation) gives at most `picks.max`: lines the deck holds part of whose
-  missing card is offered often enough this act, ranked by the line's
-  record against the boss being faced when there is one (lines on the same
-  held cards within `picks.similar` of the best share one suggestion as
-  options); then `fillers`,
-  class cards for the roles the deck lacks against the boss (its outlook's
-  limits, then the boss check's gaps), ranked by high-skill card lift and
-  kept only when the simulator loses less HP to the boss with them. On
-  held-out runs mined lines beat the baseline by a few points on average.
-- `advice`: what bosses ask for that the deck has no card for, removable curses, and one line per composition warning (`advice::composition`).
-- `healing`: the rest heal (rules percent plus "heal an additional N" relics); the Ancient heal and starting HP are `GameRules` methods.
-- `tags`: what each card does, in 14 tags (Damage, Chip Damage,
-  Multi-Hit, Area, Block, Weak, Vulnerable, Draw, Energy, Scaling and Setup
-  on the damage or block side, Clean-Up), each with its number. Read from
-  the card's numbers, the mechanics reader and the playbook's `tag_rules`;
-  hand-set and personal tags replace the reading. Roles come from tags
-  (`Playbook::roles_from`).
-- `timeline`: a run floor by floor (HP, gold, roles, dead cards, damage per
-  fight against the community average, elites per act), folded from the event
-  log, so archived runs work the same as the live one.
-- `report`: a run's report for History, answer first: how it ended, the
-  likely causes of a death (ranked; thresholds are the playbook's `report`
-  lines), the deciding fight with its survival outlook, a card per act (HP,
-  damage against the community's, deck changes, composition warnings going
-  into the boss, the boss outlook), turning points for the HP chart, and each floor's
-  decisions (taken against passed over, from `FloorRecord`). A few
-  simulations per run: History computes it once per selected run.
-- `sim`: the deck simulator. It plays seeded fights against a passive target
-  with two policies, one leaning to damage and one to block, that share
-  shuffles. The per-card data it reads:
-  - `vars` and `upgrade` deltas
-  - star costs and orbs channelled
-  - the character's energy, orb slots and arrow slots
-
-  It carries Strength, Dexterity, Focus, orbs, Poison, Plating, Vulnerable,
-  Aim, Stretch, Vigor, Stars and Arrows between turns. Assumptions the data
-  doesn't state (hand limit, Arrow return, orb slot cap) are in the
-  playbook's `simulation` block. The results are deterministic. The order of
-  operations, with sources, is in `docs/SIMULATION.md`.
-- `mechanics` (top level in core): reads power and relic text into timed
-  triggers ("at the start of your turn", "whenever you play an Attack",
-  "every 3 turns") and passives (extra damage, Vulnerable, free Skills,
-  echoes). Sentences it can't read are kept, so the UI can show what isn't
-  simulated.
-
-`Dashboard::compute` bundles everything the Run tab needs. The app recomputes
-it only when the run or data changes, never per frame. Analytics (`timeline` +
-`sim`, a few ms) are built lazily, only while the Analytics tab is open; History
-reads archived runs from disk when its tab opens, and builds the selected run's
-`timeline` and `report` once when it's picked.
+**Cost.** `Dashboard::compute` (the Run tab) runs only when the run or data changes. The combat stage (sim, outlooks, composition, picks) is rebuilt once the run settles. Analytics build lazily for their tab; History computes a run's timeline and report once on selection.
 
 ## App
 
-The `spire-platform` crate is what the OS says and the native pieces the
-app asks of it. It depends on no UI crate, so it can be checked on its
-own for each target. It is the one crate allowed `unsafe`, and only in
-`window::mac`, `window::win` and the context-menu call in `menu`, the
-native plumbing with no safe API. The rest of the workspace forbids it.
-The crate provides:
-
-- **Preferences:** text size, reduced motion.
-- **Appearance:** dark mode, the accent and its shades, contrast-theme
-  colours, transparency, and macOS's semantic colours. It is read at
-  startup and again when the window regains focus.
-- **The system font file.**
-- **The macOS menu bar** and native context menus (`menu.rs`, through
-  `muda`).
-- **Window pieces** (`window.rs`):
-  - Mica on Windows.
-  - The macOS sidebar material (an `NSVisualEffectView` placed in the
-    window's frame view below egui's view).
-  - Snap layouts for the app-drawn Windows title bar: a window subclass
-    reports the app's maximise button as `HTMAXBUTTON`.
-
-Light and dark mode also come live from eframe.
-
-The style layer (`style/`) has these parts:
-
-- **Looks as tokens:** a `LookDef` per look holds the palette and typeface,
-  and also:
-  - corner radii and control metrics
-  - the panel style (outlined, Fluent card, macOS grouped)
-  - the content layer and control fills
-  - shadows, and whether a window material may show
-- **The System look** (`style/system.rs`): built at runtime for the
-  platform (`Native::Windows` or `Native::Mac`) from its design tokens and
-  the OS's appearance. `SPIRE_SYSTEM=windows|macos` previews either look on
-  any OS, and `SPIRE_THEME=light|dark` pins its mode. The look in use is a
-  thread-local cell. Built System looks are cached and reused.
-- **Palette accessors.** `accent` is for interactive or selected items only;
-  `identity` is the character colour.
-- **Spacing tokens:** `style::space`.
-- **Motion constants:** `FADE` 83 ms and `MOVE` 167 ms.
-- **Per-look flags:** `caps_headings`, `motion`.
-
-Monitored runs are split three ways:
-
-- `monitor.rs` does the IO. A background thread watches the companion
-  mod's link file and every profile's run save, and sends them on when
-  they change.
-- `follow.rs` decides, as pure functions. `read` turns what arrived into
-  the game's run (`spire-data::game_run`) or the reason following stopped;
-  `step` says what that does to the app's run: advance, adopt, ask
-  (conflict), wait, or nothing.
-- `SpireApp::sync_game` applies the step.
-
-The mod itself is in `mod/SpireDashboardLink` (C#); see
-`docs/MONITORED_RUN.md`.
-
-`chrome.rs` sets up the window frame. There are three kinds:
-
-- the app-drawn title bar
-- the system frame
-- macOS's unified title bar with the System look
-
-It also puts Mica behind a transparent window on Windows. The System look
-also decides where navigation and Settings go:
-
-- **Windows:** a top navigation bar, and Settings as a page.
-- **macOS:** a sidebar and toolbar, and a Settings window.
-
-Views are functions: `fn show(ui, &ViewCtx, …, &mut Vec<Action>)`. They read
-immutable data and push `Action`s. `SpireApp::apply` is the only place state
-changes. Data updates run on a background thread and report back over a
-channel. Nothing fetches without a button press.
+- **Views** are functions `fn show(ui, &ViewCtx, …, &mut Vec<Action>)`: read immutable data, push `Action`s. `SpireApp::apply` is the only place state changes.
+- **Data updates** run on a background thread and report over a channel. Nothing fetches without a button press.
+- **Monitored runs**: `monitor.rs` (IO thread: the mod's link file and every profile's run save), `follow.rs` (pure: `read` the game's run, `step` decides advance/adopt/ask/wait), `SpireApp::sync_game` applies. The mod is `mod/SpireDashboardLink` (C#); see `docs/MONITORED_RUN.md`.
+- **Style** (`style/`): a `LookDef` per look (palette, type, radii, metrics, panel style, layers, shadows, materials). The System look is built at runtime per platform; `SPIRE_SYSTEM=windows|macos` and `SPIRE_THEME=light|dark` preview it anywhere. `accent` is for interactive or selected items only; `identity` is the character colour. Spacing in `style::space`; motion `FADE` 83 ms, `MOVE` 167 ms. Details in `docs/NATIVE_LOOK.md`.
+- **Chrome** (`chrome.rs`): app-drawn title bar, system frame, or macOS unified title bar; Mica on Windows. The System look puts navigation in a top bar and Settings as a page (Windows), or a sidebar, toolbar and Settings window (macOS).
+- **Platform** (`spire-platform`): text size, reduced motion, dark mode, accent and contrast colours, transparency, the system font, the macOS menu bar and context menus (`muda`), Mica, the macOS sidebar material, Windows snap layouts (`HTMAXBUTTON`).
 
 ## Data format
 
-`DataPack` (format 1) is JSON with optional lists:
+`DataPack` (format 1): JSON with optional lists (`characters`, `cards`, `relics`, `potions`, `enchantments`, `monsters`, `encounters`, `events`, `acts`, `ascensions`, `orbs`), `rules`, and the measured layers. Shapes are the structs in `catalog.rs`. Unknown enum values deserialize as `Other`; a newer `format` is rejected with a message.
 
-```json
-{ "format": 1, "source": "…", "game_version": "v0.111.0", "fetched_at": "…",
-  "characters": [], "cards": [], "relics": [], "potions": [], "enchantments": [],
-  "monsters": [], "encounters": [], "events": [], "acts": [] }
-```
+## Game rules
 
-The field shapes are the structs in `spire-core/src/catalog.rs`. Unknown enum
-values (e.g. a new card type) deserialize as `Other` instead of failing. A pack
-with a newer `format` is rejected with a clear message.
+`GameRules` holds the modelled StS2 mechanics: max ascension (10), potion slots and the ascension that removes one (A4), the starting curse (A5), ascension HP (A8) and damage (A9), the double boss (A10, Act 3), Vulnerable %, rest and weary heals, hallway and elite repeat rules. The Codex adapter reads them from ascension descriptions; a rule whose description disappears is switched off, not guessed. Weak-pool sizes (3/2/2) come from community runs; the playbook's `weak_fights` is a fallback.
 
-## Game rules (StS2)
+## Spire Codex adapter (`spire-data/src/codex.rs`)
 
-`GameRules` in the catalog holds the mechanics the dashboard models:
+- `/api/{acts,characters,cards,relics,potions,enchantments,monsters,encounters,events,ascensions,orbs,powers}?channel=beta`
+- `/api/beta/version` (`/api/versions` on stable): version label, optional.
+- `/api/runs/metrics/cards?bracket=wr50`: high-skill card lift, optional.
 
-- the maximum ascension (10)
-- base potion slots
-- the ascensions that remove a slot (A4) and add the starting curse (A5)
-- the ascensions where enemies use their ascension HP (A8) and damage (A9)
-- the double-boss act (A10, Act 3)
+Beta by default. Wire structs name only used fields, all optional; `null` lists read empty. `strip_markup` removes Godot rich text; class names (`StrikeDefect`) map to ids (`STRIKE_DEFECT`). Event preconditions become `requires` and `act_span`. Keyless use allows 15 calls per minute per endpoint; an update makes one each.
 
-The Codex adapter derives these from the ascension descriptions. A rule
-whose description disappears is switched off rather than guessed.
-`RunEvent::start` applies the rules once and stores the result, and threat
-previews read `Scaling::for_run`.
+## Community runs (`/api/exports/runs`)
 
-Weak-pool sizes per act (3/2/2) come from community runs (the most common
-count among acts that reached their boss). The playbook's `weak_fights` is
-only a fallback.
+Gzipped JSON lines, one game run file each, read through the shared `run_file.rs`. The cursor runs by **upload** time: a page holds runs played on any build. An update reads `run_pages` pages (default 12) uploaded in the last 14 days. Single-player runs without modifiers only. A failed page stops the read; pages already read are used, and the rest of the update still applies. `refresh-bundle` fails instead.
 
-## Spire Codex adapter
+| Module | Reads |
+|---|---|
+| `codex_runs.rs` | Exact lineups: anchors (fixed count in ≥ 95% of fights), spawns, variants (≥ 3% share), per-encounter stats. Player-side allies and unknown monsters dropped |
+| `benchmarks.rs` | Decks going into each boss (A10, builds ≥ `min_build`, once by `run_hash`, each player capped at `player_cap` runs' worth). Winners → `benchmarks`; all → `risks` |
+| `codex_events.rs` | Event relics seen given, how often runs meet each event per act, each option's measured `effects` (incl. `uncurse`), `?`-room treasure odds and chest rarities |
+| `card_lines.rs` | Card rewards offered per act, for `lines::measure` (every ascension) |
 
-`spire-data/src/codex.rs` maps the API responses into a `DataPack`:
-
-- `/api/{acts,characters,cards,relics,potions,enchantments,monsters,encounters,events,ascensions}?channel=beta`
-- `/api/beta/version` (or `/api/versions` on stable), for the game version label
-- `/api/runs/metrics/cards?bracket=wr50`, card lift among high-skill players
-  (optional: the update goes on without it)
-
-The dashboard follows the **beta** branch by default (`Channel::Beta`, which
-sends `?channel=beta`). Wire structs name only the fields used, every field is
-optional, and `null` lists read as empty.
-
-Notes:
-
-- Codex text has Godot rich-text markup. `strip_markup` reduces it to plain
-  text.
-- Starting decks and relics use class names (`StrikeDefect`), which are mapped
-  to ids (`STRIKE_DEFECT`).
-- Encounters list each distinct monster type once, not the count. Exact
-  lineups come from the run export instead (below). The playbook's
-  `multi_enemy_names` is only a fallback for encounters with no run data.
-- Keyless use allows 15 requests per minute per endpoint. One update makes one
-  call per endpoint.
-- Events keep their `preconditions` as `Event::requires`. "Act 2 only",
-  "Act 1–2 only" and "Act 2+" become `act_span`, which `Catalog::events_in`
-  applies to shared events. Event relics named in any option, first screen or
-  later (`pages`), become `Event::relics`.
-
-## Community runs: exact lineups
-
-`spire-data/src/codex_runs.rs` reads `/api/exports/runs`, which returns
-gzipped JSON lines with one community-submitted run each. Those are the
-game's own run files, so it shares `run_file.rs` with `game_run.rs`: one
-description of the format, for finished runs and the live save alike. Every fight records
-its `monster_ids`, duplicates included.
-
-The aggregation:
-
-1. Keep single-player runs without custom modifiers.
-2. Drop player-side allies. These are monsters that aren't listed for an
-   encounter but appear across 5 or more encounters (Necrobinder's Osty,
-   pets, relic summons). Drop fights with monsters missing from the catalog
-   (mods).
-3. Per encounter (at least 20 fights), find the **anchors**: monster types
-   at one fixed count in 95% or more of fights.
-4. If the anchors alone also occur as a whole fight (5% or more), the
-   encounter has one starting lineup and the extras are **spawns** that join
-   mid-fight. This also requires a summoner or an extra type that isn't an
-   anchor.
-5. Otherwise the encounter draws from a random pool. Each lineup with a 3% or
-   higher share becomes a **variant**.
-6. Average damage taken and turns per encounter go into `stats`.
-
-`spire-data/src/benchmarks.rs` reads the same pages a second way: each run
-replays through `game_run::read`, and the deck going into every boss is a
-sample. Only runs at the playbook's `composition.ascension` (A10) on builds
-from `min_build` count, each once (by its `run_hash`), and each player
-weighs at most `player_cap` runs (anonymous runs are their own player).
-Every deck is tagged and simulated once (`benchmark::measured`): decks that
-won make `Catalog::benchmarks` (weighted quartiles per character and act,
-all characters as the fallback under `min_decks` runs' worth), and every
-deck, won or lost, goes to `composition::risks` for `Catalog::risks`.
-`audit --roles` shows the same analysis in full, per character and pooled,
-with `BUILD=` to check one build against the others.
-
-`spire-data/src/codex_events.rs` reads them a third way, for events: the
-event relics picked up on each event's floor fill in the relics no option
-names (Trash Heap's "random forgotten Relic" is one of five, Doll Room lets
-you choose one of three), and the share of runs that met each event in each
-act (by act id, so Overgrowth and Underdocks stay apart) goes into
-`Event::met`. Relics from the general pools are left out: no one can fish an
-event for them. Each event option's `effects` come from the floors it was
-taken on (credited to the first option taken, so later screens count): how
-often it removed, transformed, upgraded, enchanted or added cards, added a
-curse, gave a relic or potion, healed, raised or cut max HP, cost HP, gave
-or took gold, and by how much. `uncurse` marks an option seen taking out a
-curse (one limited to starter cards never is). Options taken fewer than 20
-times, and effects in under 10% of picks, are left out. The same replay that builds benchmarks takes each deck going into every
-boss fight, with whether the run got past it; with the card rewards offered
-per act (`card_lines.rs`), `analysis::lines::measure` turns them into
-`Catalog::card_lines`. The adapter also reads the source's card metrics for
-high-skill players (`runs/metrics/cards?bracket=wr50`) into
-`Catalog::card_lift`. Per act, it also measures how often a `?` room turns into a
-treasure room (`Act::unknown_treasure`, share of runs) and the rarity of the
-relics treasure rooms give (`Act::chest_rarity`), and `benchmarks.rs` adds
-the max HP decks had gained by the end of each act they cleared
-(`Benchmark::max_hp_gained`).
-
-Results land in `Encounter::lineups`, `spawns` and `stats`. The update reads
-`run_pages` pages (default 12, about 12,000 runs) from the last 14 days, so
-lineups track the current game version. The export's own budget is 120
-credits per hour, and one page costs 1 credit. If this step fails, the rest of
-the update still applies.
+`audit --roles` and `audit --lookout` rerun these analyses against saved pages.
 
 ## Extension points
 
 | Want to… | Do this |
 |---|---|
-| Add a data source | Add a `fetch::Source` variant and an adapter module that returns a `DataPack`. |
-| Change how cards are read | Edit `tag_rules` / `tag_roles` / `card_tags` in the playbook (`role_rules` / `card_roles` for roles no tag gives); add a `Condition` variant if a new predicate is needed. `audit --tags` lists the class cards left untagged. |
-| Add a deck metric | Extend `DeckProfile` and `profile()`; show it in `views/breakdown.rs`. |
-| Simulate a new card mechanic | Read its `vars` key in `sim::play_of`, carry it in `Fight`, and add a `Resource` if it should be reported. |
-| Add a run chart | Add a field to `FloorPoint` in `timeline`, then a panel in `views/analytics.rs::run_section` (History gets it too). |
-| Add a threat signal | Extend `ThreatProfile` and `demands()`; thresholds go in `ActPlan`. |
-| Add a run action | Add a `Change` variant and handle it in `apply_change`; add UI in `views/log.rs`. |
-| Add a panel | New file in `views/`, call it from `views::root`. |
-
-## Roadmap
-
-Each milestone is its own PR.
-
-1. **M1 (this)**: catalog, playbook, event-sourced run, analysis, egui
-   dashboard, manual Codex update.
-2. **M2**: enchant and transform flows in the log panel; potion-slot changes;
-   shop node helper (removal cost, gold planning).
-3. **M3**: route planning: enter the visible map and get elite/rest/`?` counts
-   against the deck's readiness.
-4. **M4** (done): run history, floor-by-floor replay, run analytics and the
-   deck simulator.
-5. **M5**: community stats from Codex (`/api/runs/metrics/*`) to weigh card
-   picks and event options, cached and updated by the same button.
+| Add a data source | A `fetch::Source` variant and an adapter returning a `DataPack` |
+| Change how cards are read | `tag_rules` / `tag_roles` / `card_tags` (or `role_rules` / `card_roles`); a new `Condition` variant if needed. `audit --tags` lists untagged class cards |
+| Add a composition measure | A `Measure` variant, its value in `composition::values`, its range in `Benchmark` |
+| Simulate a mechanic | Read its `vars` key in `sim::play_of`, carry it in `sim::Fight`, add a `Resource` to report it |
+| Add a run chart | A `FloorPoint` field in `timeline`, a panel in `views/analytics.rs::run_section` |
+| Add a threat signal | `ThreatProfile` and `demands()`; thresholds in `ActPlan` |
+| Add a run action | A `Change` variant in `apply_change`; UI in `views/log.rs` |
+| Add a panel | A file in `views/`, called from `views::root` |

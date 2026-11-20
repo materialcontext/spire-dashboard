@@ -24,6 +24,18 @@ const EVERY: Duration = Duration::from_millis(500);
 /// Checks between listings of the profile folders.
 const RELIST: u32 = 20;
 
+/// Reads of a half-written file before its error is reported.
+const RETRIES: u32 = 4;
+
+/// Whether a run file read is cut short (not whole JSON): the game was
+/// writing it.
+fn torn(update: &Update) -> bool {
+    match update {
+        Update::Run { json: Some(j), .. } => !game_link::whole_json(j),
+        _ => false,
+    }
+}
+
 /// What the watcher found.
 pub enum Update {
     /// No link file yet: the mod isn't installed, enabled or running.
@@ -54,6 +66,7 @@ impl Watcher {
                 let mut first = true;
                 let mut run_saves: Vec<PathBuf> = Vec::new();
                 let mut tick = 0u32;
+                let mut retries = 0u32;
                 while !flag.load(Ordering::Relaxed) {
                     if tick.is_multiple_of(RELIST) {
                         run_saves = game.as_deref().map_or_else(Vec::new, game_link::save_dirs);
@@ -65,8 +78,6 @@ impl Watcher {
                         run_saves.iter().map(|p| game_link::modified(p)).collect::<Vec<_>>(),
                     );
                     if first || now != seen {
-                        first = false;
-                        seen = now;
                         let update = match game_link::read_link(&path) {
                             None => Update::NoLink,
                             Some(mut link) => {
@@ -78,6 +89,16 @@ impl Watcher {
                                 Update::Run { link: Box::new(link), json }
                             }
                         };
+                        // A file caught mid-write is read again next tick,
+                        // a few times, before the error is reported.
+                        if torn(&update) && retries < RETRIES {
+                            retries += 1;
+                            std::thread::sleep(EVERY);
+                            continue;
+                        }
+                        retries = 0;
+                        first = false;
+                        seen = now;
                         if tx.send(update).is_err() {
                             break;
                         }

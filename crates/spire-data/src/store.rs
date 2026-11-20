@@ -236,7 +236,6 @@ impl Store {
         Ok(id)
     }
 
-    /// Archived runs, newest first. Unreadable files are skipped.
     /// Replaces an archived run (edited in History). Written to a temporary
     /// file first, so a failed write never leaves half a run.
     pub fn update_archived(&self, id: &str, run: &Run) -> Result<(), DataError> {
@@ -256,6 +255,7 @@ impl Store {
         Ok(())
     }
 
+    /// Archived runs, newest first. Unreadable files are skipped.
     pub fn archived_runs(&self) -> Vec<(String, Run)> {
         let Ok(entries) = fs::read_dir(self.dir.join(RUNS_DIR)) else { return Vec::new() };
         let mut runs: Vec<(String, Run)> = entries
@@ -321,7 +321,7 @@ impl RunSaver {
                 let _ = tx.send(json);
                 Ok(())
             }
-            // No thread (spawn failed): fall back to a blocking write.
+            // No thread (spawn failed): the caller writes directly.
             _ => Err(DataError::Io(std::io::Error::other("run saver thread is not running"))),
         }
     }

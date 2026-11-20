@@ -1,152 +1,29 @@
 # Spire Dashboard
 
-A desktop companion for **Slay the Spire 2** (beta branch) that helps you learn
-and play the *macro* game: what your deck is missing, what the next fight will ask of it,
-which event relics are worth fishing `?` rooms for, and what the act boss demands.
+A desktop companion for **Slay the Spire 2** (beta branch) for the macro game: what your deck lacks, what the next fight asks of it, which `?` rooms are worth taking, what the boss demands.
 
-It never reads the game. After each node you tell it what happened: the fight,
-the card you took, HP and gold after. Then it re-analyses the run.
+Log each floor by hand, or let it follow the game through a read-only companion mod.
 
-## What it shows
+## Run tab
 
-- **Run vitals**: character, act, floor, HP, gold, potions, deck size.
-- **Deck, relics and potions**, with each card's role on hover. Relics are
-  marked with a role too when what they do is plain from their text (Vajra:
-  scaling damage), and relics that add potion slots add them when logged.
-- **Deck breakdown** by card type (attack, skill, power, curse…) and by role,
-  the problems a deck solves: Mitigation, Survival, Fast Damage, Scaling
-  Damage, AoE and Chip. Each role shows how well the deck actually does it,
-  simulated (Block on an ordinary and a defending turn, damage over the
-  first turns, how damage grows, how much hits every enemy, hits a turn), on
-  the range of **A10 community decks that beat this act's boss** going into
-  it: the middle half as a band, the median as a tick, your card count
-  beside it. Damage to Block, deck size and dead draws sit under the roles.
-  The range moves through the act, from what decks had entering it to what
-  they had at its boss. There are no hand-set targets: a measure is only
-  flagged (amber, and in Priorities) where community runs show that side
-  losing the boss more often, e.g. too little Block in Act 3 or too many AoE
-  cards in Act 2, with the win rates on hover. Each deck row has a strip of
-  fixed columns (the six roles, then Draw and Energy), filled where the card
-  has one; hover a column for how a card gets it.
-  Setup that piles up (Aim, Vigor or Stretch made faster than the deck uses
-  it), and the Fool's Arrows or the Regent's Stars running short, are noted
-  beside the bad-draw line.
-- **Act and boss**: the boss's HP, what it does turn by turn, and what it
-  demands, each marked covered, thin or missing for your deck.
-- **Enemy turns**: every monster's move order from the game data (fixed
-  cycles, random picks with their odds, conditional picks), with the
-  Strength it builds and the Vulnerable it puts on you.
-- **When runs end** at elites and bosses: how often community runs die
-  there and on which turns, named by the move made that turn.
-- **Survival check** for elites and bosses: on track, tight or at risk,
-  from the deck simulator's damage and block against the enemies' turns.
-  See [docs/DEATHS.md](docs/DEATHS.md).
-- **Next threats** for Monster, Elite and Boss nodes in the current act. The
-  list uses the early (weak) pool, then the normal pool. Hallway fights
-  you've already had this act are left out, and so is the elite you just
-  fought: community runs show neither comes straight back. Each is checked
-  against your deck.
-- **Relic lookout**: shown only when a `?` room this act can still give a
-  relic that's crucial to your deck. A relic is crucial when your cards call
-  for it (Lost Wisp with six or more Powers, The Boot with many small hits),
-  or when your deck is desperately short of Block or max HP next to decks
-  that cleared the act before (Orichalcum, Anchor; Strawberry, Pear, Mango).
-  A `?` room is an event or, now and then, a treasure room: the lookout names
-  the event and the option that gives the relic (with its cost), or the
-  treasure room and how often its chest gives one of those relics, and how
-  often community runs come to each in this act. Events you've had this run,
-  and those the act doesn't allow, are left out.
-- **Watch for events**: the same, for event options that do what your deck
-  needs: take out a removable curse, raise max HP when you're desperately
-  short of it, heal when HP is under 30%. What an option does comes from
-  community runs that took it (Slippery Bridge's Overcome removed a card
-  every time; Wood Carvings' Bird never touched a curse), so each source says
-  how often it delivers and what it cost them (HP, max HP, a curse, gold), in
-  red when the HP would kill you. Options that undo the point (a removal that
-  adds a curse) are left out. Up to three places each, the rest on hover.
-  While following the game, the current event marks the options you want.
-- **Look for in card rewards**: up to three suggestions, from the cards you
-  already have. First, *lines within reach*: two or three cards that
-  community decks beat this act's boss with more often together than apart,
-  where you hold part of the line and the rest is offered often enough in
-  this act. Next, *cards for what your deck lacks against the boss*: for the
-  roles its outlook and boss check find missing, your class's cards that
-  high-skill players win more with, kept only when the simulator shows the
-  deck doing better against the boss with the card (a card that needs a
-  partner, like a Shiv payoff, comes with one). Lines on the same cards you
-  hold that do about as well share one entry ("Anger + Setup Strike, Stomp
-  or Rage"). Each entry is the cards and a short label ("Synergy vs
-  Vantom"); hover the label for the numbers and a card for its details. The
-  floor log's card step lists the cards they look for, one click each.
-- **Macro advice** about your run only: role gaps for this act, boss gaps,
-  missing area damage and removable curses. There are no general tips.
-- **Enemies seen** this run.
-- **Analytics** for the current run:
-  - HP, max HP and gold by floor.
-  - HP lost in each fight next to what other players lose in the same fight.
-  - Deck roles growing floor by floor.
-  - The share of dead cards, and elites fought per act.
-- **Deck simulation**, read from the card data. Damage and block per turn
-  come with a spread, alongside turnover, the odds of drawing each card by
-  turn 3, dead draws, and whether energy fits the deck. Character mechanics are
-  simulated: orbs and Focus, Osty, Summon, Stars, Forge, Doom, Poison, Aim,
-  Stretch, Vigor and the Fool's Arrows.
-  - Powers and relics are read from their text. That covers start- and
-    end-of-turn effects, "whenever you play…" triggers, every-N counters,
-    Vulnerable, Plating, and extra damage or Block for other cards.
-  - The order effects apply in, and its sources, is in
-    [docs/SIMULATION.md](docs/SIMULATION.md).
-- **Relic catalog**: every relic, filtered by pool, rarity, whether it's in
-  your run and whether the simulator uses it. Each relic shows what the
-  simulator reads from it and what it leaves out.
-- **History**: every run you end or abandon here, filtered by character and
-  outcome. Each run opens on **How it ended** (the likely causes of a death,
-  ranked, and the deciding fight with the deck's outlook there) and a row per
-  act (HP in and out, damage against other players', deck changes, gaps, the
-  boss). Below are the same charts, with big losses, elites and rest sites
-  marked on HP, a floor-by-floor replay, and the **Decisions** log: what each
-  floor offered and what you took, rest-site choices, gold spent and potions
-  used (click a floor to replay it). Monitored runs record every offer;
-  logged runs record what you took, your rest-site choice and shop spending. **Edit run…** fixes a filed run: its ascension, result, notes, each
-  floor's fight, or a floor logged by mistake; or deletes it.
+- **Vitals:** character, act, floor, HP, gold, potions, deck size.
+- **Deck, relics, potions:** each card's roles in a strip of columns (six roles, Draw, Energy); hover for why. Relics get roles when their text is plain (Vajra: Scaling Damage); potion-slot relics add slots.
+- **Deck composition:** each role's simulated job (Block on ordinary and defending turns, damage turns 1–3, growth, AoE share, hits a turn) on the range of **A10 community decks that beat this act's boss** going in: band = middle half, tick = median, your card count beside it. Damage to Block, deck size and dead draws below. The range moves from act entry to the boss as you play. **No hand-set targets:** a measure turns amber only where community runs show that side losing the boss more often (e.g. too little Block, too many AoE cards in Act 2); win rates on hover. Setup piling up (Aim, Vigor, Stretch) and Arrows or Stars running short are noted.
+- **Act and boss:** HP, turn-by-turn moves, demands (a gap only when no card in the deck answers it), and the **survival check**: On track, Tight or At risk from the simulator against the enemies' turns ([DEATHS.md](docs/DEATHS.md)).
+- **Enemy turns:** each monster's move order (cycles, random picks with odds, conditional picks) with its Strength and the Vulnerable it applies; where community runs die and on which move.
+- **Next fight:** Monster, Elite and Boss for this act, weak pool first; hallway fights already had and the elite just fought are left out (they don't repeat).
+- **Fish for relics:** only when a `?` room this act can still give a relic crucial to your deck, by its cards (Lost Wisp with 6+ Powers) or a desperate shortfall of Block or max HP (Orichalcum, Pear). Names the event and option (with cost) or the treasure-room odds, and how often runs meet each.
+- **Watch for events:** event options doing what the deck needs: take out a removable curse, raise max HP when short, heal under 30% HP. Each option's effects are measured from community runs (Slippery Bridge's Overcome always removes a card; Wood Carvings' Bird never touches a curse), with how often it delivers and what it costs (red if the HP would kill you). Three places each, the rest on hover.
+- **Look for in card rewards:** up to three. *Lines within reach*: cards community decks beat this boss with more often together, where you hold part. Then *cards for what you lack against the boss*: class cards high-skill players win more with, kept only if the simulator improves against the boss. Hover a label for numbers, a card for details.
+- **Priorities:** composition warnings, boss demands with no card, removable curses. Run-specific only.
 
-## Monitored runs (follow the game)
+## Other tabs
 
-Instead of logging each floor by hand, the dashboard can follow your run in
-Slay the Spire 2 through a small companion mod, **Spire Dashboard Link**. The
-mod only reads: it changes nothing in the game. It tells the dashboard where
-the game saves your run and what the act's boss is, and the dashboard reads
-the game's own save after each floor.
+- **Analytics:** HP, max HP, gold by floor; HP lost per fight against other players; roles by floor; dead cards; elites per act; the deck simulation (damage and Block per turn with spread, turnover, draw odds by turn 3, dead draws, energy fit).
+- **History:** every finished or abandoned run, by character and outcome. Opens on **How it ended** (ranked causes, the deciding fight) beside a row per act (HP, damage against players', deck changes, warnings, the boss). Charts mark big losses, elites and rest sites; a floor replay; the **Decisions** log (offered vs taken, rest choice, gold, potions; click a floor to replay). **Edit run…** fixes ascension, result, notes, a floor's fight or a stray floor, or deletes the run.
+- **Cards, Relics, Enemies:** catalogs with filters; relics show what the simulator reads and leaves out.
 
-1. Get the mod:
-   - **Download:** open the latest CI run on GitHub (Actions) and download
-     the `SpireDashboardLink` artifact.
-   - **Or build it:** with the .NET 8 SDK, run
-     `dotnet build mod/SpireDashboardLink/SpireDashboardLink.csproj -c Release`.
-2. Copy `SpireDashboardLink.dll` and `SpireDashboardLink.json` into a
-   `SpireDashboardLink` folder in the game's `mods` folder:
-   - **Windows:** `…\steamapps\common\Slay the Spire 2\mods\`
-   - **macOS:** `SlayTheSpire2.app/Contents/MacOS/mods/` (Show Package
-     Contents)
-3. Start the game and enable mods in its settings. A consent dialog appears
-   the first time.
-4. In the dashboard, open **Settings → Monitored runs** and turn on **Follow
-   the game**. It shows when the mod is connected.
-
-While following:
-
-- **Logging:** floors log themselves, and the floor log is locked.
-- **The room you're in:** the fight you're in shows above Next fight (boss
-  fights keep the act panel), and so does an event, with its options and
-  any that give a relic your deck needs. This needs mod 0.2.0 or later:
-  the game's save only records a room once it's done.
-- **When the run ends:** it's filed in History, and History opens on it.
-- **If you're already logging a different run by hand:** the dashboard asks
-  before switching.
-- **Modded profile:** with mods on, the game plays in its separate *modded*
-  profile, with its own unlocks and run history.
-
-Turn following off to log by hand again. Nothing is read while it's off.
+The simulator models orbs and Focus, Osty, Summon, Stars, Forge, Doom, Poison, Aim, Stretch, Vigor and the Fool's Arrows; powers and relics are read from their text ([SIMULATION.md](docs/SIMULATION.md)).
 
 ## Run it
 
@@ -156,160 +33,55 @@ cargo run --release -p spire-app
 
 Linux needs the usual X11/Wayland runtime libraries (e.g. `libxkbcommon-x11-0`).
 
-## Use it
+## Log by hand
 
-1. Pick a character and ascension, then the act (and its boss once you see it).
-2. After each node, in the right panel: choose the node type and the encounter
-   or event, set HP/max HP/gold, add any card, relic or potion, and use `+`/`x`
-   in the deck panel to queue upgrades and removals. Then press **Commit**.
-3. After a boss, choose the next act.
-4. **Undo** reverts the last step. **Apply as correction** fixes a mistake
-   without advancing the floor.
-5. **End run** files the run in History and opens it there.
+1. Pick character and ascension, then the act and (once seen) its boss. The floor log stays locked until both are set.
+2. After each floor: room, encounter or event, HP/max HP/gold, any card, relic or potion; `+`/`x` on deck cards queue upgrades and removals (right-click for more). **Commit**.
+3. After a boss, choose the next act. **End run** files it in History.
 
-Keys are optional shortcuts: 1–8 pick the room, Ctrl+Enter commits, Ctrl+Z
-undoes, Ctrl+1–6 switch tabs and Esc closes dialogs.
+**Undo** reverts the last step; **Apply as correction** fixes without advancing. Keys: 1–8 room, Ctrl+Enter commit, Ctrl+Z undo, Ctrl+1–6 tabs, Esc closes dialogs; dropdowns follow the arrow keys. The run saves on every change.
 
-The floor log stays locked until the act and its boss are chosen.
+Healing follows the game: start at full HP (80% from A2); from Act 2 the Ancient heal applies once the boss is chosen (all missing HP, 80% from A2); at a Rest Site, **Rest +N** fills in 30% of max HP plus relics (Regal Pillow).
 
-Healing follows the game's rules:
-- Runs start at full HP, or 80% of max from A2 (Weary Traveler).
-- From Act 2, the Ancient heal is applied once the boss is chosen: all missing HP, or 80% of it from A2.
-- At a Rest Site, **Rest +N** beside HP fills in the heal: 30% of max HP, plus relics like Regal Pillow.
+## Follow the game
 
-Dropdowns and search results in the log follow the arrow keys, and Enter picks.
+The companion mod **Spire Dashboard Link** only reads: it reports where the game saves your run, the act's boss and the room you're in; the dashboard reads the game's save. Details: [MONITORED_RUN.md](docs/MONITORED_RUN.md).
 
-The run saves after every change and reloads on start.
+1. Get the mod: the `SpireDashboardLink` artifact from the latest CI run (GitHub Actions), or `dotnet build mod/SpireDashboardLink/SpireDashboardLink.csproj -c Release` (.NET 8 SDK).
+2. Copy `SpireDashboardLink.dll` and `SpireDashboardLink.json` into `mods/SpireDashboardLink/` in the game folder (Windows: `…\steamapps\common\Slay the Spire 2\mods\`; macOS: `SlayTheSpire2.app/Contents/MacOS/mods/`).
+3. Enable mods in the game (consent dialog the first time).
+4. **Settings → Monitored runs → Follow the game.** It shows when the mod is connected.
 
-The header doubles as the title bar:
-- Drag it to move the window, and double-click it to maximise.
-- Drag any edge or corner to resize.
-
-The app draws this title bar itself, so desktop tools that restyle native title
-bars (Mica For Everyone, blur themes) can't hide it. **Settings → Use the
-system title bar** brings back the operating system's own.
+While following: floors log themselves and the log is locked; the current fight or event shows above Next fight (mod 0.2.0+); a finished run files to History; a hand-logged run is never replaced without asking. With mods on, the game uses a separate *modded* profile. Nothing is read while following is off.
 
 ## Appearance
 
-**Settings** lets you choose a look, and the choice is saved.
-
 | Look | Style |
 |---|---|
-| **System** (default on Windows and macOS) | Looks like the operating system. Windows 11 gets Segoe UI, your accent colour, Fluent cards and Mica, with tabs across the top and Settings as a page. macOS gets SF Pro, your accent colour, a sidebar, a toolbar, the menu bar and a Settings window. Follows light and dark mode, and Windows contrast themes. See `docs/NATIVE_LOOK.md`. |
-| **Spirebound** (default on Linux) | High contrast in Inter. Your character's colour marks the header; gold marks what you can act on. |
-| **Forge** | Charcoal and embers. |
-| **Neon Spire** | Synthwave with glowing edges. |
-| **Grimoire** | A light theme: parchment, ink and crimson. |
-| **Terminal** | A phosphor-green CRT, all monospace. |
+| **System** (default on Windows, macOS) | The OS's own: Windows 11 (Segoe UI, accent, Fluent cards, Mica, top tabs) or macOS (SF Pro, accent, sidebar, toolbar, menu bar). Follows light/dark and contrast themes ([NATIVE_LOOK.md](docs/NATIVE_LOOK.md)) |
+| **Spirebound** (default on Linux) | High contrast, Inter; character colour on the header |
+| **Forge** | Charcoal and embers |
+| **Neon Spire** | Synthwave, glowing edges |
+| **Grimoire** | Light: parchment, ink, crimson |
+| **Terminal** | Phosphor-green CRT, monospace |
 
-**Larger text** is a separate readability switch that works with every look:
-
-- type about 10% bigger
-- roomier spacing
-- filled chips
-- brighter secondary text
-
-On a first run it starts on if Windows' text size is above 100%.
-
-**Match system light/dark** follows the operating system: Grimoire in light
-mode, Spirebound in dark. Picking a look while it's on sets the look for that
-mode. The System look follows light and dark on its own.
-
-Every look shares the same rules, from the Windows and macOS design guidance
-(see `docs/DESIGN_PRACTICES.md`):
-
-- **The accent** marks only what you can act on or what's selected.
-- **Headings** are sentence case, except in Terminal.
-- **Spacing** sits on a 4px grid.
-- **Controls** have 3:1 outlines and 24px click targets.
-- **Keyboard focus** shows a ring after Tab or the arrow keys.
-- **Motion** is brief (83–167 ms fades and slides) and off in Terminal or when
-  the system asks for reduced motion.
-- **An inactive window** dims its header.
+**Larger text** (any look): ~10% bigger type, roomier spacing, brighter secondary text; on by default when the OS text size is above 100%. **Match system light/dark** switches Grimoire/Spirebound with the OS. **Use the system title bar** replaces the app-drawn one (drag to move, double-click to maximise). Shared rules: [DESIGN_PRACTICES.md](docs/DESIGN_PRACTICES.md).
 
 ## Game data
 
-The app ships with a full snapshot of the **StS2 beta branch** (cards,
-characters including The Fool, relics, potions, enchantments, monsters,
-encounters, events, acts and ascensions), taken from the
-[Spire Codex](https://spire-codex.com) API. It works offline. The Data window
-can switch to the stable branch.
+A full **StS2 beta** snapshot from [Spire Codex](https://spire-codex.com) ships with the app; it works offline. Ascension follows StS2 (A0–A10), read from the ascension data: A4 one fewer potion slot, A5 Ascender's Bane, A8/A9 enemy ascension HP/damage, A10 two Act 3 bosses.
 
-Ascension follows StS2 (A0–A10), with the mechanical effects modelled:
+Community runs on Spire Codex supply exact enemy lineups, per-fight damage and deaths, event effects, card lines and the A10 composition ranges and risks.
 
-| Level | Effect |
-|---|---|
-| A4 | One fewer potion slot |
-| A5 | Start with Ascender's Bane |
-| A8 | Threats use enemies' ascension HP |
-| A9 | Threats use enemies' ascension damage |
-| A10 | Two Act 3 bosses |
+- **Update:** **Data… → Update data now**. Never automatic. The download layers over the bundle; on failure the current data stays. **Revert to bundled** drops it. The Data window can switch to the stable branch or another source (a base URL is the Codex API; a `.json` URL is a data pack).
+- **Fix an entity:** a partial data pack in `user.json` in the data folder overrides by id.
+- **Regenerate the bundle:** `cargo run -p spire-data --bin refresh-bundle`.
 
-These are read from the ascension data itself.
+## Playbook (strategy as data)
 
-Exact enemy lineups ("3× Corpse Slug", "3 of 5 Ruby Raiders", "Fogmog +
-Eye With Teeth mid-fight") and average damage taken per fight are aggregated
-from recent community-submitted runs on Spire Codex.
+`data/playbook.json` holds what the dashboard believes: tag and role rules and per-card overrides, big-hit and long-fight thresholds, `relic_fits`, `event_fits` and `short`, card-reward `picks`, run-report `report` lines, simulator assumptions (`simulation`), and how composition is measured (`composition`: ascension, builds, player cap, confidence, smallest gap; the ranges and warnings themselves are measured at each data refresh). **Export playbook** in the Data window, edit, **Reload from disk**.
 
-To refresh it, open **Data…** and press **Update data now**. Nothing updates
-automatically. The download is saved locally and layered over the bundled
-snapshot. If anything fails, the current data is kept. **Revert to bundled**
-drops the download.
-
-The source is configurable in the same window. A base URL means the Spire Codex
-API; a URL ending in `.json` is read as a data pack in this app's own format
-(see `docs/ARCHITECTURE.md`).
-
-To fix or add an entity by hand, put a partial data pack in `user.json` in the
-data folder. It overrides by id.
-
-To regenerate the bundled snapshot:
-
-```bash
-cargo run -p spire-data --bin refresh-bundle
-```
-
-## Tuning the strategy (playbook)
-
-Everything the dashboard *believes* lives in `data/playbook.json`, not in code:
-
-- which card features mean which tag, and which tags give which role
-- per-card tag and role overrides
-- how composition is measured (`composition`): the ascension and builds of
-  community runs used, how much one player can count, and how sure a
-  composition warning must be (confidence, smallest win-rate gap). The
-  ranges and the warnings themselves come from community runs at each data
-  refresh, not from the playbook
-- thresholds for "big hit" and "long fight"
-- when a relic is crucial to a deck (`relic_fits`: the cards it counts and
-  how many, or the shortfall it fixes) and when a deck counts as desperately
-  short of Block or max HP (`short`)
-- when an event option is worth looking for (`event_fits`: what it must do,
-  what rules it out, and when the deck needs it, by the same tests plus HP)
-- what card-reward suggestions show (`picks`): how many, how much of a line
-  may be missing, how often its missing card must be offered, and how much
-  better a line or filler must do
-- what the run report counts as a likely cause (`report`): how many causes,
-  low HP, an act's damage against players', a big loss, smithing on low HP
-  and gold left unspent
-- what the deck simulator assumes where the game data is silent (`simulation`):
-  cards drawn per turn, hand limit, turns and fights simulated, and hits that
-  bring back a shot Arrow
-
-**Export playbook** in the Data window copies it to your data folder. Edit it,
-then press **Reload from disk**.
-
-To see how the current playbook classifies every card and encounter:
-
-```bash
-cargo run -p spire-data --example audit -- --cards
-```
-
-To run the deck simulator on every starter deck:
-
-```bash
-cargo run --release -p spire-data --example audit -- --sim
-```
+Inspect it with `cargo run --release -p spire-data --example audit -- --cards` (or `--sim`, `--tags`, `--roles <pages>`; full list in `CLAUDE.md`).
 
 ## Development
 
@@ -319,9 +91,6 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-See `docs/ARCHITECTURE.md` for the design and extension points, and
-`docs/PERFORMANCE.md` for benchmarks and the rules that keep frames cheap
-on weak hardware.
+Design: [ARCHITECTURE.md](docs/ARCHITECTURE.md). Frame budget and UI rules: [PERFORMANCE.md](docs/PERFORMANCE.md).
 
-Game data comes from Spire Codex (community-maintained). Not affiliated with
-Mega Crit.
+Game data from Spire Codex (community-maintained). Not affiliated with Mega Crit.
