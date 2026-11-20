@@ -142,8 +142,8 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
 
 /// Next fight's list takes at most this share of the window's height (and
 /// at least `NEXT_FIGHT_MIN` points), then scrolls.
-const NEXT_FIGHT_SHARE: f32 = 0.4;
-const NEXT_FIGHT_MIN: f32 = 240.0;
+const NEXT_FIGHT_SHARE: f32 = 0.3;
+const NEXT_FIGHT_MIN: f32 = 200.0;
 
 /// The fight the game is in, above Next fight (following only, not for
 /// bosses: those have the act panel).
