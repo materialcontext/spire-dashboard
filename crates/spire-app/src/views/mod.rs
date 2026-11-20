@@ -203,15 +203,24 @@ pub fn root(
             if boss_floor {
                 culled(ui, ("act-wide", g, v.combat.map(|c| c.generation)), |ui| act::show(ui, v, out));
                 ui.add_space(GAP);
-                // No `?` rooms are left, so no relic lookout.
+                // Next fight steps aside; the relic and card suggestions stay.
                 if ui.available_width() > 680.0 {
                     ui.columns(2, |cols| {
                         culled(&mut cols[0], ("breakdown", g, v.combat.map(|c| c.generation)), |ui| {
                             breakdown::show(ui, v)
                         });
+                        if lookout::show(&mut cols[1], v, out) {
+                            cols[1].add_space(GAP);
+                        }
+                        picks::show(&mut cols[1], v, out);
                     });
                 } else {
                     breakdown::show(ui, v);
+                    ui.add_space(GAP);
+                    if lookout::show(ui, v, out) {
+                        ui.add_space(GAP);
+                    }
+                    picks::show(ui, v, out);
                 }
             } else if ui.available_width() > 680.0 {
                 ui.columns(2, |cols| {
