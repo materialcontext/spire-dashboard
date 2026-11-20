@@ -1,5 +1,16 @@
-//! Relic lookout: relics crucial to this deck that a `?` room this act can
-//! still give, and so worth steering into `?` rooms for.
+//! Lookout: what a `?` room this act can still give that this deck needs,
+//! and so is worth steering into `?` rooms for. Two kinds, one shape:
+//! - **Relics** crucial to the deck (`relic_fits`), below.
+//! - **Event options** that do what the deck needs (`event_fits`): remove
+//!   or transform a curse, raise max HP when short of it, heal when low.
+//!   What an option does is data (measured from community runs: how often
+//!   taking it removed a card, healed, cost HP…); when the deck needs it is
+//!   the playbook's, with the same tests as relics plus low HP. Options that
+//!   also do what the rule rules out (`unless`: a curse for a curse) don't
+//!   count.
+//!
+//! Each warning names its sources: the event and option, how often it
+//! delivers, how often runs meet the event this act, and what it costs.
 //!
 //! A relic is crucial when the deck meets one of the playbook's
 //! `relic_fits`:
@@ -23,26 +34,43 @@
 use crate::analysis::benchmark;
 use crate::analysis::deck::{ClassifiedCard, DeckProfile};
 use crate::analysis::tags::Tag;
-use crate::catalog::{Catalog, Event, Rarity, Relic};
+use crate::catalog::{Catalog, EffectKind, Event, EventEffect, EventOption, Rarity, Relic};
 use crate::ids::{EventId, RelicId};
-use crate::playbook::{Playbook, RelicFit, Shortfall};
+use crate::playbook::{EventFit, Playbook, RelicFit, Shortfall, When};
 use crate::run::RunState;
 
 /// Something worth fishing for, and where to find it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Lookout {
-    /// The relic's name, or the shortfall ("Short of Block").
+    /// The relic's name, the shortfall ("Short of Block"), or the event
+    /// rule's title ("Remove a curse").
     pub title: String,
     /// "6 Powers: each deals 8 damage to ALL enemies when played."
     pub why: String,
-    /// The relics that would answer it and that this act's `?` rooms can
-    /// give, none held.
-    pub relics: Vec<RelicId>,
-    /// Where they can come from this act, likeliest first.
+    pub wanted: Wanted,
+    /// Where it can come from this act, likeliest first.
     pub sources: Vec<Source>,
 }
 
+/// What a lookout is after.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Wanted {
+    /// Relics that would answer it and that this act's `?` rooms can give,
+    /// none held.
+    Relics(Vec<RelicId>),
+    /// An event option doing one of these.
+    Effects(Vec<EffectKind>),
+}
+
 impl Lookout {
+    /// The relics it's after (none for an event option).
+    pub fn relics(&self) -> &[RelicId] {
+        match &self.wanted {
+            Wanted::Relics(r) => r,
+            Wanted::Effects(_) => &[],
+        }
+    }
+
     /// The likeliest source's chance this act, when known.
     pub fn best_chance(&self) -> f32 {
         self.sources.iter().filter_map(Source::chance).fold(0.0, f32::max)
@@ -60,6 +88,9 @@ pub struct Source {
     pub odds: f32,
     /// Share of community runs that came to it in this act.
     pub met: Option<f32>,
+    /// What the option costs, from community runs (HP, max HP, a curse,
+    /// gold).
+    pub costs: Vec<EventEffect>,
 }
 
 /// Where a relic comes from.
@@ -87,10 +118,13 @@ impl Source {
     }
 }
 
-/// Why a fit holds for this run (its cards, its shortfall, or both), or
-/// `None` when it doesn't.
-pub fn fit_holds(
-    fit: &RelicFit,
+/// Cards matching a rule are named when there are this many or fewer.
+const NAMED: usize = 3;
+
+/// Why a rule's `when` holds for this run (its cards, its shortfall, its
+/// HP), or `None` when it doesn't.
+pub fn holds(
+    when: &When,
     state: &RunState,
     deck: &[ClassifiedCard],
     profile: &DeckProfile,
@@ -98,17 +132,56 @@ pub fn fit_holds(
     playbook: &Playbook,
 ) -> Option<String> {
     let mut why = Vec::new();
-    if let Some(cards) = &fit.cards {
-        let n = deck.iter().filter(|c| c.unmet.is_none() && c.card.is_some_and(|card| cards.matches(card))).count();
-        if (n as u32) < fit.at_least.max(1) {
+    if let Some(cards) = &when.cards {
+        let matched: Vec<&str> = deck
+            .iter()
+            .filter(|c| c.unmet.is_none())
+            .filter_map(|c| c.card.filter(|card| cards.matches(card)))
+            .map(|card| card.name.as_str())
+            .collect();
+        let n = matched.len();
+        if (n as u32) < when.at_least.max(1) {
             return None;
         }
-        why.push(format!("{n} {}", fit.what));
+        let what = if n == 1 && !when.what_one.is_empty() { &when.what_one } else { &when.what };
+        // A few are named ("2× Inflame").
+        let mut names: Vec<(&str, usize)> = Vec::new();
+        for m in &matched {
+            match names.iter_mut().find(|(name, _)| name == m) {
+                Some((_, k)) => *k += 1,
+                None => names.push((m, 1)),
+            }
+        }
+        let named: Vec<String> =
+            names.iter().map(|(name, k)| if *k > 1 { format!("{k}× {name}") } else { name.to_string() }).collect();
+        why.push(if n <= NAMED { format!("{n} {what} ({})", named.join(", ")) } else { format!("{n} {what}") });
     }
-    if let Some(short) = fit.short_of {
+    if let Some(short) = when.short_of {
         why.push(shortfall(short, state, profile, catalog, playbook)?);
     }
+    if let Some(below) = when.hp_below {
+        if state.max_hp <= 0 || state.hp_fraction() >= below {
+            return None;
+        }
+        why.push(format!("HP {}/{}", state.hp, state.max_hp));
+    }
     (!why.is_empty()).then(|| why.join("; "))
+}
+
+/// What an option costs: its cost effects, by community runs.
+fn costs(option: Option<&EventOption>) -> Vec<EventEffect> {
+    option.map_or_else(Vec::new, |o| o.effects.iter().filter(|e| e.kind.is_cost()).copied().collect())
+}
+
+/// The room a source is in: the event, the option and what it requires.
+fn event_room(e: &Event, option: Option<&EventOption>, one_of: u32) -> Room {
+    Room::Event {
+        event: e.id.clone(),
+        name: e.name.clone(),
+        option: option.map(|o| (o.title.clone(), o.text.clone())),
+        one_of,
+        requires: e.requires.iter().filter(|r| !r.starts_with("Act ")).cloned().collect(),
+    }
 }
 
 /// Why the deck is desperately short, or `None` when it isn't. Measured
@@ -168,21 +241,20 @@ fn sources(relics: &[RelicId], state: &RunState, catalog: &Catalog, events: &[&E
     for e in events {
         let given: Vec<_> = e.relics.iter().filter(|r| relics.contains(&r.relic)).collect();
         let Some(first) = given.first() else { continue };
+        // Named on a later screen, the option has no text of its own here.
         let option = first.option.as_ref().map(|t| {
-            let text = e.options.iter().find(|o| &o.title == t).map(|o| o.text.clone()).unwrap_or_default();
-            (t.clone(), text)
+            e.options
+                .iter()
+                .find(|o| &o.title == t)
+                .cloned()
+                .unwrap_or_else(|| EventOption { title: t.clone(), ..Default::default() })
         });
         out.push(Source {
-            room: Room::Event {
-                event: e.id.clone(),
-                name: e.name.clone(),
-                option,
-                one_of: first.one_of,
-                requires: e.requires.iter().filter(|r| !r.starts_with("Act ")).cloned().collect(),
-            },
+            room: event_room(e, option.as_ref(), first.one_of),
             gives: given.iter().map(|r| r.relic.clone()).collect(),
             odds: given.iter().map(|r| 1.0 / r.one_of.max(1) as f32).sum::<f32>().min(1.0),
             met: e.met.get(act_id).copied(),
+            costs: costs(option.as_ref()),
         });
     }
     if let Some(act) = catalog.acts.get(act_id) {
@@ -196,7 +268,34 @@ fn sources(relics: &[RelicId], state: &RunState, catalog: &Catalog, events: &[&E
             }
         }
         if !gives.is_empty() {
-            out.push(Source { room: Room::Treasure, gives, odds, met: act.unknown_treasure });
+            out.push(Source { room: Room::Treasure, gives, odds, met: act.unknown_treasure, costs: Vec::new() });
+        }
+    }
+    out.sort_by(|a, b| b.chance().unwrap_or(0.0).total_cmp(&a.chance().unwrap_or(0.0)));
+    out
+}
+
+/// The event options this act that answer a rule: one source per option
+/// doing one of its effects and none of its `unless`.
+fn option_sources(fit: &EventFit, state: &RunState, events: &[&Event]) -> Vec<Source> {
+    let Some(act_id) = &state.act else { return Vec::new() };
+    let mut out: Vec<Source> = Vec::new();
+    for e in events {
+        for o in &e.options {
+            if fit.unless.iter().any(|k| o.effect(*k).is_some()) {
+                continue;
+            }
+            let odds = fit.effects.iter().filter_map(|k| o.effect(*k)).map(|x| x.rate).fold(0.0, f32::max);
+            if odds <= 0.0 {
+                continue;
+            }
+            out.push(Source {
+                room: event_room(e, Some(o), 1),
+                gives: Vec::new(),
+                odds: odds.min(1.0),
+                met: e.met.get(act_id).copied(),
+                costs: costs(Some(o)).into_iter().filter(|c| !fit.effects.contains(&c.kind)).collect(),
+            });
         }
     }
     out.sort_by(|a, b| b.chance().unwrap_or(0.0).total_cmp(&a.chance().unwrap_or(0.0)));
@@ -219,15 +318,16 @@ pub fn lookout(
     let mut out: Vec<Lookout> = Vec::new();
 
     // By the deck's cards: one warning per relic, with what it does.
-    for fit in playbook.relic_fits.iter().filter(wanted).filter(|f| f.short_of.is_none()) {
-        let Some(why) = fit_holds(fit, state, deck, profile, catalog, playbook) else { continue };
-        if out.iter().any(|l| l.relics.contains(&fit.relic)) {
+    for fit in playbook.relic_fits.iter().filter(wanted).filter(|f| f.when.short_of.is_none()) {
+        let Some(why) = holds(&fit.when, state, deck, profile, catalog, playbook) else { continue };
+        if out.iter().any(|l| l.relics().contains(&fit.relic)) {
             continue;
         }
         let relics = vec![fit.relic.clone()];
         let sources = sources(&relics, state, catalog, &events);
         if !sources.is_empty() {
-            out.push(Lookout { title: name(&fit.relic), why: format!("{why}: {}", fit.why), relics, sources });
+            let wanted = Wanted::Relics(relics);
+            out.push(Lookout { title: name(&fit.relic), why: format!("{why}: {}", fit.why), wanted, sources });
         }
     }
 
@@ -237,8 +337,8 @@ pub fn lookout(
             .relic_fits
             .iter()
             .filter(wanted)
-            .filter(|f| f.short_of == Some(short))
-            .filter(|f| fit_holds(f, state, deck, profile, catalog, playbook).is_some())
+            .filter(|f| f.when.short_of == Some(short))
+            .filter(|f| holds(&f.when, state, deck, profile, catalog, playbook).is_some())
             .collect();
         let Some(why) = fits.first().and_then(|_| shortfall(short, state, profile, catalog, playbook)) else {
             continue;
@@ -248,7 +348,18 @@ pub fn lookout(
         // Only the relics this act's `?` rooms can give, in the playbook's order.
         let relics: Vec<RelicId> = wanted.into_iter().filter(|r| sources.iter().any(|s| s.gives.contains(r))).collect();
         if !sources.is_empty() {
-            out.push(Lookout { title: format!("Short of {}", short.label()), why, relics, sources });
+            let title = format!("Short of {}", short.label());
+            out.push(Lookout { title, why, wanted: Wanted::Relics(relics), sources });
+        }
+    }
+
+    // Event options: one warning per rule that holds.
+    for fit in &playbook.event_fits {
+        let Some(why) = holds(&fit.when, state, deck, profile, catalog, playbook) else { continue };
+        let sources = option_sources(fit, state, &events);
+        if !sources.is_empty() {
+            let wanted = Wanted::Effects(fit.effects.clone());
+            out.push(Lookout { title: fit.title.clone(), why: format!("{why}: {}", fit.why), wanted, sources });
         }
     }
     out.sort_by(|a, b| b.best_chance().total_cmp(&a.best_chance()));

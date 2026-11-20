@@ -289,14 +289,22 @@ fn tags(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
 
 fn lookout(cat: &Catalog, pb: &spire_core::Playbook, paths: &[String]) {
     use spire_core::analysis::deck::{classify_run, profile};
-    use spire_core::analysis::events::fit_holds;
+    use spire_core::analysis::events::holds;
+    use spire_core::playbook::When;
     let mut samples = Vec::new();
     for p in paths {
         let bytes = std::fs::read(p).unwrap_or_else(|e| panic!("{p}: {e}"));
         let text = spire_data::fetch::decode_maybe_gzip(&bytes).unwrap_or_else(|e| panic!("{p}: {e}"));
         samples.extend(spire_data::benchmarks::samples(&text, cat));
     }
-    println!("== relic_fits against {} community decks at the end of acts they cleared", samples.len());
+    // Every rule, relic and event, by name and its `when`.
+    let rules: Vec<(String, &When)> = pb
+        .relic_fits
+        .iter()
+        .map(|f| (cat.relics.get(&f.relic).map_or(f.relic.to_string(), |r| r.name.clone()), &f.when))
+        .chain(pb.event_fits.iter().map(|f| (format!("event: {}", f.title), &f.when)))
+        .collect();
+    println!("== relic_fits and event_fits against {} community decks at the end of acts they cleared", samples.len());
     println!("   (a shortfall is measured against decks that cleared the act before)");
     let mut acts: BTreeMap<u8, usize> = BTreeMap::new();
     for s in &samples {
@@ -306,19 +314,24 @@ fn lookout(cat: &Catalog, pb: &spire_core::Playbook, paths: &[String]) {
     for s in &samples {
         let deck = classify_run(&s.state, cat, pb);
         let prof = profile(&deck);
-        for (i, fit) in pb.relic_fits.iter().enumerate() {
-            if fit_holds(fit, &s.state, &deck, &prof, cat, pb).is_some() {
+        for (i, (_, when)) in rules.iter().enumerate() {
+            if holds(when, &s.state, &deck, &prof, cat, pb).is_some() {
                 *hits.entry((i, s.act)).or_default() += 1;
             }
         }
     }
-    for (i, fit) in pb.relic_fits.iter().enumerate() {
-        let name = cat.relics.get(&fit.relic).map_or(fit.relic.to_string(), |r| r.name.clone());
-        let rule = match (fit.short_of, &fit.cards) {
-            (Some(short), _) => format!("short of {}", short.label()),
-            (None, _) => format!("{} {}", fit.at_least, fit.what),
-        };
-        let mut line = format!("{name:<22} {rule:<36}");
+    for (i, (name, when)) in rules.iter().enumerate() {
+        let mut rule = Vec::new();
+        if when.cards.is_some() {
+            rule.push(format!("{} {}", when.at_least, when.what));
+        }
+        if let Some(short) = when.short_of {
+            rule.push(format!("short of {}", short.label()));
+        }
+        if let Some(below) = when.hp_below {
+            rule.push(format!("HP under {:.0}%", below * 100.0));
+        }
+        let mut line = format!("{name:<26} {:<36}", rule.join(" & "));
         for (act, n) in &acts {
             let h = hits.get(&(i, *act)).copied().unwrap_or(0);
             line.push_str(&format!("  act {}: {:>5.1}%", act + 1, h as f32 * 100.0 / (*n).max(1) as f32));

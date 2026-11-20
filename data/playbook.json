@@ -758,6 +758,42 @@
       "why": "1 max HP after every combat"
     }
   ],
+  "event_fits": [
+    {
+      "title": "Remove a curse",
+      "effects": ["uncurse"],
+      "unless": ["curse"],
+      "cards": {
+        "all": [
+          {
+            "card_type": "curse"
+          },
+          {
+            "not": {
+              "keyword": "Eternal"
+            }
+          }
+        ]
+      },
+      "at_least": 1,
+      "what": "removable curses",
+      "what_one": "removable curse",
+      "why": "removed or transformed, a curse is never drawn again"
+    },
+    {
+      "title": "Raise max HP",
+      "effects": ["max_hp"],
+      "short_of": "max_hp",
+      "why": "max HP carries into every fight left"
+    },
+    {
+      "title": "Heal",
+      "effects": ["heal"],
+      "unless": ["damage"],
+      "hp_below": 0.3,
+      "why": "an event heal saves a rest site for an upgrade"
+    }
+  ],
   "short": {
     "block_share": 0.75,
     "max_hp_points": 5.0

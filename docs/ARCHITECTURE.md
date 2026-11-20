@@ -45,6 +45,7 @@ still there.
   applies Vulnerable.
 - Per-card tag and role overrides; the player's own overrides of both are
   saved apart (`my_tags.json`, `my_roles.json`).
+- When an event option is worth looking for (`event_fits`).
 - When a relic is crucial to a deck (`relic_fits`), and what counts as
   desperately short of Block or max HP (`short`).
 - Per-act targets and thresholds, and what the run report counts as a
@@ -119,16 +120,22 @@ for the run report only: `apply` never reads it.
   monsters an on-death power summons (`threats::lineup_waves`) fight as a
   later stage. The lead way loses least HP unless a clocked fight runs past
   the community's pace; `limits` name the roles that would help.
-- `events`: the relic `lookout`: relics a playbook `relic_fits` rule says are
-  crucial to this deck, by its cards (one warning per relic) or by a
-  shortfall (Block share or max HP gained, under decks that cleared the
-  previous act by the `short` lines; one warning per shortfall naming every
-  relic that fixes it). Sources are the `?` rooms still possible this act:
-  events (not seen this run, allowed by the act) with the option that gives
-  the relic, and a `?` room turned treasure room, whose chest gives a relic
-  by the act's rarity shares at random among the character's pool. Each
-  carries how often community runs come to it in the act. `fit_holds` is
-  the test, shared with `audit --lookout`. Empty unless something qualifies.
+- `events`: the `lookout`: what a `?` room this act can still give that
+  the deck needs, in two kinds (`Wanted`). **Relics** a playbook
+  `relic_fits` rule says are crucial, by the deck's cards (one warning per
+  relic) or by a shortfall (Block share or max HP gained, under decks that
+  cleared the previous act by the `short` lines; one warning per shortfall
+  naming every relic that fixes it). **Event options** an `event_fits` rule
+  asks for: options whose measured effects include one of its `effects` and
+  none of its `unless` (one warning per rule). Both kinds share `When` (cards
+  counted, shortfall, HP under a share) and its test, `holds`, which
+  `audit --lookout` uses too. Sources are the `?` rooms still possible this
+  act: events (not seen this run, allowed by the act) with the option, and
+  for relics a `?` room turned treasure room, whose chest gives a relic by
+  the act's rarity shares at random among the character's pool. Each carries
+  how often community runs come to it in the act, how often the option
+  delivers, and what it costs (its cost effects). Empty unless something
+  qualifies.
 - `lines`: card lines and card-reward suggestions. `measure` (at data
   refresh) finds, per character and act, sets of two or three cards whose
   community decks beat the act's boss more often together than with any
@@ -360,7 +367,13 @@ names (Trash Heap's "random forgotten Relic" is one of five, Doll Room lets
 you choose one of three), and the share of runs that met each event in each
 act (by act id, so Overgrowth and Underdocks stay apart) goes into
 `Event::met`. Relics from the general pools are left out: no one can fish an
-event for them. The same replay that builds benchmarks takes each deck going into every
+event for them. Each event option's `effects` come from the floors it was
+taken on (credited to the first option taken, so later screens count): how
+often it removed, transformed, upgraded, enchanted or added cards, added a
+curse, gave a relic or potion, healed, raised or cut max HP, cost HP, gave
+or took gold, and by how much. `uncurse` marks an option seen taking out a
+curse (one limited to starter cards never is). Options taken fewer than 20
+times, and effects in under 10% of picks, are left out. The same replay that builds benchmarks takes each deck going into every
 boss fight, with whether the run got past it; with the card rewards offered
 per act (`card_lines.rs`), `analysis::lines::measure` turns them into
 `Catalog::card_lines`. The adapter also reads the source's card metrics for

@@ -186,7 +186,19 @@ mod tests {
             let chest = cat.acts.values().any(|a| a.chest_rarity.contains_key(&relic.rarity));
             let event = cat.events.values().any(|e| e.relics.iter().any(|r| r.relic == fit.relic));
             assert!(chest || event, "neither a chest nor an event gives {} ({:?})", fit.relic, relic.rarity);
-            assert!(fit.cards.is_some() || fit.short_of.is_some(), "{} has neither cards nor short_of", fit.relic);
+            assert!(fit.when.is_set(), "{} tests nothing", fit.relic);
+        }
+    }
+
+    #[test]
+    fn event_fits_name_effects_some_event_option_has() {
+        let cat = spire_core::Catalog::from_layers([bundled_pack()]);
+        for fit in &bundled_playbook().event_fits {
+            assert!(fit.when.is_set(), "{} tests nothing", fit.title);
+            let answered = cat.events.values().flat_map(|e| &e.options).any(|o| {
+                fit.effects.iter().any(|k| o.effect(*k).is_some()) && !fit.unless.iter().any(|k| o.effect(*k).is_some())
+            });
+            assert!(answered, "no event option answers {}", fit.title);
         }
     }
 
