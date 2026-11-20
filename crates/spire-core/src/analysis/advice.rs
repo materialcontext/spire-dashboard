@@ -5,6 +5,7 @@ use crate::analysis::composition::Composition;
 use crate::analysis::deck::{Coverage, DeckProfile};
 use crate::analysis::threats::{Scaling, ThreatPreview, preview};
 use crate::catalog::Catalog;
+use crate::catalog::Measure;
 use crate::playbook::Playbook;
 use crate::run::RunState;
 
@@ -76,14 +77,29 @@ pub fn advise(state: &RunState, catalog: &Catalog, playbook: &Playbook, deck: &D
     out
 }
 
-/// One line per composition warning, the biggest win-rate gap first.
+/// One line per composition warning, the biggest win-rate gap first. A
+/// role's job and its share of the deck are two views of one problem: only
+/// the bigger gap of the two is a line.
 pub fn composition(c: &Composition) -> Vec<Advice> {
+    let role = |m: Measure| match m {
+        Measure::Job(r) | Measure::Share(r) => Some(r),
+        _ => None,
+    };
+    let mut seen = Vec::new();
     c.flags()
         .into_iter()
+        .filter(|row| match role(row.measure) {
+            Some(r) if seen.contains(&r) => false,
+            Some(r) => {
+                seen.push(r);
+                true
+            }
+            None => true,
+        })
         .map(|row| Advice {
             severity: Severity::Watch,
-            text: row.summary(),
-            detail: row.evidence().unwrap_or_default(),
+            text: row.flag.map(|f| crate::analysis::composition::phrase(row.measure, f.side)).unwrap_or_default(),
+            detail: format!("{}\n{}", row.numbers(), row.evidence().unwrap_or_default()),
         })
         .collect()
 }

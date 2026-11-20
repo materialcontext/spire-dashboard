@@ -121,11 +121,15 @@ pub fn phrase(measure: Measure, side: Side) -> String {
 impl Row {
     /// "Too little Mitigation: 9 Block, decks that beat the boss 12–18".
     pub fn summary(&self) -> String {
-        let m = self.measure;
         let side = self.flag.map_or(Side::Low, |f| f.side);
+        format!("{}: {}", phrase(self.measure, side), self.numbers())
+    }
+
+    /// "9 Block; decks that beat the boss 12–18".
+    pub fn numbers(&self) -> String {
+        let m = self.measure;
         format!(
-            "{}: {}; decks that beat the boss {}–{}",
-            phrase(m, side),
+            "{}; decks that beat the boss {}–{}",
             m.format(self.value),
             m.format(self.range.p25),
             m.format(self.range.p75)
@@ -231,7 +235,13 @@ pub fn standing(
             let to = m.of(end)?;
             let from = match entering {
                 Some(b) => m.of(b).unwrap_or(to),
-                None => start.get(m).map_or(to, |v| Quartiles { p25: *v, p50: *v, p75: *v }),
+                // Every starting deck is the same: centre the boss range's
+                // spread on it, or a single point would flag any pick.
+                None => start.get(m).map_or(to, |v| Quartiles {
+                    p25: v - (to.p50 - to.p25),
+                    p50: *v,
+                    p75: v + (to.p75 - to.p50),
+                }),
             };
             let range = from.lerp(to, progress);
             let value = values.get(m).copied().unwrap_or(0.0);
@@ -469,16 +479,16 @@ mod tests {
             RunState { character: Some(CharacterId::new("IRONCLAD")), act: Some(act), ..Default::default() };
         let block = |v: f32| -> BTreeMap<Measure, f32> { [(Measure::Job(Role::Mitigation), v)].into_iter().collect() };
         let start = block(6.0);
-        // Floor 0: the range is the starting deck's own value.
+        // Floor 0: the starting deck's value, with the boss range's spread.
         let c = standing(&state, &cat, &block(6.0), &start).expect("a benchmark");
         let row = c.row(Measure::Job(Role::Mitigation)).unwrap();
-        assert_eq!(row.range, q(6.0, 6.0, 6.0));
+        assert_eq!(row.range, q(2.0, 6.0, 10.0));
         assert!(row.flag.is_none());
-        // Halfway: halfway to the boss range; 7 Block is under it, a risk.
+        // Halfway: halfway to the boss range; 5 Block is under it, a risk.
         state.act_floor = 5;
-        let c = standing(&state, &cat, &block(7.0), &start).unwrap();
+        let c = standing(&state, &cat, &block(5.0), &start).unwrap();
         let row = c.row(Measure::Job(Role::Mitigation)).unwrap();
-        assert_eq!(row.range, q(8.0, 10.0, 12.0));
+        assert_eq!(row.range, q(6.0, 10.0, 14.0));
         assert_eq!(row.flag.map(|f| f.side), Some(Side::Low));
         assert_eq!(c.flags().len(), 1);
         // Over the range: no risk on that side, no flag.

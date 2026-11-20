@@ -9,7 +9,7 @@ Slay the Spire 2 macro dashboard: Rust workspace, egui UI. Read `docs/ARCHITECTU
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo fmt --all --check`
 - `cargo run -p spire-data --bin refresh-bundle`: regenerate `data/catalog.json` from Spire Codex
-- `cargo run -p spire-data --example audit [-- --cards | --sim | --mechanics | --outlook | --patterns | --tags | --lookout <run-export pages>]`: see how the playbook reads the data, simulate every starter deck, list what the simulator reads from every power and relic, play every starter deck against every elite, print every elite and boss turn by turn, count tags per character and list untagged class cards, or count how many community decks each `relic_fits` and `event_fits` rule flags
+- `cargo run -p spire-data --example audit [-- --cards | --sim | --mechanics | --outlook | --patterns | --tags | --lookout <run-export pages> | --roles <run-export pages>]`: see how the playbook reads the data, simulate every starter deck, list what the simulator reads from every power and relic, play every starter deck against every elite, print every elite and boss turn by turn, count tags per character and list untagged class cards, count how many community decks each `relic_fits` and `event_fits` rule flags, or show how boss win rates move with each composition measure (A10, per character and pooled; `BUILD=` splits by build)
 - `dotnet build mod/SpireDashboardLink/SpireDashboardLink.csproj -c Release`: build the companion mod (.NET 8 SDK; builds without the game)
 
 fmt, clippy and test must pass before pushing (CI runs them, and builds the mod).
