@@ -1,18 +1,18 @@
 //! Deck composition: by card type (one stacked bar) and by macro role.
 
 use eframe::egui::{RichText, Sense, Ui, vec2};
-use spire_core::analysis::benchmark::Measure;
+use spire_core::analysis::composition::{Composition, Row};
 use spire_core::analysis::tags::Tag;
 use spire_core::catalog::CardType;
+use spire_core::catalog::Measure;
 use spire_core::playbook::Role;
 
 use crate::app::ViewCtx;
 use crate::style;
-use crate::widgets::{bar, caption, panel};
+use crate::widgets::{bar, caption, panel, range_bar};
 
 pub fn show(ui: &mut Ui, v: &ViewCtx) {
     let d = &v.dash.deck;
-    let plan = v.playbook.act(v.state.act_index);
     panel(ui, "Deck composition", Some(&format!("{} cards", d.total)), |ui| {
         // Card types as one proportional bar with a legend underneath.
         let width = ui.available_width();
@@ -40,25 +40,26 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
         });
 
         ui.add_space(crate::style::space::s());
-        ui.label(caption("Roles")).on_hover_text(
-            "Bright: cards you added. Faded: starter Strikes and Defends. Tick: this act's target. \
-             Hover a role for how well the deck does it (simulated).",
-        );
-        let target = |r: Role| plan.and_then(|p| p.targets.iter().find(|t| t.role == r)).map(|t| t.min);
-        let max_role =
-            Role::ALL.iter().map(|r| (d.role(*r) + d.starter_role(*r)).max(target(*r).unwrap_or(0))).max().unwrap_or(1);
+        let comp = v.combat.and_then(|c| c.composition.as_ref());
         let jobs = v.combat.map(|c| &c.jobs);
-        for r in Role::ALL {
-            let row = bar(ui, r.label(), d.role(r), d.starter_role(r), max_role, target(r), style::role_color(r));
-            // Built only while hovered: what the deck does, then how a card
-            // counts for the role.
-            row.on_hover_ui(|ui| {
-                ui.set_max_width(360.0);
-                if let Some(j) = jobs {
-                    ui.label(RichText::new(j.describe(r)).strong());
+        match comp {
+            Some(c) => roles(ui, v, c),
+            None => {
+                // No benchmark for this act (or not simulated yet): counts.
+                ui.label(caption("Roles"))
+                    .on_hover_text("Bright: cards you added. Faded: starter Strikes and Defends.");
+                let max = Role::ALL.iter().map(|r| d.role(*r) + d.starter_role(*r)).max().unwrap_or(1);
+                for r in Role::ALL {
+                    let row = bar(ui, r.label(), d.role(r), d.starter_role(r), max, style::role_color(r));
+                    row.on_hover_ui(|ui| {
+                        ui.set_max_width(360.0);
+                        if let Some(j) = jobs {
+                            ui.label(RichText::new(j.describe(r)).strong());
+                        }
+                        ui.label(v.playbook.role_criteria(r));
+                    });
                 }
-                ui.label(v.playbook.role_criteria(r));
-            });
+            }
         }
         if let Some(j) = jobs {
             ui.label(caption(format!("Bad draws: {:.0}% of usual damage", j.floor * 100.0)))
@@ -73,11 +74,12 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
             });
         }
         // Draw and energy aren't roles: they help every role on bad draws.
-        bar(ui, "Draw", d.tag(Tag::Draw), 0, max_role, None, style::tag_color_of(Tag::Draw));
-        bar(ui, "Energy gain", d.tag(Tag::Energy), 0, max_role, None, style::tag_color_of(Tag::Energy));
+        let max_role = Role::ALL.iter().map(|r| d.role(*r) + d.starter_role(*r)).max().unwrap_or(1);
+        bar(ui, "Draw", d.tag(Tag::Draw), 0, max_role, style::tag_color_of(Tag::Draw));
+        bar(ui, "Energy gain", d.tag(Tag::Energy), 0, max_role, style::tag_color_of(Tag::Energy));
         // Stars only matter to decks that make them (the Regent's).
         if d.star_makers > 0 {
-            bar(ui, "Star gain", d.star_makers, 0, max_role, None, style::star_color());
+            bar(ui, "Star gain", d.star_makers, 0, max_role, style::star_color());
         }
         let counts: Vec<String> = [(d.upgraded, "upgraded"), (d.no_role, "with no role"), (d.unknown, "unknown")]
             .into_iter()
@@ -87,71 +89,82 @@ pub fn show(ui: &mut Ui, v: &ViewCtx) {
         if !counts.is_empty() {
             ui.label(caption(counts.join(" · ")));
         }
-        if let Some(b) = v.combat.and_then(|c| c.bench.as_ref()) {
-            benchmark(ui, v, b);
-        }
     });
 }
 
-/// "Mitigation  5 · cleared decks 6–10", shortfalls first, then the rest
-/// in one line.
-fn benchmark(ui: &mut Ui, v: &ViewCtx, b: &crate::app::Bench) {
-    ui.add_space(crate::style::space::s());
-    let every = if b.all_characters { " (all characters)" } else { "" };
-    ui.label(
-        RichText::new(format!("Vs. {} decks that cleared Act {}{every}", b.decks, v.state.act_index + 1)).strong(),
-    )
-    .on_hover_text(
-        "Community runs' decks at the end of the act, middle half shown. Listed: where your deck is \
-         worse than 3 in 4 of them. Every character's decks are used when this one has too few.",
-    );
-    let short: Vec<_> = b.rows.iter().filter(|r| r.short).collect();
-    if short.is_empty() {
-        ui.label(RichText::new("No shortfalls").small().color(style::color::good()));
+/// Each role's job on the range of decks that beat this act's boss, then
+/// damage to Block, deck size and dead draws. Warnings in the warning
+/// colour; the numbers, the role's share of the deck and the evidence on
+/// hover.
+fn roles(ui: &mut Ui, v: &ViewCtx, c: &Composition) {
+    let d = &v.dash.deck;
+    let who = if c.all_characters { "all characters'" } else { "this character's" };
+    ui.label(caption("Roles")).on_hover_text(format!(
+        "Each role's job, simulated, on the range of A10 decks ({who}, {:.0} effective) that beat the Act {} \
+         boss, going into it: band, the middle half; tick, the median. The range moves from entering the act to \
+         its boss as you play it. Amber: a side that loses the boss more often in community runs.",
+        c.effective,
+        c.act + 1
+    ));
+    fn flagged(r: Option<&Row>) -> Option<&Row> {
+        r.filter(|r| r.flag.is_some())
     }
-    for r in short {
-        ui.horizontal(|ui| {
-            let label = ui.add_sized(
-                [crate::widgets::BAR_LABEL_WIDTH, 16.0],
-                eframe::egui::Label::new(RichText::new(r.measure.label()).small().color(style::color::warn()))
-                    .truncate(),
-            );
-            // Built only while hovered.
-            label.on_hover_ui(|ui| {
-                ui.label(match r.measure {
-                    Measure::Job(role) => {
-                        let tags: Vec<&str> = v.playbook.tags_for(role).iter().map(|t| t.label()).collect();
-                        format!("Look for: {}", tags.join(", "))
-                    }
-                    Measure::Tag(t) => t.describe().to_string(),
-                    Measure::Starter => "Removing Strikes and Defends helps here".to_string(),
-                });
-            });
-            ui.label(
-                RichText::new(format!(
-                    "{} · cleared {}–{}",
-                    value(r.measure, r.yours),
-                    value(r.measure, r.range.p25),
-                    value(r.measure, r.range.p75)
-                ))
-                .small(),
-            );
+    for role in Role::ALL {
+        let Some(job) = c.row(Measure::Job(role)) else { continue };
+        let share = c.row(Measure::Share(role));
+        // A warning on the job or on the role's share of the deck.
+        let warning = flagged(Some(job)).or(flagged(share));
+        let cards = d.role(role) + d.starter_role(role);
+        let text = format!("{} · {cards}", job.measure.format(job.value));
+        let row = range_bar(ui, role.label(), job.value, job.range, style::role_color(role), warning.is_some(), text);
+        row.on_hover_ui(|ui| {
+            ui.set_max_width(380.0);
+            if let Some(w) = warning {
+                ui.label(RichText::new(w.summary()).strong().color(style::color::warn()));
+                if let Some(e) = w.evidence() {
+                    ui.label(e);
+                }
+                ui.add_space(crate::style::space::xs());
+            }
+            ui.label(RichText::new(Measure::Job(role).describe()).strong());
+            ui.label(format!(
+                "{}; decks that beat the boss {}–{} (median {})",
+                job.measure.format(job.value),
+                job.measure.format(job.range.p25),
+                job.measure.format(job.range.p75),
+                job.measure.format(job.range.p50)
+            ));
+            if let Some(s) = share {
+                ui.label(format!(
+                    "{cards} cards, {} of the deck; decks that beat the boss {}–{}",
+                    s.measure.format(s.value),
+                    s.measure.format(s.range.p25),
+                    s.measure.format(s.range.p75)
+                ));
+            }
+            ui.add_space(crate::style::space::xs());
+            ui.label(caption(v.playbook.role_criteria(role)));
         });
     }
-    let fine: Vec<&str> = b.rows.iter().filter(|r| !r.short).map(|r| r.measure.label()).collect();
-    if !fine.is_empty() {
-        ui.label(caption(format!("{} more in range or better", fine.len()))).on_hover_text(fine.join(", "));
-    }
-}
-
-/// A measure's value in its unit: shares as percentages, jobs as the job
-/// lines word them.
-fn value(m: Measure, x: f32) -> String {
-    match m {
-        Measure::Job(Role::ScalingDamage) => format!("×{x:.1}"),
-        Measure::Job(Role::Aoe) => format!("{:.0}%", x * 100.0),
-        Measure::Job(Role::Chip) => format!("{x:.1} hits"),
-        Measure::Job(_) => format!("{x:.0}"),
-        _ => format!("{:.0}%", x * 100.0),
+    for m in [Measure::Balance, Measure::Size, Measure::Dead] {
+        let Some(r) = c.row(m) else { continue };
+        let row =
+            range_bar(ui, &m.label(), r.value, r.range, style::color::text_dim(), r.flag.is_some(), m.format(r.value));
+        row.on_hover_ui(|ui| {
+            ui.set_max_width(380.0);
+            if r.flag.is_some() {
+                ui.label(RichText::new(r.summary()).strong().color(style::color::warn()));
+                if let Some(e) = r.evidence() {
+                    ui.label(e);
+                }
+            }
+            ui.label(RichText::new(m.describe()).strong());
+            ui.label(format!(
+                "Decks that beat the boss {}–{} (median {})",
+                m.format(r.range.p25),
+                m.format(r.range.p75),
+                m.format(r.range.p50)
+            ));
+        });
     }
 }

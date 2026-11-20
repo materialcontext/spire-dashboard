@@ -1,9 +1,12 @@
-//! Macro advice: compares the deck against the act plan and the act boss.
+//! Macro advice: what the act's bosses ask for that the deck lacks
+//! entirely, removable curses, and the deck's composition warnings.
 
+use crate::analysis::composition::Composition;
 use crate::analysis::deck::{Coverage, DeckProfile};
 use crate::analysis::threats::{Scaling, ThreatPreview, preview};
 use crate::catalog::Catalog;
-use crate::playbook::{Playbook, RoleTarget};
+use crate::catalog::Measure;
+use crate::playbook::Playbook;
 use crate::run::RunState;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -37,48 +40,13 @@ pub fn boss_previews(
         .collect()
 }
 
-/// Short lines: the roles missing or thin for the act's targets (one line
-/// each), what each boss wants that the deck lacks (one line per boss), and
-/// removable curses.
+/// Short lines: what each boss wants that the deck has no card for (one
+/// line per boss), and removable curses. Composition warnings come from
+/// [`composition`], once the deck has been simulated.
 pub fn advise(state: &RunState, catalog: &Catalog, playbook: &Playbook, deck: &DeckProfile) -> Vec<Advice> {
     let mut out = Vec::new();
-    let Some(plan) = playbook.act(state.act_index) else { return out };
-    let act = state.act_index + 1;
-
-    let short: Vec<&RoleTarget> = plan.targets.iter().filter(|t| deck.role(t.role) < t.min).collect();
-    let why = |t: &&RoleTarget| {
-        let starter = match deck.starter_role(t.role) {
-            0 => String::new(),
-            n => format!(" ({n} starter, not counted)"),
-        };
-        format!("{}: {} of {} added cards{starter}", t.role.label(), deck.role(t.role), t.min)
-    };
-    let (missing, thin): (Vec<&RoleTarget>, Vec<&RoleTarget>) = short.iter().partition(|t| deck.role(t.role) == 0);
-    if !missing.is_empty() {
-        out.push(Advice {
-            severity: Severity::Urgent,
-            text: format!(
-                "Missing for Act {act}: {}",
-                missing.iter().map(|t| t.role.label()).collect::<Vec<_>>().join(", ")
-            ),
-            detail: missing.iter().map(why).collect::<Vec<_>>().join("\n"),
-        });
-    }
-    if !thin.is_empty() {
-        out.push(Advice {
-            severity: Severity::Watch,
-            text: format!(
-                "Thin for Act {act}: {}",
-                thin.iter()
-                    .map(|t| format!("{} {}/{}", t.role.label(), deck.role(t.role), t.min))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            detail: thin.iter().map(why).collect::<Vec<_>>().join("\n"),
-        });
-    }
     for boss in boss_previews(state, catalog, playbook, deck) {
-        let gaps: Vec<_> = boss.checks.iter().filter(|c| c.coverage != Coverage::Covered).collect();
+        let gaps: Vec<_> = boss.checks.iter().filter(|c| c.coverage == Coverage::Missing).collect();
         if gaps.is_empty() {
             continue;
         }
@@ -107,4 +75,31 @@ pub fn advise(state: &RunState, catalog: &Catalog, playbook: &Playbook, deck: &D
     }
     out.sort_by_key(|a| a.severity);
     out
+}
+
+/// One line per composition warning, the biggest win-rate gap first. A
+/// role's job and its share of the deck are two views of one problem: only
+/// the bigger gap of the two is a line.
+pub fn composition(c: &Composition) -> Vec<Advice> {
+    let role = |m: Measure| match m {
+        Measure::Job(r) | Measure::Share(r) => Some(r),
+        _ => None,
+    };
+    let mut seen = Vec::new();
+    c.flags()
+        .into_iter()
+        .filter(|row| match role(row.measure) {
+            Some(r) if seen.contains(&r) => false,
+            Some(r) => {
+                seen.push(r);
+                true
+            }
+            None => true,
+        })
+        .map(|row| Advice {
+            severity: Severity::Watch,
+            text: row.flag.map(|f| crate::analysis::composition::phrase(row.measure, f.side)).unwrap_or_default(),
+            detail: format!("{}\n{}", row.numbers(), row.evidence().unwrap_or_default()),
+        })
+        .collect()
 }

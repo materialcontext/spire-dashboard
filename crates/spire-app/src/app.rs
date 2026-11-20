@@ -47,23 +47,16 @@ pub struct Combat {
     /// How well the deck does each role, from `sim`.
     pub jobs: spire_core::analysis::jobs::Jobs,
     pub outlooks: Vec<(spire_core::EncounterId, Outlook)>,
-    /// The deck next to community decks that cleared this act, when the
+    /// The deck next to community decks that beat this act's boss, when the
     /// data has a benchmark for it.
-    pub bench: Option<Bench>,
+    pub composition: Option<spire_core::analysis::composition::Composition>,
+    /// Its warnings, for Priorities.
+    pub advice: Vec<spire_core::analysis::Advice>,
     /// Setup piling up, Arrows or Stars running short.
     pub balance: Vec<spire_core::analysis::balance::Warning>,
     /// What to look for in card rewards (lines within reach, then cards for
     /// what the deck lacks against the boss).
     pub picks: Vec<spire_core::analysis::lines::Suggestion>,
-}
-
-/// The deck against a benchmark: which decks, and each measure.
-pub struct Bench {
-    pub decks: u32,
-    /// The character had too few decks: every character's are used.
-    pub all_characters: bool,
-    /// Shortfalls first.
-    pub rows: Vec<spire_core::analysis::benchmark::Comparison>,
 }
 
 impl Combat {
@@ -899,6 +892,24 @@ impl SpireApp {
         }
     }
 
+    /// The deck against decks that beat this act's boss. In act 1 the range
+    /// starts from the character's starting deck, simulated here.
+    fn composition(&self, sim: &DeckSim) -> Option<spire_core::analysis::composition::Composition> {
+        use spire_core::analysis::composition;
+        let values = composition::values(sim, &self.dash.deck);
+        let start = match (&self.state.character, self.state.act_index) {
+            (Some(c), 0) => {
+                let begin = spire_core::RunEvent::start(&self.catalog, c, self.state.ascension)?;
+                let s = spire_core::run::apply(spire_core::run::RunState::default(), &begin);
+                let start_sim = simulate(&s, &self.catalog, &self.playbook.simulation);
+                let profile = spire_core::analysis::deck::run_profile(&s, &self.catalog, &self.playbook);
+                composition::values(&start_sim, &profile)
+            }
+            _ => Default::default(),
+        };
+        composition::standing(&self.state, &self.catalog, &values, &start)
+    }
+
     /// Builds what the open tab needs and nothing else: analytics for the
     /// live run, or the archived runs read from disk.
     fn prepare_tab(&mut self, ctx: &egui::Context) {
@@ -929,14 +940,8 @@ impl SpireApp {
                 }
             }
             let jobs = spire_core::analysis::jobs::measure(&sim);
-            let bench = self.state.character.as_ref().and_then(|c| {
-                let b = spire_core::analysis::benchmark::for_run(&self.catalog, c, self.state.act_index)?;
-                Some(Bench {
-                    decks: b.decks,
-                    all_characters: b.character.is_none(),
-                    rows: spire_core::analysis::benchmark::compare(b, &self.dash.deck, &jobs),
-                })
-            });
+            let composition = self.composition(&sim);
+            let advice = composition.as_ref().map(spire_core::analysis::advice::composition).unwrap_or_default();
             let balance = spire_core::analysis::balance::warnings(&sim, &self.state, &self.catalog, &self.playbook);
             // The act's boss and how the deck fares against it, for the fillers.
             let boss = self.dash.bosses.iter().find(|b| self.state.boss.as_ref() == Some(&b.encounter)).and_then(|b| {
@@ -944,7 +949,8 @@ impl SpireApp {
                 Some((b, o))
             });
             let picks = spire_core::analysis::lines::suggest(&self.state, &self.catalog, &self.playbook, boss);
-            self.combat = Some(Combat { generation: self.generation, sim, jobs, outlooks, bench, balance, picks });
+            self.combat =
+                Some(Combat { generation: self.generation, sim, jobs, outlooks, composition, advice, balance, picks });
         }
         self.prepare_current_fight();
         match self.ui.tab {

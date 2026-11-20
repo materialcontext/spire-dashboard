@@ -183,9 +183,6 @@ fn playbook() -> Playbook {
       "multi_enemy_names": ["pair"],
       "acts": [{
         "index": 0, "weak_fights": 1,
-        "targets": [
-          { "role": "fast_damage", "min": 2 }, { "role": "scaling_damage", "min": 1 }, { "role": "aoe", "min": 1 }
-        ],
         "big_hit": 25,
         "long_fight_hp": { "monster": 100, "elite": 150, "boss": 250 }
       }],
@@ -284,10 +281,9 @@ fn profile_splits_starters_from_added_cards() {
     // "frontload_defense" in the rules reads as Mitigation (old names load).
     assert_eq!(p.starter_role(Role::Mitigation), 1);
     assert_eq!(p.starter_basics, 2);
-    let plan = pb.act(0);
-    assert_eq!(coverage(&p, Role::FastDamage, plan), Coverage::Thin);
-    assert_eq!(coverage(&p, Role::Aoe, plan), Coverage::Covered);
-    assert_eq!(coverage(&p, Role::Survival, plan), Coverage::Missing);
+    assert_eq!(coverage(&p, Role::FastDamage), Coverage::Covered);
+    assert_eq!(coverage(&p, Role::Aoe), Coverage::Covered);
+    assert_eq!(coverage(&p, Role::Survival), Coverage::Missing);
 }
 
 #[test]
@@ -1303,22 +1299,32 @@ fn relics_that_add_potion_slots_say_so() {
 
 #[test]
 fn benchmarks_group_by_character_and_fall_back_to_everyone() {
-    use spire_core::analysis::benchmark::{MIN_DECKS, Sample, for_run, measure};
+    use spire_core::analysis::benchmark::{Sample, for_run, measure, measured};
     let mut cat = catalog();
     let mut pb = playbook();
     pb.simulation = SimAssumptions { trials: 20, ..SimAssumptions::default() };
     let hero = CharacterId::new("HERO");
     let deck = sim_state(&cat, &[("STRIKE", false), ("STRIKE", true), ("DEFEND", false), ("INFLAME", false)]);
-    let sample = |character: &CharacterId, act| Sample { character: character.clone(), act, state: deck.clone() };
-    // The hero cleared act 1 enough times; a second character only a few.
+    let sample = |character: &CharacterId, act, weight| Sample {
+        character: character.clone(),
+        act,
+        state: deck.clone(),
+        weight,
+    };
+    // The hero beat act 1's boss enough times; a second character only a
+    // few. One player's 40 runs count as 4.
     let rare = CharacterId::new("RARE");
-    let mut samples: Vec<Sample> = (0..MIN_DECKS).map(|_| sample(&hero, 0)).collect();
-    samples.extend((0..3).map(|_| sample(&rare, 0)));
-    let benchmarks = measure(&samples, &cat, &pb);
+    let min = 30.0;
+    let mut samples: Vec<Sample> = (0..30).map(|_| sample(&hero, 0, 1.0)).collect();
+    samples.extend((0..40).map(|_| sample(&rare, 0, 0.1)));
+    let m = measured(&deck, &cat, &pb);
+    let decks: Vec<(&Sample, &spire_core::analysis::benchmark::Measured)> = samples.iter().map(|s| (s, &m)).collect();
+    let benchmarks = measure(&decks, min);
     assert_eq!(benchmarks.len(), 2, "the hero's, and everyone's");
     let mine = &benchmarks[0];
-    assert_eq!((mine.character.as_ref(), mine.decks, mine.size.p50), (Some(&hero), MIN_DECKS as u32, 4.0));
-    assert_eq!(benchmarks[1].decks, MIN_DECKS as u32 + 3);
+    assert_eq!((mine.character.as_ref(), mine.decks, mine.size.p50), (Some(&hero), 30, 4.0));
+    assert_eq!(benchmarks[1].decks, 70);
+    assert!((benchmarks[1].effective - 34.0).abs() < 1e-3, "the rare player's 40 runs weigh 4");
     cat.benchmarks = benchmarks;
     assert_eq!(for_run(&cat, &hero, 0).and_then(|b| b.character.clone()), Some(hero));
     assert_eq!(for_run(&cat, &rare, 0).map(|b| b.character.is_none()), Some(true), "too few: everyone's decks");

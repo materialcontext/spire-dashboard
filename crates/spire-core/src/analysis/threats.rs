@@ -395,7 +395,7 @@ pub fn preview(
     let (plans, _) = lineup_plans(enc, catalog, scaling, pattern::HORIZON);
     let checks = demands(&profile, enc.room, plan)
         .into_iter()
-        .map(|d| DemandCheck { have: deck.role(d.role), coverage: coverage(deck, d.role, plan), demand: d })
+        .map(|d| DemandCheck { have: deck.role(d.role), coverage: coverage(deck, d.role), demand: d })
         .collect();
     ThreatPreview {
         encounter: enc.id.clone(),

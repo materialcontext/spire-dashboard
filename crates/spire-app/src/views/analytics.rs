@@ -9,7 +9,7 @@ use spire_core::analysis::report::{Turning, TurningKind};
 use spire_core::analysis::sim::DeckSim;
 use spire_core::analysis::timeline::Timeline;
 use spire_core::catalog::{CardType, Catalog};
-use spire_core::playbook::{Playbook, Role};
+use spire_core::playbook::Role;
 
 use crate::app::{Analytics, UiState, ViewCtx};
 use crate::style::{self, color::*};
@@ -26,7 +26,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, a: &Analytics, st: &mut UiState) {
     }
     let wide = ui.available_width() > 900.0;
     let run = |ui: &mut Ui| {
-        run_section(ui, "live", v.catalog, v.playbook, &a.timeline, Some(v.state.act_index), &[]);
+        run_section(ui, "live", v.catalog, &a.timeline, &[]);
     };
     let deck = |ui: &mut Ui, st: &mut UiState| deck_section(ui, "live", &a.sim, &mut st.show_all_odds);
     if wide {
@@ -44,17 +44,8 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, a: &Analytics, st: &mut UiState) {
 // ---------------------------------------------------------------- run
 
 /// Vitals, fights, role growth, dead cards and elites for one run.
-/// `act` picks which act's role targets to compare against; `marks` are
-/// turning points to mark on the HP chart.
-pub fn run_section(
-    ui: &mut Ui,
-    salt: &str,
-    catalog: &Catalog,
-    playbook: &Playbook,
-    t: &Timeline,
-    act: Option<u8>,
-    marks: &[Turning],
-) {
+/// `marks` are turning points to mark on the HP chart.
+pub fn run_section(ui: &mut Ui, salt: &str, catalog: &Catalog, t: &Timeline, marks: &[Turning]) {
     if t.points.is_empty() {
         panel(ui, "This run", None, |ui| {
             ui.label(RichText::new("Log a floor to start the charts.").color(text_dim()));
@@ -67,9 +58,7 @@ pub fn run_section(
     ui.add_space(GAP);
     panel(ui, "Damage taken per fight", None, |ui| fights(ui, salt, catalog, t));
     ui.add_space(GAP);
-    let act = act.unwrap_or_else(|| t.points.last().map_or(0, |p| p.act_index));
-    let note = format!("Act {} targets", act + 1);
-    panel(ui, "Deck roles by floor", Some(&note), |ui| roles(ui, playbook, t, act));
+    panel(ui, "Deck roles by floor", None, |ui| roles(ui, t));
     ui.add_space(GAP);
     panel(ui, "Dead cards and elites", None, |ui| dead_and_elites(ui, salt, t));
 }
@@ -267,35 +256,24 @@ fn fights(ui: &mut Ui, salt: &str, catalog: &Catalog, t: &Timeline) {
         });
 }
 
-/// One row per role: a sparkline of cards added over the run, and now vs target.
-fn roles(ui: &mut Ui, playbook: &Playbook, t: &Timeline, act: u8) {
-    let targets = playbook.act(act).map(|a| a.targets.as_slice()).unwrap_or_default();
+/// One row per role: a sparkline of cards added over the run, and how many
+/// now.
+fn roles(ui: &mut Ui, t: &Timeline) {
     let last = t.points.last();
     egui::Grid::new("role-growth").num_columns(3).spacing([10.0, 6.0]).show(ui, |ui| {
         for role in Role::ALL {
             let series: Vec<f32> = t.points.iter().map(|p| p.role(role) as f32).collect();
-            let target = targets.iter().find(|x| x.role == role).map(|x| x.min);
             ui.horizontal(|ui| {
                 let (rect, _) = ui.allocate_exact_size(vec2(8.0, 8.0), egui::Sense::hover());
                 ui.painter().rect_filled(rect, 0.0, style::role_color(role));
                 ui.label(RichText::new(role.label()).color(text_dim()));
             });
-            sparkline(ui, &series, target.map(|t| t as f32), style::role_color(role), vec2(140.0, 22.0));
-            let now = last.map_or(0, |p| p.role(role));
-            let text = match target {
-                Some(t) => format!("{now} of {t}"),
-                None => now.to_string(),
-            };
-            let color = match target {
-                Some(t) if now < t => warn(),
-                Some(_) => good(),
-                None => text_dim(),
-            };
-            ui.label(RichText::new(text).color(color));
+            sparkline(ui, &series, None, style::role_color(role), vec2(140.0, 22.0));
+            ui.label(RichText::new(last.map_or(0, |p| p.role(role)).to_string()).color(text()));
             ui.end_row();
         }
     });
-    ui.label(caption("Cards added for each role (starter Strikes and Defends not counted). Dashed: the act target."));
+    ui.label(caption("Cards added for each role (starter Strikes and Defends not counted)."));
 }
 
 fn dead_and_elites(ui: &mut Ui, salt: &str, t: &Timeline) {

@@ -346,20 +346,12 @@ pub fn section<R>(ui: &mut Ui, title: &str, note: Option<&str>, add: impl FnOnce
         .inner
 }
 
-/// A labelled horizontal bar: `value` out of `max`, a faded `extra`
-/// segment after it, and an optional target tick.
+/// A labelled horizontal bar: `value` out of `max`, and a faded `extra`
+/// segment after it.
 /// Width of a [`bar`]'s label column, to line notes up under the bar.
 pub const BAR_LABEL_WIDTH: f32 = 150.0;
 
-pub fn bar(
-    ui: &mut Ui,
-    label: &str,
-    value: u32,
-    extra: u32,
-    max: u32,
-    target: Option<u32>,
-    color: Color32,
-) -> egui::Response {
+pub fn bar(ui: &mut Ui, label: &str, value: u32, extra: u32, max: u32, color: Color32) -> egui::Response {
     ui.horizontal(|ui| {
         ui.add_sized([BAR_LABEL_WIDTH, 18.0], egui::Label::new(RichText::new(label).color(text_dim())).truncate());
         let width = (ui.available_width() - 64.0).max(60.0);
@@ -377,18 +369,40 @@ pub fn bar(
             );
             painter.rect_filled(faded, 0.0, color.gamma_multiply(0.3));
         }
-        if let Some(t) = target {
-            let x = rect.min.x + frac(t);
-            painter.vline(x, (rect.min.y - 3.0)..=(rect.max.y + 3.0), Stroke::new(2.0, text()));
-        }
-        let text = match (extra, target) {
-            (0, Some(t)) => format!("{value} / {t}"),
-            (0, None) => value.to_string(),
-            (e, Some(t)) => format!("{value} +{e} / {t}"),
-            (e, None) => format!("{value} +{e}"),
-        };
-        let met = target.is_none_or(|t| value >= t);
-        ui.label(RichText::new(text).small().color(if met { crate::style::color::text() } else { warn() }));
+        let text = if extra > 0 { format!("{value} +{extra}") } else { value.to_string() };
+        ui.label(RichText::new(text).small().color(crate::style::color::text()));
+    })
+    .response
+}
+
+/// A value on a range: the middle half as a faint band, the median as a
+/// tick, the value as a bar from zero; `warn` colours it as a warning.
+/// `text` sits on the right.
+pub fn range_bar(
+    ui: &mut Ui,
+    label: &str,
+    value: f32,
+    range: spire_core::catalog::Quartiles,
+    color: Color32,
+    warn_it: bool,
+    text: String,
+) -> egui::Response {
+    ui.horizontal(|ui| {
+        let name = RichText::new(label).color(if warn_it { warn() } else { text_dim() });
+        ui.add_sized([BAR_LABEL_WIDTH, 18.0], egui::Label::new(name).truncate());
+        let width = (ui.available_width() - 92.0).max(60.0);
+        let (rect, _) = ui.allocate_exact_size(vec2(width, 10.0), Sense::hover());
+        let painter = ui.painter_at(rect.expand(3.0));
+        let max = (range.p75 * 1.5).max(value * 1.05).max(f32::EPSILON);
+        let x = |v: f32| rect.min.x + (v / max).clamp(0.0, 1.0) * rect.width();
+        painter.rect_filled(rect, 0.0, surface());
+        let band = Rect::from_min_max(egui::pos2(x(range.p25), rect.min.y), egui::pos2(x(range.p75), rect.max.y));
+        painter.rect_filled(band, 0.0, color.gamma_multiply(0.25));
+        let bar = Rect::from_min_max(rect.min, egui::pos2(x(value), rect.min.y + rect.height() * 0.5 + 2.0));
+        let bar = bar.translate(vec2(0.0, rect.height() * 0.25 - 1.0));
+        painter.rect_filled(bar, 0.0, if warn_it { warn() } else { color });
+        painter.vline(x(range.p50), (rect.min.y - 3.0)..=(rect.max.y + 3.0), Stroke::new(1.5, text_dim()));
+        ui.label(RichText::new(text).small().color(if warn_it { warn() } else { crate::style::color::text() }));
     })
     .response
 }
@@ -402,7 +416,6 @@ pub fn stripe(ui: &mut Ui, color: Color32, height: f32) {
 pub fn coverage_color(c: Coverage) -> Color32 {
     match c {
         Coverage::Missing => bad(),
-        Coverage::Thin => warn(),
         Coverage::Covered => good(),
     }
 }

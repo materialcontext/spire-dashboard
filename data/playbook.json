@@ -505,28 +505,6 @@
     {
       "index": 0,
       "weak_fights": 3,
-      "targets": [
-        {
-          "role": "mitigation",
-          "min": 1
-        },
-        {
-          "role": "survival",
-          "min": 1
-        },
-        {
-          "role": "fast_damage",
-          "min": 3
-        },
-        {
-          "role": "scaling_damage",
-          "min": 1
-        },
-        {
-          "role": "aoe",
-          "min": 1
-        }
-      ],
       "big_hit": 25,
       "long_fight_hp": {
         "monster": 90,
@@ -537,32 +515,6 @@
     {
       "index": 1,
       "weak_fights": 2,
-      "targets": [
-        {
-          "role": "mitigation",
-          "min": 4
-        },
-        {
-          "role": "survival",
-          "min": 2
-        },
-        {
-          "role": "fast_damage",
-          "min": 4
-        },
-        {
-          "role": "scaling_damage",
-          "min": 2
-        },
-        {
-          "role": "aoe",
-          "min": 2
-        },
-        {
-          "role": "chip",
-          "min": 1
-        }
-      ],
       "big_hit": 30,
       "long_fight_hp": {
         "monster": 130,
@@ -573,32 +525,6 @@
     {
       "index": 2,
       "weak_fights": 2,
-      "targets": [
-        {
-          "role": "mitigation",
-          "min": 6
-        },
-        {
-          "role": "survival",
-          "min": 3
-        },
-        {
-          "role": "fast_damage",
-          "min": 4
-        },
-        {
-          "role": "scaling_damage",
-          "min": 3
-        },
-        {
-          "role": "aoe",
-          "min": 2
-        },
-        {
-          "role": "chip",
-          "min": 1
-        }
-      ],
       "big_hit": 35,
       "long_fight_hp": {
         "monster": 180,
@@ -758,6 +684,15 @@
       "why": "1 max HP after every combat"
     }
   ],
+  "composition": {
+    "ascension": 10,
+    "min_build": "v0.107.0",
+    "player_cap": 20.0,
+    "min_decks": 120.0,
+    "confidence": 0.9,
+    "min_gap": 0.03,
+    "resamples": 400
+  },
   "event_fits": [
     {
       "title": "Remove a curse",

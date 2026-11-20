@@ -101,6 +101,18 @@ impl Jobs {
     }
 }
 
+/// What a role's job measures, in words.
+pub fn describe_job(role: Role) -> &'static str {
+    match role {
+        Role::Mitigation => "Block on an ordinary turn",
+        Role::Survival => "Block on a turn spent defending",
+        Role::FastDamage => "damage over the first 3 turns",
+        Role::ScalingDamage => "how much damage grows by turn 5",
+        Role::Aoe => "share of damage that hits every enemy",
+        Role::Chip => "attack hits a turn",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -99,7 +99,6 @@ pub fn preview_body(
 fn status_word(c: Option<Coverage>) -> (&'static str, egui::Color32) {
     match c {
         Some(Coverage::Missing) => ("Gap", coverage_color(Coverage::Missing)),
-        Some(Coverage::Thin) => ("Thin", coverage_color(Coverage::Thin)),
         Some(Coverage::Covered) => ("Ready", coverage_color(Coverage::Covered)),
         None => ("No demands", text_faint()),
     }

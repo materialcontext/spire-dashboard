@@ -443,11 +443,41 @@ impl Default for ShortLines {
     }
 }
 
+/// How a deck's composition is measured against community decks, and
+/// when it warns (`analysis::composition`). Method settings, not targets:
+/// the ranges and the risks come from community runs at data refresh.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct RoleTarget {
-    pub role: Role,
-    /// Minimum number of cards filling this role by the end of the act.
-    pub min: u32,
+#[serde(default)]
+pub struct CompositionLines {
+    /// Community runs at this ascension only.
+    pub ascension: u32,
+    /// Runs on game builds older than this are left out ("v0.107.0").
+    pub min_build: String,
+    /// One player counts for at most this many runs.
+    pub player_cap: f32,
+    /// A character with fewer effective decks for an act uses every
+    /// character's.
+    pub min_decks: f32,
+    /// Confidence of the interval a risk's gap must stay below zero in.
+    pub confidence: f32,
+    /// Smallest boss win-rate gap (0–1) worth a warning.
+    pub min_gap: f32,
+    /// Bootstrap resamples for that interval.
+    pub resamples: u32,
+}
+
+impl Default for CompositionLines {
+    fn default() -> Self {
+        CompositionLines {
+            ascension: 10,
+            min_build: "v0.107.0".into(),
+            player_cap: 20.0,
+            min_decks: 120.0,
+            confidence: 0.9,
+            min_gap: 0.03,
+            resamples: 400,
+        }
+    }
 }
 
 /// Per-act strategy: priorities, thresholds and notes.
@@ -458,8 +488,6 @@ pub struct ActPlan {
     /// Hallway fights drawn from the weak pool at the start of the act.
     #[serde(default)]
     pub weak_fights: u32,
-    #[serde(default)]
-    pub targets: Vec<RoleTarget>,
     /// A single enemy turn at or above this much damage is a "big hit".
     pub big_hit: u32,
     /// Total enemy HP at or above this means a long fight (by room).
@@ -529,6 +557,9 @@ pub struct Playbook {
     /// What the run report counts as a cause (`analysis::report`).
     #[serde(default)]
     pub report: ReportLines,
+    /// How composition is measured and when it warns.
+    #[serde(default)]
+    pub composition: CompositionLines,
     #[serde(default)]
     pub simulation: SimAssumptions,
     /// Which roles a relic plays, from what the deck simulator reads in its

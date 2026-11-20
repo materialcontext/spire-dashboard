@@ -295,9 +295,7 @@ pub fn lines_within_reach(state: &RunState, catalog: &Catalog, playbook: &Playbo
 /// (what the simulator found holding it back), then the boss check's gaps.
 fn wanted_roles(boss: &ThreatPreview, outlook: &Outlook) -> Vec<Role> {
     let mut out: Vec<Role> = outlook.limits.iter().filter_map(|l| l.role).collect();
-    for cov in [Coverage::Missing, Coverage::Thin] {
-        out.extend(boss.checks.iter().filter(|c| c.coverage == cov).map(|c| c.demand.role));
-    }
+    out.extend(boss.checks.iter().filter(|c| c.coverage == Coverage::Missing).map(|c| c.demand.role));
     let mut seen = Vec::new();
     out.retain(|r| {
         let new = !seen.contains(r);

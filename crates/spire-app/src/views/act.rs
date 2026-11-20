@@ -63,10 +63,15 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, out: &mut Vec<Action>) {
 
     ui.add_space(crate::style::space::m());
     crate::widgets::section(ui, "Priorities", None, |ui| {
-        if v.dash.advice.is_empty() {
+        // The dashboard's lines, then the deck's composition warnings (once
+        // simulated), by severity.
+        let mut advice: Vec<&spire_core::analysis::Advice> = v.dash.advice.iter().collect();
+        advice.extend(v.combat.map(|c| c.advice.as_slice()).unwrap_or_default());
+        advice.sort_by_key(|a| a.severity);
+        if advice.is_empty() {
             ui.label(RichText::new("Nothing pressing.").color(text_dim()));
         }
-        for a in &v.dash.advice {
+        for a in advice {
             let (color, text_color) = match a.severity {
                 Severity::Urgent => (bad(), text()),
                 Severity::Watch => (warn(), text()),

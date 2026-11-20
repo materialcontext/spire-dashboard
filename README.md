@@ -15,17 +15,19 @@ the card you took, HP and gold after. Then it re-analyses the run.
   scaling damage), and relics that add potion slots add them when logged.
 - **Deck breakdown** by card type (attack, skill, power, curse…) and by role,
   the problems a deck solves: Mitigation, Survival, Fast Damage, Scaling
-  Damage, AoE and Chip, against per-act targets. Under each role, how well
-  the deck actually does it, simulated: Block on an ordinary and a defending
-  turn, damage over the first turns, how damage grows, how much hits every
-  enemy, hits a turn. Each deck row has a strip of fixed columns (the six
-  roles, then Draw and Energy), filled where the card has one; hover a column
-  for how a card gets it. The deck's output on a bad draw is noted. Starter
-  Strikes/Defends are shown separately: targets count what you've *added*.
-  Under that, the deck **next to community decks that cleared this act**
-  (same character, or every character's when there are too few): each
-  job, each tag's share and the share of starter cards, with the shortfalls
-  first and the tags to look for.
+  Damage, AoE and Chip. Each role shows how well the deck actually does it,
+  simulated (Block on an ordinary and a defending turn, damage over the
+  first turns, how damage grows, how much hits every enemy, hits a turn), on
+  the range of **A10 community decks that beat this act's boss** going into
+  it: the middle half as a band, the median as a tick, your card count
+  beside it. Damage to Block, deck size and dead draws sit under the roles.
+  The range moves through the act, from what decks had entering it to what
+  they had at its boss. There are no hand-set targets: a measure is only
+  flagged (amber, and in Priorities) where community runs show that side
+  losing the boss more often, e.g. too little Block in Act 3 or too many AoE
+  cards in Act 2, with the win rates on hover. Each deck row has a strip of
+  fixed columns (the six roles, then Draw and Energy), filled where the card
+  has one; hover a column for how a card gets it.
   Setup that piles up (Aim, Vigor or Stretch made faster than the deck uses
   it), and the Fool's Arrows or the Regent's Stars running short, are noted
   beside the bad-draw line.
@@ -82,7 +84,7 @@ the card you took, HP and gold after. Then it re-analyses the run.
 - **Analytics** for the current run:
   - HP, max HP and gold by floor.
   - HP lost in each fight next to what other players lose in the same fight.
-  - Deck roles growing floor by floor against the act targets.
+  - Deck roles growing floor by floor.
   - The share of dead cards, and elites fought per act.
 - **Deck simulation**, read from the card data. Damage and block per turn
   come with a spread, alongside turnover, the odds of drawing each card by
@@ -273,7 +275,11 @@ Everything the dashboard *believes* lives in `data/playbook.json`, not in code:
 
 - which card features mean which tag, and which tags give which role
 - per-card tag and role overrides
-- per-act role targets
+- how composition is measured (`composition`): the ascension and builds of
+  community runs used, how much one player can count, and how sure a
+  composition warning must be (confidence, smallest win-rate gap). The
+  ranges and the warnings themselves come from community runs at each data
+  refresh, not from the playbook
 - thresholds for "big hit" and "long fight"
 - when a relic is crucial to a deck (`relic_fits`: the cards it counts and
   how many, or the shortfall it fixes) and when a deck counts as desperately

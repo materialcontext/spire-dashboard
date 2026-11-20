@@ -284,7 +284,7 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser, out: &mut Vec<Ac
     ui.add_space(GAP);
     let left = |ui: &mut Ui, d: &mut Detail| {
         let salt = format!("hist-{}", d.id);
-        analytics::run_section(ui, &salt, v.catalog, v.playbook, &d.timeline, None, &d.report.turning);
+        analytics::run_section(ui, &salt, v.catalog, &d.timeline, &d.report.turning);
     };
     let right = |ui: &mut Ui, d: &mut Detail, show_all: &mut bool| {
         replay(ui, v, &archived.run, d);
