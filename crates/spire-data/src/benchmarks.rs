@@ -21,12 +21,33 @@ use spire_core::{Catalog, DataPack, Playbook};
 use crate::game_run::{self, ActHint};
 use crate::run_file::WRun;
 
+/// Who and what a community run is: to keep one ascension, drop repeats,
+/// and keep one player from outweighing the rest.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RunMeta {
+    /// The export's id for the run.
+    pub hash: Option<String>,
+    /// An opaque token for the player; none on older runs.
+    pub player: Option<String>,
+    pub ascension: u32,
+    pub build: Option<String>,
+}
+
+/// A deck going into a boss fight, and whether the run got past it.
+#[derive(Clone, Debug)]
+pub struct BossDeck {
+    pub sample: Sample,
+    pub won: bool,
+}
+
 /// One run's decks: at the end of each act it cleared, and going into each
 /// boss fight.
 #[derive(Default)]
-struct RunDecks {
-    cleared: Vec<Sample>,
-    bosses: Vec<BossFight>,
+pub struct RunDecks {
+    pub meta: RunMeta,
+    pub cleared: Vec<Sample>,
+    pub bosses: Vec<BossFight>,
+    pub boss_decks: Vec<BossDeck>,
 }
 
 /// Distinct reward cards in a deck: no starters, curses, statuses or tokens.
@@ -46,7 +67,7 @@ fn reward_cards(state: &RunState, catalog: &Catalog) -> Vec<spire_core::ids::Car
     out
 }
 
-fn run_decks(line: &str, catalog: &Catalog) -> RunDecks {
+pub fn run_decks(line: &str, catalog: &Catalog) -> RunDecks {
     let mut out = RunDecks::default();
     let Ok(run) = serde_json::from_str::<WRun>(line) else { return out };
     let modded = run.modifiers.as_ref().is_some_and(|m| !m.is_null() && m.as_array().is_none_or(|a| !a.is_empty()));
@@ -54,6 +75,12 @@ fn run_decks(line: &str, catalog: &Catalog) -> RunDecks {
         return out;
     }
     let won = run.win == Some(true);
+    out.meta = RunMeta {
+        hash: run.run_hash.clone(),
+        player: run.player_token.clone(),
+        ascension: run.ascension,
+        build: run.build_id.clone(),
+    };
     let Ok(read) = game_run::read(line, catalog, &ActHint::default()) else { return out };
     let ending =
         read.events.iter().find_map(|e| if let RunEvent::End { outcome, .. } = e { Some(outcome) } else { None });
@@ -83,6 +110,8 @@ fn run_decks(line: &str, catalog: &Catalog) -> RunDecks {
                 _ => Some(true),
             };
             if let Some(won_fight) = outcome {
+                let sample = Sample { character: character.clone(), act: state.act_index, state: state.clone() };
+                out.boss_decks.push(BossDeck { sample, won: won_fight });
                 out.bosses.push(BossFight {
                     character: character.clone(),
                     act: state.act_index,
@@ -106,6 +135,15 @@ fn run_decks(line: &str, catalog: &Catalog) -> RunDecks {
 /// The decks one run cleared acts with.
 fn run_samples(line: &str, catalog: &Catalog) -> Vec<Sample> {
     run_decks(line, catalog).cleared
+}
+
+/// Every run in a page of the run export, with its decks.
+pub fn runs(jsonl: &str, catalog: &Catalog) -> Vec<RunDecks> {
+    jsonl
+        .lines()
+        .map(|line| run_decks(line, catalog))
+        .filter(|r| !r.cleared.is_empty() || !r.boss_decks.is_empty())
+        .collect()
 }
 
 /// Every boss fight's deck in a page of the run export.

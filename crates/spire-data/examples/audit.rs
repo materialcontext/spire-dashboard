@@ -52,6 +52,11 @@ fn main() {
         lines(&cat);
         return;
     }
+    if std::env::args().any(|a| a == "--roles") {
+        let pages: Vec<String> = std::env::args().skip_while(|a| a != "--roles").skip(1).collect();
+        roles(&cat, &pb, &pages);
+        return;
+    }
     if std::env::args().any(|a| a == "--lookout") {
         let pages: Vec<String> = std::env::args().skip_while(|a| a != "--lookout").skip(1).collect();
         lookout(&cat, &pb, &pages);
@@ -369,4 +374,259 @@ fn lines(cat: &Catalog) {
         }
     }
     println!("== card lift: {} cards", cat.card_lift.len());
+}
+
+/// Boss fights by character and act: each deck's measures, whether it won,
+/// and its weight.
+type Fights = BTreeMap<(String, u8), Vec<(Vec<f64>, bool, f64)>>;
+
+/// A player counts for at most this many runs.
+const PLAYER_CAP: f64 = 20.0;
+
+/// Weighted share of `xs` at or under each value: quantile `q` of weighted
+/// values.
+fn wquantile(xs: &[(f64, f64)], q: f64) -> f64 {
+    let mut v: Vec<(f64, f64)> = xs.to_vec();
+    v.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let total: f64 = v.iter().map(|x| x.1).sum();
+    let mut acc = 0.0;
+    for (x, w) in &v {
+        acc += w;
+        if acc >= q * total {
+            return *x;
+        }
+    }
+    v.last().map_or(0.0, |x| x.0)
+}
+
+/// Research for the role overhaul: A10 decks going into each act's boss,
+/// their jobs, and how the boss win rate moves with each job. Runs are
+/// deduplicated by hash and each player counts for at most 20 runs.
+fn roles(cat: &Catalog, pb: &spire_core::Playbook, paths: &[String]) {
+    use spire_core::analysis::jobs;
+    use spire_core::analysis::sim::simulate;
+    use std::collections::{BTreeSet, HashMap};
+    let asc: u32 = std::env::var("ASC").ok().and_then(|a| a.parse().ok()).unwrap_or(10);
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut runs = Vec::new();
+    let (mut dupes, mut other_asc) = (0, 0);
+    for p in paths {
+        let bytes = std::fs::read(p).unwrap_or_else(|e| panic!("{p}: {e}"));
+        let Ok(text) = spire_data::fetch::decode_maybe_gzip(&bytes) else {
+            eprintln!("skipped {p}: unreadable");
+            continue;
+        };
+        for r in spire_data::benchmarks::runs(&text, cat) {
+            if let Some(h) = &r.meta.hash
+                && !seen.insert(h.clone())
+            {
+                dupes += 1;
+                continue;
+            }
+            if r.meta.ascension != asc {
+                other_asc += 1;
+                continue;
+            }
+            // BUILD=v0.111.0 keeps one build; BUILD=-v0.111.0 every other.
+            if let Ok(b) = std::env::var("BUILD") {
+                let this = r.meta.build.as_deref() == Some(b.trim_start_matches('-'));
+                if this == b.starts_with('-') {
+                    continue;
+                }
+            }
+            runs.push(r);
+        }
+    }
+    let mut per_player: HashMap<Option<String>, usize> = HashMap::new();
+    for r in &runs {
+        *per_player.entry(r.meta.player.clone()).or_default() += 1;
+    }
+    let anonymous = per_player.get(&None).copied().unwrap_or(0);
+    // Anonymous runs: each its own player (no way to group them).
+    let weight = |r: &spire_data::benchmarks::RunDecks| match &r.meta.player {
+        None => 1.0,
+        Some(_) => (PLAYER_CAP / per_player[&r.meta.player] as f64).min(1.0),
+    };
+    println!(
+        "== A{asc}: {} runs ({} players, {anonymous} anonymous), {dupes} repeats dropped, {other_asc} other ascensions",
+        runs.len(),
+        per_player.len() - usize::from(anonymous > 0)
+    );
+    let mut builds: BTreeMap<String, usize> = BTreeMap::new();
+    for r in &runs {
+        *builds.entry(r.meta.build.clone().unwrap_or("?".into())).or_default() += 1;
+    }
+    println!("   builds: {builds:?}");
+    // What's measured on each deck going into the boss: each role's job,
+    // each role's share of the deck, its size, balance and reliability.
+    let mut names: Vec<String> = Role::ALL.iter().map(|r| format!("job {}", r.label())).collect();
+    names.extend(Role::ALL.iter().map(|r| format!("share {}", r.label())));
+    names.extend(["deck size", "damage:block", "bad-draw floor", "dead draws", "damage spread"].map(String::from));
+    let measure = |state: &spire_core::run::RunState| -> Vec<f64> {
+        let sim = simulate(state, cat, &pb.simulation);
+        let j = jobs::measure(&sim);
+        let p = spire_core::analysis::deck::run_profile(state, cat, pb);
+        let n = p.total.max(1) as f64;
+        let mut v: Vec<f64> = Role::ALL.iter().map(|r| j.value(*r) as f64).collect();
+        v.extend(Role::ALL.iter().map(|r| (p.role(*r) + p.starter_role(*r)) as f64 / n));
+        let t3 = sim.turns.get(2).map(|t| t.damage);
+        v.extend([
+            n,
+            j.fast_damage as f64 / (3.0 * j.mitigation as f64).max(1.0),
+            j.floor as f64,
+            sim.dead_draws as f64,
+            t3.map_or(0.0, |d| ((d.high - d.low) / d.mean.max(1.0)) as f64),
+        ]);
+        v
+    };
+    // (character, act) -> [(measures, won, weight)]
+    let mut fights: Fights = BTreeMap::new();
+    for r in &runs {
+        let w = weight(r);
+        for b in &r.boss_decks {
+            fights.entry((b.sample.character.to_string(), b.sample.act)).or_default().push((
+                measure(&b.sample.state),
+                b.won,
+                w,
+            ));
+        }
+    }
+    pooled(&names, &fights);
+    if std::env::var("POOLED_ONLY").is_ok() {
+        return;
+    }
+    for ((ch, act), fs) in &fights {
+        let tw: f64 = fs.iter().map(|f| f.2).sum();
+        let ess = tw * tw / fs.iter().map(|f| f.2 * f.2).sum::<f64>();
+        let wr = fs.iter().filter(|f| f.1).map(|f| f.2).sum::<f64>() / tw;
+        println!("\n{ch} act {}: {} boss fights, effective {ess:.0}, won {:.0}%", act + 1, fs.len(), wr * 100.0);
+        println!(
+            "   {:<24} {:>6} {:>7} {:>7} | win% by fifth, low to high | under p25 n  win% | AUC",
+            "measure", "p25", "p50", "p75"
+        );
+        for (m, name) in names.iter().enumerate() {
+            let val = |f: &(Vec<f64>, bool, f64)| f.0[m];
+            let vals: Vec<(f64, f64)> = fs.iter().map(|f| (val(f), f.2)).collect();
+            // Cleared decks' quartiles: winners going in.
+            let winners: Vec<(f64, f64)> = fs.iter().filter(|f| f.1).map(|f| (val(f), f.2)).collect();
+            let (p25, p50, p75) = (wquantile(&winners, 0.25), wquantile(&winners, 0.5), wquantile(&winners, 0.75));
+            let cuts: Vec<f64> = (1..5).map(|k| wquantile(&vals, k as f64 / 5.0)).collect();
+            let mut bins = [(0.0f64, 0.0f64); 5];
+            for f in fs {
+                let b = cuts.iter().filter(|c| val(f) > **c).count();
+                bins[b].0 += f.2;
+                bins[b].1 += if f.1 { f.2 } else { 0.0 };
+            }
+            let fifths: Vec<String> = bins
+                .iter()
+                .map(|(n, w)| if *n > 0.0 { format!("{:>3.0}", w / n * 100.0) } else { "  -".into() })
+                .collect();
+            let under: Vec<_> = fs.iter().filter(|f| val(f) < p25).collect();
+            let un: f64 = under.iter().map(|f| f.2).sum();
+            let uw = under.iter().filter(|f| f.1).map(|f| f.2).sum::<f64>() / un.max(1e-9);
+            // Weighted AUC: chance a winner's value beats a loser's.
+            let (mut num, mut den) = (0.0, 0.0);
+            for a in fs.iter().filter(|f| f.1) {
+                for b in fs.iter().filter(|f| !f.1) {
+                    let w = a.2 * b.2;
+                    den += w;
+                    num += w * match val(a).total_cmp(&val(b)) {
+                        std::cmp::Ordering::Greater => 1.0,
+                        std::cmp::Ordering::Equal => 0.5,
+                        std::cmp::Ordering::Less => 0.0,
+                    };
+                }
+            }
+            println!(
+                "   {name:<24} {p25:>6.2} {p50:>7.2} {p75:>7.2} | {}  | {:>6.0} {:>4.0}% | {:.2}",
+                fifths.join(" "),
+                un,
+                uw * 100.0,
+                num / den.max(1e-9)
+            );
+        }
+    }
+}
+
+/// Every character's decks pooled per act, each placed by its percentile
+/// among its own character's decks going into that act's boss: win rate of
+/// the bottom quarter, middle half and top quarter, and how far each end
+/// sits from the middle, with a 90% bootstrap interval.
+fn pooled(names: &[String], fights: &Fights) {
+    println!("\n== Pooled across characters (each deck placed within its own character and act)");
+    println!("   {:<24} act | bottom 1/4  middle  top 1/4 | low - mid [90%]      | high - mid [90%]", "measure");
+    let acts: std::collections::BTreeSet<u8> = fights.keys().map(|k| k.1).filter(|a| *a < 3).collect();
+    for (m, name) in names.iter().enumerate() {
+        for act in &acts {
+            // (band, won, weight): band 0 bottom quarter, 1 middle, 2 top.
+            let mut rows: Vec<(usize, bool, f64)> = Vec::new();
+            for (_, fs) in fights.iter().filter(|(k, _)| k.1 == *act) {
+                let vals: Vec<(f64, f64)> = fs.iter().map(|f| (f.0[m], f.2)).collect();
+                let (lo, hi) = (wquantile(&vals, 0.25), wquantile(&vals, 0.75));
+                for f in fs {
+                    let v = f.0[m];
+                    // Ties at a cut stay in the middle.
+                    let band = if v < lo {
+                        0
+                    } else if v > hi {
+                        2
+                    } else {
+                        1
+                    };
+                    rows.push((band, f.1, f.2));
+                }
+            }
+            let rate = |rows: &[(usize, bool, f64)], band: usize| {
+                let (n, w) = rows
+                    .iter()
+                    .filter(|r| r.0 == band)
+                    .fold((0.0, 0.0), |(n, w), r| (n + r.2, w + if r.1 { r.2 } else { 0.0 }));
+                if n > 0.0 { w / n } else { f64::NAN }
+            };
+            let point = [rate(&rows, 0), rate(&rows, 1), rate(&rows, 2)];
+            // Bootstrap: resample decks with replacement (simple LCG).
+            let mut seed: u64 = 0x9E37_79B9_7F4A_7C15 ^ (m as u64 * 31 + *act as u64);
+            let mut next = || {
+                seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                (seed >> 33) as usize
+            };
+            let (mut lows, mut highs) = (Vec::new(), Vec::new());
+            for _ in 0..400 {
+                let sample: Vec<(usize, bool, f64)> = (0..rows.len()).map(|_| rows[next() % rows.len()]).collect();
+                let (a, b, c) = (rate(&sample, 0), rate(&sample, 1), rate(&sample, 2));
+                lows.push(a - b);
+                highs.push(c - b);
+            }
+            let ci = |v: &mut Vec<f64>| {
+                v.retain(|x| x.is_finite());
+                v.sort_by(|a, b| a.total_cmp(b));
+                if v.is_empty() { (f64::NAN, f64::NAN) } else { (v[v.len() * 5 / 100], v[v.len() * 95 / 100]) }
+            };
+            let (l, h) = (ci(&mut lows), ci(&mut highs));
+            let mark = |lo: f64, hi: f64| {
+                if hi < 0.0 {
+                    " worse"
+                } else if lo > 0.0 {
+                    " better"
+                } else {
+                    ""
+                }
+            };
+            println!(
+                "   {name:<24} {:>3} |   {:>5.1}%   {:>5.1}%  {:>5.1}% | {:>+5.1} [{:>+5.1},{:>+5.1}]{:<7} | {:>+5.1} [{:>+5.1},{:>+5.1}]{}",
+                act + 1,
+                point[0] * 100.0,
+                point[1] * 100.0,
+                point[2] * 100.0,
+                (point[0] - point[1]) * 100.0,
+                l.0 * 100.0,
+                l.1 * 100.0,
+                mark(l.0, l.1),
+                (point[2] - point[1]) * 100.0,
+                h.0 * 100.0,
+                h.1 * 100.0,
+                mark(h.0, h.1)
+            );
+        }
+    }
 }

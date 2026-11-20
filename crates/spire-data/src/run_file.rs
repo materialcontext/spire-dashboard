@@ -162,6 +162,14 @@ pub(crate) struct WRun {
     pub(crate) killed_by_encounter: Option<String>,
     /// Custom-run modifiers (community runs with any are left out).
     pub(crate) modifiers: Option<serde_json::Value>,
+    /// The export's id for the run, its player (an opaque token) and the
+    /// game build it was played on.
+    #[serde(deserialize_with = "lenient::opt_id")]
+    pub(crate) run_hash: Option<String>,
+    #[serde(deserialize_with = "lenient::opt_id")]
+    pub(crate) player_token: Option<String>,
+    #[serde(deserialize_with = "lenient::opt_id")]
+    pub(crate) build_id: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
