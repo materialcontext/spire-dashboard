@@ -122,14 +122,28 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, st: &mut UiState, out: &mut Vec<Action>) {
         if list.is_empty() {
             ui.label(RichText::new("Nothing known for this act.").color(text_dim()));
         }
-        for t in list {
-            culled(ui, ("threat", v.generation, v.combat.map(|c| c.generation), st.threat_tab, &t.encounter), |ui| {
-                ui.add_space(crate::style::space::s());
-                fight_card(ui, v, t, out);
-            });
-        }
+        // A capped height that scrolls, so the panels under it stay on
+        // screen; cards scrolled out of view are skipped (`culled`).
+        let height = (ui.ctx().content_rect().height() * NEXT_FIGHT_SHARE).max(NEXT_FIGHT_MIN);
+        egui::ScrollArea::vertical().id_salt("next-fight").max_height(height).auto_shrink([false, true]).show(
+            ui,
+            |ui| {
+                for t in list {
+                    let key = ("threat", v.generation, v.combat.map(|c| c.generation), st.threat_tab, &t.encounter);
+                    culled(ui, key, |ui| {
+                        ui.add_space(crate::style::space::s());
+                        fight_card(ui, v, t, out);
+                    });
+                }
+            },
+        );
     });
 }
+
+/// Next fight's list takes at most this share of the window's height (and
+/// at least `NEXT_FIGHT_MIN` points), then scrolls.
+const NEXT_FIGHT_SHARE: f32 = 0.3;
+const NEXT_FIGHT_MIN: f32 = 200.0;
 
 /// The fight the game is in, above Next fight (following only, not for
 /// bosses: those have the act panel).
