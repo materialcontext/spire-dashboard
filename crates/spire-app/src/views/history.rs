@@ -280,17 +280,7 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser, out: &mut Vec<Ac
         return;
     }
     let wide = ui.available_width() > 900.0;
-    if wide {
-        ui.columns(2, |cols| {
-            let [a, b] = cols else { return };
-            report_view::ending(a, v, &d.report);
-            report_view::acts(b, v, &d.report);
-        });
-    } else {
-        report_view::ending(ui, v, &d.report);
-        ui.add_space(GAP);
-        report_view::acts(ui, v, &d.report);
-    }
+    report_view::summary(ui, v, &d.report);
     ui.add_space(GAP);
     let left = |ui: &mut Ui, d: &mut Detail| {
         let salt = format!("hist-{}", d.id);
