@@ -356,6 +356,8 @@ struct WEncounter {
 #[derive(Deserialize)]
 struct WOption {
     #[serde(default, deserialize_with = "null_as_default")]
+    id: String,
+    #[serde(default, deserialize_with = "null_as_default")]
     title: String,
     #[serde(default, deserialize_with = "null_as_default")]
     description: String,
@@ -1012,7 +1014,12 @@ fn map_event(e: WEvent, acts_of: &BTreeMap<&str, Vec<ActId>>, event_relics: &[&R
         "Shared" => EventKind::Shared,
         _ => EventKind::Act,
     };
-    let option = |o: &WOption| EventOption { title: strip_markup(&o.title), text: strip_markup(&o.description) };
+    let option = |o: &WOption| EventOption {
+        id: o.id.clone(),
+        title: strip_markup(&o.title),
+        text: strip_markup(&o.description),
+        effects: Vec::new(),
+    };
     let options: Vec<EventOption> = e.options.iter().flatten().map(option).collect();
     // Every option on every screen, for the relics they name.
     let every: Vec<EventOption> = options

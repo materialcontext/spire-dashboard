@@ -177,7 +177,7 @@ pub fn add_community_data(pack: &mut DataPack, pages: &[String], notes: &mut Vec
         "Community runs: {} fights read, {} encounters with exact lineups, weak fights per act {:?}.",
         s.fights, s.encounters, s.weak_fights
     ));
-    let events = codex_events::enrich(pack, &codex_events::sightings(pages));
+    let events = codex_events::enrich(pack, &codex_events::sightings(pages, &codex_events::curses(pack)));
     notes.push(format!("Community runs: event relics found for {events} events, and how often each event comes up."));
     let (decks, bosses) = crate::benchmarks::add(pack, pages, &crate::bundled_playbook());
     notes.push(format!(

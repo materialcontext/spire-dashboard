@@ -1,6 +1,13 @@
 //! `?` rooms from the Spire Codex run export: which event relics each event
-//! gave, how often runs meet each event in each act, and how often a `?`
-//! room turns into a treasure room, with the rarity of chest relics per act.
+//! gave, how often runs meet each event in each act, what taking each event
+//! option did, and how often a `?` room turns into a treasure room, with the
+//! rarity of chest relics per act.
+//!
+//! What an option does is read from the floor it was taken on: cards
+//! removed, transformed, upgraded, enchanted or added, curses, relics,
+//! potions, HP healed and lost, max HP, gold. It's credited to the first
+//! option taken, so later screens count toward it (Slippery Bridge's Hold On
+//! ends in a removal too).
 //!
 //! The event endpoint names only some of the relics an event gives (Trash
 //! Heap's "random forgotten Relic" names none). The runs record every relic
@@ -14,16 +21,31 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use spire_core::DataPack;
-use spire_core::catalog::{EventRelic, Rarity};
+use spire_core::catalog::{CardType, EffectKind, EventEffect, EventRelic, Rarity};
 use spire_core::ids::{ActId, RelicId};
 
-use crate::run_file::{WRun, entry};
+use crate::run_file::{WRun, WStats, entry};
 
 /// An event relic seen fewer times than this from an event is left out
 /// (stray or modded data).
 const MIN_GIVEN: u32 = 2;
 /// Fewer runs than this reaching an act and its shares stay unmeasured.
 const MIN_RUNS: u32 = 100;
+/// Options taken fewer times than this keep no effects.
+const MIN_PICKS: u32 = 20;
+/// Effects seen in fewer of an option's picks than this are left out (a
+/// relic's heal on the floor, a rare follow-up).
+const MIN_RATE: f32 = 0.1;
+
+/// What one event option did across the runs that took it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Tally {
+    pub picks: u32,
+    /// Picks in which each effect happened, and its total amount.
+    pub effects: BTreeMap<EffectKind, (u32, f64)>,
+    /// Picks in which a curse was removed or transformed.
+    pub uncursed: u32,
+}
 
 /// Events met in community runs.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -38,10 +60,39 @@ pub struct Sightings {
     pub unknown_treasure: BTreeMap<String, u32>,
     /// Relics taken from treasure rooms (any), per act: `(act, relic)`.
     pub chest: BTreeMap<(String, String), u32>,
+    /// What taking each event option did: `(event, option)`.
+    pub options: BTreeMap<(String, String), Tally>,
 }
 
-/// Reads single-player, unmodified runs. Bad lines are skipped.
-pub fn sightings(pages: &[String]) -> Sightings {
+/// What a floor's stats say happened, by effect. `curses` are the curse
+/// card ids, to tell a curse from a card gained.
+fn effects(st: &WStats, curses: &BTreeSet<String>) -> Vec<(EffectKind, f64)> {
+    let n = |v: usize| v as f64;
+    let curse = st.cards_gained.iter().filter(|c| curses.contains(entry(&c.id))).count();
+    let picked = |c: &[crate::run_file::WChoice]| c.iter().filter(|c| c.was_picked).count();
+    let num = |v: Option<f64>| v.unwrap_or(0.0).max(0.0);
+    let all = [
+        (EffectKind::Remove, n(st.cards_removed.len())),
+        (EffectKind::Transform, n(st.cards_transformed.len())),
+        (EffectKind::Upgrade, n(st.upgraded_cards.len())),
+        (EffectKind::Enchant, n(st.cards_enchanted.len())),
+        (EffectKind::Card, n(st.cards_gained.len() - curse)),
+        (EffectKind::Curse, n(curse)),
+        (EffectKind::Relic, n(picked(&st.relic_choices))),
+        (EffectKind::Potion, n(picked(&st.potion_choices))),
+        (EffectKind::Heal, num(st.hp_healed)),
+        (EffectKind::MaxHp, num(st.max_hp_gained)),
+        (EffectKind::MaxHpLoss, num(st.max_hp_lost)),
+        (EffectKind::Damage, f64::from(st.damage_taken.unwrap_or(0))),
+        (EffectKind::Gold, num(st.gold_gained)),
+        (EffectKind::GoldCost, f64::from(st.gold_spent.unwrap_or(0).max(0)) + num(st.gold_lost)),
+    ];
+    all.into_iter().filter(|(_, v)| *v > 0.0).collect()
+}
+
+/// Reads single-player, unmodified runs. Bad lines are skipped. `curses`
+/// are the curse card ids.
+pub fn sightings(pages: &[String], curses: &BTreeSet<String>) -> Sightings {
     let mut s = Sightings::default();
     let runs = pages
         .iter()
@@ -77,6 +128,22 @@ pub fn sightings(pages: &[String]) -> Sightings {
                     for c in picked {
                         *s.given.entry((event.to_string(), entry(&c.choice).to_string())).or_default() += 1;
                     }
+                    for st in &p.player_stats {
+                        let Some(option) = st.event_choices.iter().find_map(|c| c.option()) else { continue };
+                        let t = s.options.entry((event.to_string(), option.to_string())).or_default();
+                        t.picks += 1;
+                        let taken_out = st
+                            .cards_removed
+                            .iter()
+                            .chain(st.cards_transformed.iter().map(|c| &c.original_card))
+                            .any(|c| curses.contains(entry(&c.id)));
+                        t.uncursed += u32::from(taken_out);
+                        for (kind, amount) in effects(st, curses) {
+                            let e = t.effects.entry(kind).or_default();
+                            e.0 += 1;
+                            e.1 += amount;
+                        }
+                    }
                 }
             }
             for e in met {
@@ -85,6 +152,33 @@ pub fn sightings(pages: &[String]) -> Sightings {
         }
     }
     s
+}
+
+/// An option's effects, most frequent first; none when too few runs took it.
+fn option_effects(t: Option<&Tally>) -> Vec<EventEffect> {
+    let Some(t) = t.filter(|t| t.picks >= MIN_PICKS) else { return Vec::new() };
+    let mut out: Vec<EventEffect> = t
+        .effects
+        .iter()
+        .map(|(kind, (hits, total))| EventEffect {
+            kind: *kind,
+            rate: *hits as f32 / t.picks as f32,
+            amount: (*total / f64::from((*hits).max(1))) as f32,
+        })
+        .filter(|e| e.rate >= MIN_RATE)
+        .collect();
+    // Seen taking out a curse: it can, as often as it removes or transforms.
+    let takes = out.iter().filter(|e| matches!(e.kind, EffectKind::Remove | EffectKind::Transform));
+    if let Some(rate) = takes.map(|e| e.rate).reduce(f32::max).filter(|_| t.uncursed > 0) {
+        out.push(EventEffect { kind: EffectKind::Uncurse, rate, amount: 1.0 });
+    }
+    out.sort_by(|a, b| b.rate.total_cmp(&a.rate));
+    out
+}
+
+/// The curse card ids in a pack.
+pub fn curses(pack: &DataPack) -> BTreeSet<String> {
+    pack.cards.iter().filter(|c| c.card_type == CardType::Curse).map(|c| c.id.0.clone()).collect()
 }
 
 fn is_empty(v: &serde_json::Value) -> bool {
@@ -127,6 +221,9 @@ pub fn enrich(pack: &mut DataPack, s: &Sightings) -> usize {
     let mut gained = 0;
     for event in &mut pack.events {
         let id = event.id.0.as_str();
+        for option in &mut event.options {
+            option.effects = option_effects(s.options.get(&(id.to_string(), option.id.clone())));
+        }
         event.met = s
             .runs
             .iter()
@@ -202,12 +299,81 @@ mod tests {
             run(&[&[("OTHER", &[])]]),
         ]
         .join("\n");
-        let s = sightings(&[page]);
+        let s = sightings(&[page], &BTreeSet::new());
         assert_eq!(s.runs, BTreeMap::from([("ONE".to_string(), 3), ("TWO".to_string(), 1)]));
         // Met twice in one act counts the run once.
         assert_eq!(s.met[&("TRASH_HEAP".to_string(), "ONE".to_string())], 2);
         assert_eq!(s.given[&("TRASH_HEAP".to_string(), "HAND_DRILL".to_string())], 1);
         assert_eq!(s.given[&("DOLL_ROOM".to_string(), "MR_STRUGGLES".to_string())], 1);
+    }
+
+    /// One run meeting Slippery Bridge, taking `options` in turn, with the
+    /// floor's stats.
+    fn bridge(options: &[&str], stats: serde_json::Value) -> String {
+        let choices: Vec<_> = options
+            .iter()
+            .map(|o| serde_json::json!({"title": {"key": format!("SLIPPERY_BRIDGE.pages.INITIAL.options.{o}.title"), "table": "events"}}))
+            .collect();
+        let mut st = stats;
+        st["event_choices"] = serde_json::Value::Array(choices);
+        serde_json::json!({
+            "players": [{}],
+            "acts": ["ACT.ONE"],
+            "map_point_history": [[{
+                "map_point_type": "unknown",
+                "player_stats": [st],
+                "rooms": [{"model_id": "EVENT.SLIPPERY_BRIDGE", "room_type": "event"}]
+            }]]
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn credits_what_a_floor_did_to_the_first_option_taken() {
+        let removed = serde_json::json!({"cards_removed": [{"id": "CARD.STRIKE_IRONCLAD"}]});
+        let page = [
+            bridge(&["OVERCOME"], removed.clone()),
+            bridge(&["HOLD_ON_0", "OVERCOME"], {
+                let mut v = removed.clone();
+                v["damage_taken"] = serde_json::json!(3);
+                v
+            }),
+            bridge(&["HOLD_ON_0", "OVERCOME"], {
+                let mut v = removed;
+                v["damage_taken"] = serde_json::json!(7);
+                v["cards_gained"] = serde_json::json!([{"id": "CARD.DEBT"}, {"id": "CARD.BASH"}]);
+                v
+            }),
+        ]
+        .join("\n");
+        let s = sightings(&[page], &BTreeSet::from(["DEBT".to_string()]));
+        let overcome = &s.options[&("SLIPPERY_BRIDGE".to_string(), "OVERCOME".to_string())];
+        assert_eq!(overcome.picks, 1);
+        assert_eq!(overcome.effects[&EffectKind::Remove], (1, 1.0));
+        let hold = &s.options[&("SLIPPERY_BRIDGE".to_string(), "HOLD_ON_0".to_string())];
+        assert_eq!(hold.picks, 2);
+        assert_eq!(hold.effects[&EffectKind::Remove], (2, 2.0));
+        assert_eq!(hold.effects[&EffectKind::Damage], (2, 10.0));
+        assert_eq!(hold.effects[&EffectKind::Curse], (1, 1.0), "Debt is a curse");
+        assert_eq!(hold.effects[&EffectKind::Card], (1, 1.0), "Bash is a card");
+        assert_eq!(hold.uncursed, 0, "a Strike was removed, not a curse");
+    }
+
+    #[test]
+    fn keeps_an_options_frequent_effects_once_enough_runs_took_it() {
+        let mut t = Tally { picks: MIN_PICKS, ..Default::default() };
+        t.effects.insert(EffectKind::Remove, (MIN_PICKS, f64::from(MIN_PICKS)));
+        t.effects.insert(EffectKind::Damage, (MIN_PICKS / 2, f64::from(MIN_PICKS / 2) * 8.0));
+        t.effects.insert(EffectKind::Heal, (1, 7.0));
+        let e = option_effects(Some(&t));
+        assert_eq!(e.len(), 2, "a heal in 1 pick of 20 is noise");
+        assert_eq!((e[0].kind, e[0].rate, e[0].amount), (EffectKind::Remove, 1.0, 1.0));
+        assert_eq!((e[1].kind, e[1].rate, e[1].amount), (EffectKind::Damage, 0.5, 8.0));
+        assert!(!e.iter().any(|e| e.kind == EffectKind::Uncurse), "never seen taking out a curse");
+        let curse = option_effects(Some(&Tally { uncursed: 1, ..t.clone() }));
+        let u = curse.iter().find(|e| e.kind == EffectKind::Uncurse).expect("can take out a curse");
+        assert_eq!(u.rate, 1.0, "as often as it removes");
+        assert!(option_effects(Some(&Tally { picks: MIN_PICKS - 1, ..t })).is_empty(), "too few picks");
     }
 
     #[test]

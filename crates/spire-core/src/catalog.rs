@@ -844,10 +844,110 @@ pub enum EventKind {
     Ancient,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct EventOption {
+    /// The game's id for it (`OVERCOME`), as runs record the choice.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub id: String,
     pub title: String,
     pub text: String,
+    /// What taking it did in community runs (counting what followed on
+    /// later screens), most frequent first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effects: Vec<EventEffect>,
+}
+
+/// Something taking an event option did, measured from community runs.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct EventEffect {
+    pub kind: EffectKind,
+    /// Share of the runs that took the option in which it happened.
+    pub rate: f32,
+    /// How much, on average, when it did: cards, HP or gold.
+    pub amount: f32,
+}
+
+/// What an event option does to the run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EffectKind {
+    /// Cards removed from the deck.
+    Remove,
+    Transform,
+    /// Removes or transforms a curse: seen taking one out in community
+    /// runs (an option limited to starter cards never does). Its rate is
+    /// the option's removal or transform rate.
+    Uncurse,
+    Upgrade,
+    Enchant,
+    /// Cards added, curses aside.
+    Card,
+    Curse,
+    Relic,
+    Potion,
+    Heal,
+    MaxHp,
+    MaxHpLoss,
+    /// HP lost.
+    Damage,
+    Gold,
+    /// Gold paid or lost.
+    GoldCost,
+}
+
+impl EffectKind {
+    pub const ALL: [EffectKind; 15] = [
+        EffectKind::Remove,
+        EffectKind::Transform,
+        EffectKind::Uncurse,
+        EffectKind::Upgrade,
+        EffectKind::Enchant,
+        EffectKind::Card,
+        EffectKind::Curse,
+        EffectKind::Relic,
+        EffectKind::Potion,
+        EffectKind::Heal,
+        EffectKind::MaxHp,
+        EffectKind::MaxHpLoss,
+        EffectKind::Damage,
+        EffectKind::Gold,
+        EffectKind::GoldCost,
+    ];
+
+    /// What it costs the run, rather than gives.
+    pub fn is_cost(self) -> bool {
+        matches!(self, EffectKind::Curse | EffectKind::MaxHpLoss | EffectKind::Damage | EffectKind::GoldCost)
+    }
+
+    /// "removes 1 card", "about 8 HP lost".
+    pub fn describe(self, amount: f32) -> String {
+        let n = amount.round().max(1.0) as u32;
+        let cards = |verb: &str| format!("{verb} {n} card{}", if n == 1 { "" } else { "s" });
+        match self {
+            EffectKind::Remove => cards("removes"),
+            EffectKind::Transform => cards("transforms"),
+            EffectKind::Uncurse => "takes out a curse".into(),
+            EffectKind::Upgrade => cards("upgrades"),
+            EffectKind::Enchant => cards("enchants"),
+            EffectKind::Card => cards("adds"),
+            EffectKind::Curse => format!("{n} curse{}", if n == 1 { "" } else { "s" }),
+            EffectKind::Relic => format!("{n} relic{}", if n == 1 { "" } else { "s" }),
+            EffectKind::Potion => format!("{n} potion{}", if n == 1 { "" } else { "s" }),
+            EffectKind::Heal => format!("heals about {n}"),
+            EffectKind::MaxHp => format!("+{n} max HP"),
+            EffectKind::MaxHpLoss => format!("−{n} max HP"),
+            EffectKind::Damage => format!("about {n} HP"),
+            EffectKind::Gold => format!("about {n} gold"),
+            EffectKind::GoldCost => format!("about {n} gold"),
+        }
+    }
+}
+
+impl EventOption {
+    /// Its effect of a kind, if runs saw it.
+    pub fn effect(&self, kind: EffectKind) -> Option<&EventEffect> {
+        self.effects.iter().find(|e| e.kind == kind)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
