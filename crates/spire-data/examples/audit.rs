@@ -300,7 +300,8 @@ fn lookout(cat: &Catalog, pb: &spire_core::Playbook, paths: &[String]) {
     for p in paths {
         let bytes = std::fs::read(p).unwrap_or_else(|e| panic!("{p}: {e}"));
         let text = spire_data::fetch::decode_maybe_gzip(&bytes).unwrap_or_else(|e| panic!("{p}: {e}"));
-        samples.extend(spire_data::benchmarks::samples(&text, cat));
+        samples
+            .extend(spire_data::benchmarks::runs(&text, cat).into_iter().flat_map(|r| r.boss_decks).map(|d| d.sample));
     }
     // Every rule, relic and event, by name and its `when`.
     let rules: Vec<(String, &When)> = pb
@@ -309,8 +310,7 @@ fn lookout(cat: &Catalog, pb: &spire_core::Playbook, paths: &[String]) {
         .map(|f| (cat.relics.get(&f.relic).map_or(f.relic.to_string(), |r| r.name.clone()), &f.when))
         .chain(pb.event_fits.iter().map(|f| (format!("event: {}", f.title), &f.when)))
         .collect();
-    println!("== relic_fits and event_fits against {} community decks at the end of acts they cleared", samples.len());
-    println!("   (a shortfall is measured against decks that cleared the act before)");
+    println!("== relic_fits and event_fits against {} community decks going into a boss", samples.len());
     let mut acts: BTreeMap<u8, usize> = BTreeMap::new();
     for s in &samples {
         *acts.entry(s.act).or_default() += 1;

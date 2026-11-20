@@ -208,10 +208,11 @@ impl Composition {
     }
 }
 
-/// Share of the act's floors played, by the act's usual length.
+/// Share of the act's floors played, by the act's usual length (with the
+/// extra boss floor in a double-boss act).
 pub fn progress(state: &RunState, catalog: &Catalog) -> f32 {
-    let act = state.act.as_ref().and_then(|a| catalog.acts.get(a));
-    let length = act.and_then(|a| a.length).or(act.map(|a| a.rooms)).filter(|n| *n > 0).unwrap_or(17);
+    let rooms = state.act.as_ref().and_then(|a| catalog.acts.get(a)).map(|a| a.rooms);
+    let length = super::floors::act_length(state, catalog).or(rooms).filter(|n| *n > 0).unwrap_or(17);
     (state.act_floor as f32 / length as f32).clamp(0.0, 1.0)
 }
 

@@ -207,6 +207,12 @@ pub fn read_link(path: &Path) -> Option<Link> {
     serde_json::from_str(&text).ok()
 }
 
+/// Whether text is one whole JSON document: a file read while the game was
+/// still writing it isn't.
+pub fn whole_json(text: &str) -> bool {
+    serde_json::from_str::<serde::de::IgnoredAny>(text).is_ok()
+}
+
 /// When a file last changed, for noticing new writes.
 pub fn modified(path: &Path) -> Option<SystemTime> {
     std::fs::metadata(path).and_then(|m| m.modified()).ok()

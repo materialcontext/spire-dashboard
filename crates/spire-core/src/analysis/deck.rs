@@ -130,10 +130,6 @@ impl DeckProfile {
     pub fn of_type(&self, t: CardType) -> u32 {
         self.by_type.get(&t).copied().unwrap_or(0)
     }
-
-    pub fn upgraded_fraction(&self) -> f32 {
-        if self.total == 0 { 0.0 } else { self.upgraded as f32 / self.total as f32 }
-    }
 }
 
 fn is_starter_basic(card: &Card) -> bool {

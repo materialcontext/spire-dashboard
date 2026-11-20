@@ -19,7 +19,7 @@ spire-app ──► spire-data ──► spire-core
 
 ## Domain
 
-**Catalog** (`catalog.rs`): game facts in a source-agnostic shape. A `DataPack` is the serialized form; a `Catalog` layers packs **bundled → downloaded → curated → user**, later winning by id. The curated layer (`data/patterns.json`) fixes sourced gaps in monster data, only while the gap remains. Measured layers (`benchmarks`, `risks`, `card_lines`, `card_lift`) come from the last pack that has them.
+**Catalog** (`catalog.rs`): game facts in a source-agnostic shape. A `DataPack` is the serialized form; a `Catalog` layers packs **bundled → downloaded → curated → user**, later winning by id. The curated layer (`data/patterns.json`) fixes sourced gaps in monster data, only while the gap remains. Measured layers come whole from one pack: `benchmarks` with their `risks`, and `card_lines`, from the pack measured on the most decks (later wins ties), so a small download never replaces a larger bundled sample; `card_lift` from the last pack that has it.
 
 **Playbook** (`playbook.rs`, `data/playbook.json`): strategy as data, editable without a rebuild.
 
@@ -96,7 +96,7 @@ Beta by default. Wire structs name only used fields, all optional; `null` lists 
 
 ## Community runs (`/api/exports/runs`)
 
-Gzipped JSON lines, one game run file each, read through the shared `run_file.rs`. The cursor runs by **upload** time: a page holds runs played on any build. An update reads `run_pages` pages (default 12) uploaded in the last 14 days. Single-player runs without modifiers only. If this step fails, the rest of the update still applies.
+Gzipped JSON lines, one game run file each, read through the shared `run_file.rs`. The cursor runs by **upload** time: a page holds runs played on any build. An update reads `run_pages` pages (default 12) uploaded in the last 14 days. Single-player runs without modifiers only. A failed page stops the read; pages already read are used, and the rest of the update still applies. `refresh-bundle` fails instead.
 
 | Module | Reads |
 |---|---|

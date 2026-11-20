@@ -121,32 +121,45 @@ pub fn codex_responses(base_url: &str, channel: Channel) -> Result<(Responses, O
 }
 
 /// Downloads up to `pages` pages of community runs submitted since `start`,
-/// returning decompressed JSONL text per page.
-pub fn codex_run_pages(base_url: &str, start: &str, pages: u32) -> Result<Vec<String>, DataError> {
+/// returning decompressed JSONL text per page, and the error that stopped
+/// it early, if any (the pages read before it are kept).
+pub fn codex_run_pages(base_url: &str, start: &str, pages: u32) -> (Vec<String>, Option<DataError>) {
     let agent = agent();
-    let base = base_url.trim_end_matches('/');
+    let url = format!("{}/api/exports/runs", base_url.trim_end_matches('/'));
     let mut out = Vec::new();
     let mut cursor: Option<String> = None;
     for _ in 0..pages {
-        let mut url = format!("{base}/api/exports/runs?limit=1000&start={start}");
-        if let Some(c) = &cursor {
-            url.push_str(&format!("&cursor={c}"));
-        }
-        let mut resp = agent.get(&url).call().map_err(|e| DataError::Http(format!("{url}: {e}")))?;
-        let next = resp.headers().get("x-next-cursor").and_then(|v| v.to_str().ok()).map(str::to_string);
-        let bytes = resp
-            .body_mut()
-            .with_config()
-            .limit(256 * 1024 * 1024)
-            .read_to_vec()
-            .map_err(|e| DataError::Http(format!("{url}: {e}")))?;
-        out.push(decode_maybe_gzip(&bytes)?);
-        match next {
-            Some(c) if !c.is_empty() => cursor = Some(c),
-            _ => break,
+        match run_page(&agent, &url, start, cursor.as_deref()) {
+            Ok((text, next)) => {
+                out.push(text);
+                match next {
+                    Some(c) if !c.is_empty() && cursor.as_ref() != Some(&c) => cursor = Some(c),
+                    _ => break,
+                }
+            }
+            Err(e) => return (out, Some(e)),
         }
     }
-    Ok(out)
+    (out, None)
+}
+
+/// One page of the run export, and the cursor to the next.
+fn run_page(
+    agent: &ureq::Agent,
+    url: &str,
+    start: &str,
+    cursor: Option<&str>,
+) -> Result<(String, Option<String>), DataError> {
+    let err = |e: &dyn std::fmt::Display| DataError::Http(format!("{url} (cursor {cursor:?}): {e}"));
+    // `query` percent-encodes: the cursor and timestamp can hold `+` or `=`.
+    let mut req = agent.get(url).query("limit", "1000").query("start", start);
+    if let Some(c) = cursor {
+        req = req.query("cursor", c);
+    }
+    let mut resp = req.call().map_err(|e| err(&e))?;
+    let next = resp.headers().get("x-next-cursor").and_then(|v| v.to_str().ok()).map(str::to_string);
+    let bytes = resp.body_mut().with_config().limit(256 * 1024 * 1024).read_to_vec().map_err(|e| err(&e))?;
+    Ok((decode_maybe_gzip(&bytes)?, next))
 }
 
 /// The export is served as a gzip file; accept plain text too.
@@ -201,6 +214,23 @@ pub fn add_community_data(pack: &mut DataPack, pages: &[String], notes: &mut Vec
     notes.push(format!("Community runs: {} boss fights, {lines} card lines.", bosses.len()));
 }
 
+/// Where the bundle's measured layers stay because the download measured
+/// fewer decks (`Catalog::from_layers` keeps the larger sample).
+fn kept_bundled(pack: &DataPack) -> Vec<String> {
+    use spire_core::catalog::{benchmark_decks, line_fights};
+    let bundled = crate::bundled_pack();
+    let mut notes = Vec::new();
+    let (new, old) = (benchmark_decks(&pack.benchmarks), benchmark_decks(&bundled.benchmarks));
+    if new < old {
+        notes.push(format!("Composition ranges and risks: the bundled ones stay ({old} decks against {new})."));
+    }
+    let (new, old) = (line_fights(&pack.card_lines), line_fights(&bundled.card_lines));
+    if new < old {
+        notes.push(format!("Card lines: the bundled ones stay ({old} boss fights against {new})."));
+    }
+    notes
+}
+
 /// Fetches and converts a full data pack from a source. Blocking: run it off
 /// the UI thread.
 pub fn fetch(source: &Source) -> Result<Fetched, DataError> {
@@ -211,9 +241,13 @@ pub fn fetch(source: &Source) -> Result<Fetched, DataError> {
             let mut notes = Vec::new();
             if *run_pages > 0 {
                 let start = rfc3339(unix_now() - RUN_WINDOW_DAYS * 86_400);
-                match codex_run_pages(base_url, &start, *run_pages) {
-                    Ok(pages) => add_community_data(&mut pack, &pages, &mut notes),
-                    Err(e) => notes.push(format!("Skipped community runs: {e}")),
+                let (pages, stopped) = codex_run_pages(base_url, &start, *run_pages);
+                if let Some(e) = stopped {
+                    notes.push(format!("Community runs: stopped after {} of {run_pages} pages: {e}", pages.len()));
+                }
+                if !pages.is_empty() {
+                    add_community_data(&mut pack, &pages, &mut notes);
+                    notes.extend(kept_bundled(&pack));
                 }
             }
             Ok(Fetched { pack, notes })

@@ -6,7 +6,7 @@
 //! ```
 //!
 //! Options: `--base-url URL`, `--out PATH` (default `data/catalog.json`),
-//! `--run-pages N` pages of community runs for exact lineups (default 3, 0 = none),
+//! `--run-pages N` pages of community runs (default 12, 0 = none),
 //! `--runs-since RFC3339` (default: 14 days ago), `--channel beta|stable`
 //! (default beta). With `--from-dir`, run pages
 //! are read from `DIR/runs/*` (gzip or plain JSONL).
@@ -94,7 +94,11 @@ fn run() -> Result<(), String> {
         None if args.run_pages > 0 => {
             let since =
                 args.runs_since.clone().unwrap_or_else(|| rfc3339(unix_now() - fetch::RUN_WINDOW_DAYS * 86_400));
-            fetch::codex_run_pages(&args.base_url, &since, args.run_pages)
+            // The bundle is all or nothing: a page that fails fails it.
+            match fetch::codex_run_pages(&args.base_url, &since, args.run_pages) {
+                (pages, None) => Ok(pages),
+                (_, Some(e)) => Err(e),
+            }
         }
         None => Ok(Vec::new()),
     }
