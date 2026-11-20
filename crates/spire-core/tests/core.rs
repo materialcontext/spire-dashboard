@@ -221,6 +221,7 @@ fn node_reports_fold_into_state_and_undo() {
             Change::SetGold(120),
             Change::AddPotion("FIRE".into()),
         ],
+        record: None,
     }));
     let s = run.state();
     assert_eq!(s.floor, 1);
@@ -304,6 +305,7 @@ fn hallway_threats_follow_weak_then_normal_pool() {
         encounter: Some(EncounterId::new("SLIMES_WEAK")),
         event: None,
         changes: vec![],
+        record: None,
     }));
     let later = next_threats(&run.state(), NodeKind::Monster, &cat, &pb, &deck);
     assert_eq!(later.len(), 1);
@@ -367,6 +369,7 @@ fn lookout_names_a_crucial_relic_only_where_this_act_can_give_it() {
         encounter: None,
         event: Some(EventId::new("SHRINE")),
         changes: vec![],
+        record: None,
     }));
     assert!(looks(&seen).is_empty());
 
@@ -658,7 +661,13 @@ fn fixed_rooms_are_predicted_from_the_act_floor() {
     let mut rooms = Vec::new();
     for _ in 0..6 {
         rooms.push(expected_room(&run.state(), &cat));
-        run.push(RunEvent::Node(NodeReport { kind: NodeKind::Unknown, encounter: None, event: None, changes: vec![] }));
+        run.push(RunEvent::Node(NodeReport {
+            kind: NodeKind::Unknown,
+            encounter: None,
+            event: None,
+            changes: vec![],
+            record: None,
+        }));
     }
     use NodeKind::*;
     assert_eq!(rooms, [Some(Ancient), Some(Monster), None, Some(Treasure), Some(Rest), Some(Boss)]);
@@ -672,7 +681,13 @@ fn fixed_rooms_are_predicted_from_the_act_floor() {
     let mut rooms = Vec::new();
     for _ in 0..7 {
         rooms.push(expected_room(&run.state(), &cat));
-        run.push(RunEvent::Node(NodeReport { kind: NodeKind::Unknown, encounter: None, event: None, changes: vec![] }));
+        run.push(RunEvent::Node(NodeReport {
+            kind: NodeKind::Unknown,
+            encounter: None,
+            event: None,
+            changes: vec![],
+            record: None,
+        }));
     }
     assert_eq!(rooms, [Some(Ancient), Some(Monster), None, Some(Treasure), Some(Rest), Some(Boss), Some(Boss)]);
 }
@@ -818,6 +833,7 @@ fn timeline_tracks_floors_fights_and_elites() {
             encounter: Some(EncounterId::new(enc)),
             event: None,
             changes: vec![Change::SetHp(hp)],
+            record: None,
         })
     };
     run.push(node(NodeKind::Monster, "SLIMES_WEAK", 70));
@@ -827,6 +843,7 @@ fn timeline_tracks_floors_fights_and_elites() {
         encounter: None,
         event: None,
         changes: vec![Change::SetHp(64)],
+        record: None,
     }));
     let t = timeline::timeline(&run, &cat, &pb);
     assert_eq!(t.points.len(), 3);
@@ -1100,6 +1117,7 @@ fn history_edits_rewrite_the_log() {
             encounter: Some(EncounterId::new(e)),
             event: None,
             changes: vec![],
+            record: None,
         })
     };
     run.push(fight("A"));
@@ -1137,7 +1155,13 @@ fn next_fights_leave_out_what_cannot_come_next() {
     let pb = playbook();
     let mut run = started(&cat);
     let fight = |kind, e: &str| {
-        RunEvent::Node(NodeReport { kind, encounter: Some(EncounterId::new(e)), event: None, changes: vec![] })
+        RunEvent::Node(NodeReport {
+            kind,
+            encounter: Some(EncounterId::new(e)),
+            event: None,
+            changes: vec![],
+            record: None,
+        })
     };
     run.push(fight(NodeKind::Monster, "CULTIST_PAIR"));
     run.push(fight(NodeKind::Elite, "BRUTE_ELITE"));
@@ -1270,7 +1294,7 @@ fn the_current_floor_is_the_one_being_played() {
 fn the_next_act_is_offered_only_after_this_acts_boss() {
     let cat = catalog();
     let mut run = started(&cat);
-    let floor = |kind| RunEvent::Node(NodeReport { kind, encounter: None, event: None, changes: vec![] });
+    let floor = |kind| RunEvent::Node(NodeReport { kind, encounter: None, event: None, changes: vec![], record: None });
     run.push(floor(NodeKind::Monster));
     assert!(!run.state().act_boss_beaten());
     run.push(floor(NodeKind::Boss));

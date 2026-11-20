@@ -10,6 +10,7 @@ pub mod healing;
 pub mod jobs;
 pub mod lines;
 pub mod pattern;
+pub mod report;
 pub mod requirements;
 pub mod rules;
 pub mod shape;

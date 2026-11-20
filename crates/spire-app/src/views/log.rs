@@ -111,6 +111,19 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
         }
     }
 
+    // A rest site's choice, for the run's decision record.
+    if d.kind == NodeKind::Rest {
+        step(ui, 2, "What you did");
+        let mut choice = d.rest;
+        let options = [(Some("HEAL"), "Rest"), (Some("SMITH"), "Smith"), (Some("OTHER"), "Other")];
+        if segmented(ui, &mut choice, &options) {
+            d.rest = choice;
+        }
+        if d.rest.is_none() {
+            ui.label(caption("Unpicked: an upgrade reads as Smith, HP gained as Rest."));
+        }
+    }
+
     step(ui, 3, "After the floor");
     egui::Grid::new("vitals").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
         ui.label(RichText::new("HP").color(text_dim()));
@@ -130,6 +143,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
                         .clicked()
                 {
                     d.hp = (s.hp + heal).min(d.max_hp);
+                    d.rest = Some("HEAL");
                 }
             }
         });

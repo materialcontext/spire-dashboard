@@ -18,7 +18,7 @@ fn boss_floor_run(cat: &Catalog) -> Run {
             break;
         }
         let kind = expected_room(&run.state(), cat).unwrap_or(NodeKind::Unknown);
-        run.push(RunEvent::Node(NodeReport { kind, encounter: None, event: None, changes: vec![] }));
+        run.push(RunEvent::Node(NodeReport { kind, encounter: None, event: None, changes: vec![], record: None }));
     }
     run
 }
@@ -64,6 +64,7 @@ fn fool_run(cat: &Catalog) -> Run {
                 encounter: Some(e),
                 event: None,
                 changes: vec![],
+                record: None,
             }));
         }
         if index < 2 {
@@ -72,6 +73,7 @@ fn fool_run(cat: &Catalog) -> Run {
                 encounter: bosses.first().cloned(),
                 event: None,
                 changes: vec![],
+                record: None,
             }));
         } else {
             run.push(RunEvent::SetSecondBoss(bosses[1].clone()));

@@ -308,6 +308,43 @@ impl Shortfall {
     }
 }
 
+/// What the run report counts as a cause (`analysis::report`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReportLines {
+    /// Causes shown, at most.
+    pub causes: u32,
+    /// Going into the last floor under this share of max HP is a cause.
+    pub low_hp: f32,
+    /// An act's fights costing this many times the community's average
+    /// HP is a cause…
+    pub bleed: f32,
+    /// …when that's at least this much HP over the average.
+    pub bleed_min: f32,
+    /// A fight costing this much HP over the community's average is a
+    /// turning point.
+    pub big_loss: f32,
+    /// Upgrading at a rest site under this share of max HP, in the act the
+    /// run ended, is a cause.
+    pub smith_low_hp: f32,
+    /// Ending with at least this much gold is a cause.
+    pub unspent_gold: i32,
+}
+
+impl Default for ReportLines {
+    fn default() -> Self {
+        ReportLines {
+            causes: 3,
+            low_hp: 0.5,
+            bleed: 1.5,
+            bleed_min: 20.0,
+            big_loss: 10.0,
+            smith_low_hp: 0.4,
+            unspent_gold: 150,
+        }
+    }
+}
+
 /// What card-reward suggestions show (`analysis::lines`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -450,6 +487,9 @@ pub struct Playbook {
     /// What card-reward suggestions show (`analysis::lines`).
     #[serde(default)]
     pub picks: PickLines,
+    /// What the run report counts as a cause (`analysis::report`).
+    #[serde(default)]
+    pub report: ReportLines,
     #[serde(default)]
     pub simulation: SimAssumptions,
     /// Which roles a relic plays, from what the deck simulator reads in its
