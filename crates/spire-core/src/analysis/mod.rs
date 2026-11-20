@@ -26,7 +26,7 @@ use crate::run::{NodeKind, RunState};
 
 pub use advice::{Advice, Severity};
 pub use deck::{ClassifiedCard, Coverage, DeckProfile, DeckRow};
-pub use events::{Lookout, Room as RelicRoom, Source as RelicSource};
+pub use events::{Lookout, Room as LookoutRoom, Source as LookoutSource, Wanted};
 pub use threats::{ThreatPreview, ThreatProfile};
 
 /// Everything the dashboard shows, computed in one pass from a state.

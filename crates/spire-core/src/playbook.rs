@@ -268,23 +268,59 @@ impl Default for TagLines {
     }
 }
 
-/// When a relic is crucial to a deck, by its cards (`cards`, counted at
-/// `at_least`, dead cards left out), by a shortfall the relic fixes
-/// (`short_of`), or both.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct RelicFit {
-    pub relic: crate::ids::RelicId,
+/// When a deck needs something: by its cards (`cards`, counted at
+/// `at_least`, dead cards left out), by a shortfall (`short_of`), by low HP
+/// (`hp_below`). Every test it names must hold.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct When {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cards: Option<Condition>,
     #[serde(default)]
     pub at_least: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub short_of: Option<Shortfall>,
-    /// The cards counted, plural ("Powers"); unused for a shortfall.
+    /// HP under this share of max HP.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hp_below: Option<f32>,
+    /// The cards counted, plural ("Powers"); unused without `cards`.
     #[serde(default)]
     pub what: String,
+    /// The same, for one ("removable curse"); `what` when unset.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub what_one: String,
+}
+
+impl When {
+    /// Whether it tests anything at all.
+    pub fn is_set(&self) -> bool {
+        self.cards.is_some() || self.short_of.is_some() || self.hp_below.is_some()
+    }
+}
+
+/// When a relic is crucial to a deck.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct RelicFit {
+    pub relic: crate::ids::RelicId,
+    #[serde(flatten)]
+    pub when: When,
     /// What the relic does for the deck ("each deals 8 damage to ALL
     /// enemies when played").
+    pub why: String,
+}
+
+/// When an event option is worth steering into `?` rooms for: the deck
+/// needs one of `effects`, by `when`. Options that also do one of `unless`
+/// don't answer it (a removal that adds a curse, for a curse).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct EventFit {
+    /// The warning's title ("Remove a curse").
+    pub title: String,
+    pub effects: Vec<crate::catalog::EffectKind>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unless: Vec<crate::catalog::EffectKind>,
+    #[serde(flatten)]
+    pub when: When,
+    /// What it does for the deck ("a curse removed is never drawn again").
     pub why: String,
 }
 
@@ -481,6 +517,9 @@ pub struct Playbook {
     /// When a relic is worth fishing `?` rooms for.
     #[serde(default)]
     pub relic_fits: Vec<RelicFit>,
+    /// When an event option is worth steering into `?` rooms for.
+    #[serde(default)]
+    pub event_fits: Vec<EventFit>,
     /// When a deck counts as desperately short of Block or max HP.
     #[serde(default)]
     pub short: ShortLines,

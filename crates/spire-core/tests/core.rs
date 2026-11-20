@@ -3,7 +3,7 @@
 use spire_core::analysis::deck::{Coverage, coverage, deck_profile};
 use spire_core::analysis::events::lookout;
 use spire_core::analysis::threats::next_threats;
-use spire_core::analysis::{Dashboard, RelicRoom, Severity, sim, timeline};
+use spire_core::analysis::{Dashboard, LookoutRoom, Severity, Wanted, sim, timeline};
 use spire_core::catalog::*;
 use spire_core::playbook::*;
 use spire_core::run::*;
@@ -125,7 +125,11 @@ fn catalog() -> Catalog {
                 name: "Shrine".into(),
                 kind: EventKind::Act,
                 acts: vec![ActId::new("ACT1")],
-                options: vec![EventOption { title: "Pray".into(), text: "Lose 5 HP. Obtain Wisp.".into() }],
+                options: vec![EventOption {
+                    title: "Pray".into(),
+                    text: "Lose 5 HP. Obtain Wisp.".into(),
+                    ..Default::default()
+                }],
                 requires: vec![],
                 act_span: None,
                 relics: vec![EventRelic { relic: RelicId::new("WISP"), option: Some("Pray".into()), one_of: 1 }],
@@ -136,7 +140,11 @@ fn catalog() -> Catalog {
                 name: "Fountain".into(),
                 kind: EventKind::Shared,
                 acts: vec![],
-                options: vec![EventOption { title: "Drink".into(), text: "Heal 10 HP. Obtain Wisp.".into() }],
+                options: vec![EventOption {
+                    title: "Drink".into(),
+                    text: "Heal 10 HP. Obtain Wisp.".into(),
+                    ..Default::default()
+                }],
                 requires: vec!["Act 2 only".into()],
                 act_span: Some((1, 1)),
                 relics: vec![EventRelic { relic: RelicId::new("WISP"), option: Some("Drink".into()), one_of: 1 }],
@@ -355,9 +363,9 @@ fn lookout_names_a_crucial_relic_only_where_this_act_can_give_it() {
     run.push(RunEvent::Adjust(vec![Change::AddCard(DeckCard::new("INFLAME".into()))]));
     let l = looks(&run);
     assert_eq!(l.len(), 1);
-    assert_eq!(l[0].why, "2 Powers: each hits everyone");
+    assert_eq!(l[0].why, "2 Powers (2× INFLAME): each hits everyone");
     assert_eq!(l[0].sources.len(), 1, "the Shrine only");
-    let RelicRoom::Event { name, option, .. } = &l[0].sources[0].room else { panic!("an event") };
+    let LookoutRoom::Event { name, option, .. } = &l[0].sources[0].room else { panic!("an event") };
     assert_eq!(name, "Shrine");
     assert_eq!(option.as_ref().map(|(_, text)| text.as_str()), Some("Lose 5 HP. Obtain Wisp."));
     assert_eq!(l[0].sources[0].chance(), Some(0.25));
@@ -376,6 +384,101 @@ fn lookout_names_a_crucial_relic_only_where_this_act_can_give_it() {
     // Already held: nothing to fish for.
     run.push(RunEvent::Adjust(vec![Change::AddRelic(RelicId::new("WISP"))]));
     assert!(looks(&run).is_empty());
+}
+
+#[test]
+fn lookout_names_event_options_that_do_what_the_deck_needs() {
+    let mut cat = catalog();
+    let effect = |kind, rate, amount| EventEffect { kind, rate, amount };
+    let option = |id: &str, effects: Vec<EventEffect>| EventOption {
+        id: id.into(),
+        title: id.to_lowercase(),
+        text: format!("{id} text"),
+        effects,
+    };
+    let event = |id: &str, options, met| Event {
+        id: EventId::new(id),
+        name: id.to_lowercase(),
+        kind: EventKind::Act,
+        acts: vec![ActId::new("ACT1")],
+        options,
+        requires: vec![],
+        act_span: None,
+        relics: vec![],
+        met: [(ActId::new("ACT1"), met)].into_iter().collect(),
+    };
+    for e in [
+        event(
+            "BRIDGE",
+            vec![
+                option(
+                    "CROSS",
+                    vec![
+                        effect(EffectKind::Remove, 1.0, 1.0),
+                        effect(EffectKind::Uncurse, 1.0, 1.0),
+                        effect(EffectKind::Damage, 0.5, 6.0),
+                    ],
+                ),
+                // Removes one, adds one: no help with a curse.
+                option(
+                    "BATHE",
+                    vec![
+                        effect(EffectKind::Remove, 1.0, 1.0),
+                        effect(EffectKind::Uncurse, 1.0, 1.0),
+                        effect(EffectKind::Curse, 1.0, 1.0),
+                    ],
+                ),
+                // Starter cards only: never seen taking out a curse.
+                option("CARVE", vec![effect(EffectKind::Transform, 1.0, 1.0)]),
+            ],
+            0.4,
+        ),
+        event("SPRING", vec![option("DRINK", vec![effect(EffectKind::Heal, 1.0, 20.0)])], 0.2),
+    ] {
+        cat.events.insert(e.id.clone(), e);
+    }
+    let mut pb = playbook();
+    pb.event_fits = serde_json::from_str(
+        r#"[
+          { "title": "Remove a curse", "effects": ["uncurse"], "unless": ["curse"],
+            "cards": { "all": [{ "card_type": "curse" }, { "not": { "keyword": "Eternal" } }] },
+            "at_least": 1, "what": "removable curses", "what_one": "removable curse", "why": "never drawn again" },
+          { "title": "Heal", "effects": ["heal"], "unless": ["damage"], "hp_below": 0.35, "why": "saves a rest" }
+        ]"#,
+    )
+    .expect("event fits parse");
+
+    let mut run = started(&cat);
+    assert!(looks(&run, &cat, &pb).is_empty(), "no curse, full HP");
+
+    run.push(RunEvent::Adjust(vec![Change::AddCard(DeckCard::new("REGRET".into()))]));
+    let l = looks(&run, &cat, &pb);
+    assert_eq!(l.len(), 1);
+    assert_eq!(l[0].title, "Remove a curse");
+    assert_eq!(l[0].why, "1 removable curse (REGRET): never drawn again");
+    assert_eq!(l[0].wanted, Wanted::Effects(vec![EffectKind::Uncurse]));
+    assert_eq!(l[0].sources.len(), 1, "Cross only: Bathe adds a curse, Carve can't reach one");
+    let s = &l[0].sources[0];
+    let LookoutRoom::Event { name, option, .. } = &s.room else { panic!("an event") };
+    assert_eq!((name.as_str(), option.as_ref().map(|(t, _)| t.as_str())), ("bridge", Some("cross")));
+    assert_eq!(s.chance(), Some(0.4));
+    assert_eq!(s.costs, vec![effect(EffectKind::Damage, 0.5, 6.0)], "what it costs, not what it gives");
+
+    // Low HP adds the heal.
+    run.push(RunEvent::Adjust(vec![Change::SetHp(20)]));
+    let l = looks(&run, &cat, &pb);
+    assert_eq!(l.iter().map(|l| l.title.as_str()).collect::<Vec<_>>(), ["Remove a curse", "Heal"]);
+    assert!(l[1].why.starts_with("HP 20/80"));
+
+    // The bridge seen this run: the curse has nowhere left to go.
+    run.push(RunEvent::Node(NodeReport {
+        kind: NodeKind::Unknown,
+        encounter: None,
+        event: Some(EventId::new("BRIDGE")),
+        changes: vec![],
+        record: None,
+    }));
+    assert_eq!(looks(&run, &cat, &pb).iter().map(|l| l.title.as_str()).collect::<Vec<_>>(), ["Heal"]);
 }
 
 fn looks(run: &Run, cat: &Catalog, pb: &Playbook) -> Vec<spire_core::analysis::Lookout> {
@@ -408,10 +511,7 @@ fn lookout_warns_of_lost_max_hp_with_the_relics_a_chest_can_give() {
     let mut pb = playbook();
     pb.relic_fits.push(RelicFit {
         relic: RelicId::new("PEAR"),
-        cards: None,
-        at_least: 0,
-        short_of: Some(Shortfall::MaxHp),
-        what: String::new(),
+        when: When { short_of: Some(Shortfall::MaxHp), ..Default::default() },
         why: "raises max HP by 10".into(),
     });
 
@@ -425,7 +525,7 @@ fn lookout_warns_of_lost_max_hp_with_the_relics_a_chest_can_give() {
     assert_eq!(l[0].title, "Short of max HP");
     assert_eq!(l[0].why, "Max HP -10 since the start");
     let chest = &l[0].sources[0];
-    assert_eq!(chest.room, RelicRoom::Treasure);
+    assert_eq!(chest.room, LookoutRoom::Treasure);
     // A ? room is a treasure room in 1 run in 10; its relic is uncommon
     // half the time, one of the 2 uncommons this character can get.
     assert_eq!(chest.chance(), Some(0.1 * 0.5 / 2.0));

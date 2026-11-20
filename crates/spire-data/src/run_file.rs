@@ -296,6 +296,31 @@ pub(crate) struct WStats {
     #[serde(deserialize_with = "lenient::ids")]
     pub(crate) rest_site_choices: Vec<String>,
     pub(crate) gold_spent: Option<i32>,
+    // Numbers read as f64: a stray fraction mustn't drop the whole run.
+    pub(crate) hp_healed: Option<f64>,
+    pub(crate) max_hp_gained: Option<f64>,
+    pub(crate) max_hp_lost: Option<f64>,
+    pub(crate) gold_gained: Option<f64>,
+    pub(crate) gold_lost: Option<f64>,
+    /// The options taken in an event, in order, as text keys
+    /// (`SLIPPERY_BRIDGE.pages.INITIAL.options.OVERCOME.title`).
+    pub(crate) event_choices: Vec<WEventChoice>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+pub(crate) struct WEventChoice {
+    pub(crate) title: serde_json::Value,
+}
+
+impl WEventChoice {
+    /// The option's id, when it's an event option (`OVERCOME`); an
+    /// ancient's relic choice has none.
+    pub(crate) fn option(&self) -> Option<&str> {
+        let key = self.title.get("key")?.as_str()?;
+        let (_, rest) = key.split_once(".options.")?;
+        Some(rest.strip_suffix(".title").unwrap_or(rest))
+    }
 }
 
 /// `CARD.SNAP` → `SNAP`.

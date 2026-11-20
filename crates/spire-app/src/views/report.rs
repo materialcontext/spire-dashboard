@@ -15,32 +15,76 @@ use crate::app::ViewCtx;
 use crate::style::color::*;
 use crate::widgets::{caption, panel, secondary};
 
+/// Width the summary needs to put Acts and How it ended side by side: each
+/// half fits the Acts table (about 500 points with its frame).
+const SIDE_BY_SIDE: f32 = 1040.0;
+
+/// Acts beside How it ended, the two panels ending level; stacked when a
+/// half is too narrow for the Acts table.
+pub fn summary(ui: &mut Ui, v: &ViewCtx, r: &RunReport) {
+    let has_acts = !r.acts.is_empty();
+    if ui.available_width() >= SIDE_BY_SIDE && has_acts {
+        let id = egui::Id::unique("report-summary");
+        ui.columns(2, |cols| {
+            let [a, b] = cols else { return };
+            panel(a, "Acts", None, |ui| level(ui, id, 0, |ui| acts(ui, v, r)));
+            panel(b, "How it ended", None, |ui| level(ui, id, 1, |ui| ending(ui, v, r)));
+        });
+        return;
+    }
+    panel(ui, "How it ended", None, |ui| ending(ui, v, r));
+    if has_acts {
+        ui.add_space(crate::style::space::m());
+        panel(ui, "Acts", None, |ui| acts(ui, v, r));
+    }
+}
+
+/// Lays out one of several panels side by side at least as tall as the
+/// tallest of them, so they end level. Each records its own height for the
+/// next frame (a frame late when the heights change, then repainted).
+fn level(ui: &mut Ui, id: egui::Id, slot: usize, body: impl FnOnce(&mut Ui)) {
+    let key = id.with(slot);
+    let (mine, tallest) = ui.ctx().data(|d| {
+        let tallest = (0..2).filter_map(|i| d.get_temp::<f32>(id.with(i))).fold(0.0, f32::max);
+        (d.get_temp::<f32>(key), tallest)
+    });
+    body(ui);
+    let natural = ui.min_rect().height();
+    if mine != Some(natural) {
+        ui.ctx().data_mut(|d| d.insert_temp(key, natural));
+        ui.ctx().request_repaint();
+    }
+    // Pad by the difference (`set_min_height` counts from the cursor, not
+    // the top).
+    if tallest > natural {
+        ui.add_space(tallest - natural);
+    }
+}
+
 /// The run's ending, its likely causes, and the deciding fight.
-pub fn ending(ui: &mut Ui, v: &ViewCtx, r: &RunReport) {
-    panel(ui, "How it ended", None, |ui| {
-        ui.label(RichText::new(headline(v, r)).color(text()));
-        for c in &r.causes {
-            ui.horizontal_wrapped(|ui| {
-                ui.spacing_mut().item_spacing.x = 6.0;
-                ui.label(RichText::new("•").color(bad()));
-                ui.label(RichText::new(&c.text).color(text())).on_hover_text(&c.detail);
-            });
-        }
-        let Some(d) = &r.deciding else { return };
-        ui.add_space(crate::style::space::s());
-        let label = if d.won { "Costliest fight" } else { "Deciding fight" };
+fn ending(ui: &mut Ui, v: &ViewCtx, r: &RunReport) {
+    ui.label(RichText::new(headline(v, r)).color(text()));
+    for c in &r.causes {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 6.0;
-            ui.label(secondary(label));
-            ui.label(RichText::new(v.catalog.encounter_name(&d.encounter)).strong().color(text()));
-            ui.label(caption(format!("floor {} · lost {} of {} HP", d.floor, d.lost, d.hp.0)));
+            ui.label(RichText::new("•").color(bad()));
+            ui.label(RichText::new(&c.text).color(text())).on_hover_text(&c.detail);
         });
-        // The deck's outlook explains a loss; a fight won speaks for itself.
-        if !d.won {
-            let stats = v.catalog.encounters.get(&d.encounter).and_then(|e| e.stats.as_ref());
-            crate::views::turns::outlook(ui, &d.outlook, stats);
-        }
+    }
+    let Some(d) = &r.deciding else { return };
+    ui.add_space(crate::style::space::s());
+    let label = if d.won { "Costliest fight" } else { "Deciding fight" };
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        ui.label(secondary(label));
+        ui.label(RichText::new(v.catalog.encounter_name(&d.encounter)).strong().color(text()));
+        ui.label(caption(format!("floor {} · lost {} of {} HP", d.floor, d.lost, d.hp.0)));
     });
+    // The deck's outlook explains a loss; a fight won speaks for itself.
+    if !d.won {
+        let stats = v.catalog.encounters.get(&d.encounter).and_then(|e| e.stats.as_ref());
+        crate::views::turns::outlook(ui, &d.outlook, stats);
+    }
 }
 
 fn headline(v: &ViewCtx, r: &RunReport) -> String {
@@ -58,21 +102,16 @@ fn headline(v: &ViewCtx, r: &RunReport) -> String {
 
 /// One row per act: HP in and out, damage against the community's, elites,
 /// deck changes, unmet targets and the boss.
-pub fn acts(ui: &mut Ui, v: &ViewCtx, r: &RunReport) {
-    if r.acts.is_empty() {
-        return;
-    }
-    panel(ui, "Acts", None, |ui| {
-        egui::Grid::new("report-acts").num_columns(5).spacing([12.0, 4.0]).show(ui, |ui| {
-            for h in ["", "HP out", "Damage", "Deck", "Boss"] {
-                ui.label(caption(h));
-            }
+fn acts(ui: &mut Ui, v: &ViewCtx, r: &RunReport) {
+    egui::Grid::new("report-acts").num_columns(5).spacing([12.0, 4.0]).show(ui, |ui| {
+        for h in ["", "HP out", "Damage", "Deck", "Boss"] {
+            ui.label(caption(h));
+        }
+        ui.end_row();
+        for a in &r.acts {
+            act_row(ui, v, a);
             ui.end_row();
-            for a in &r.acts {
-                act_row(ui, v, a);
-                ui.end_row();
-            }
-        });
+        }
     });
 }
 
@@ -202,6 +241,9 @@ fn floor_row(ui: &mut Ui, v: &ViewCtx, f: &FloorDecisions, current: bool) -> boo
     let mut clicked = false;
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
+        // A label that breaks inside itself throws the row's later labels
+        // onto the wrong line (they overlap); whole labels move down instead.
+        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
         let place = f
             .encounter
             .as_ref()
@@ -315,8 +357,12 @@ fn rest_word(choice: &str) -> String {
 
 fn named(ui: &mut Ui, verb: &str, names: impl Iterator<Item = String>, color: egui::Color32) {
     ui.label(secondary(verb));
+    // One label per name, so a long list wraps between names.
     let names: Vec<String> = names.collect();
-    ui.label(RichText::new(names.join(", ")).color(color));
+    for (i, name) in names.iter().enumerate() {
+        let sep = if i + 1 < names.len() { "," } else { "" };
+        ui.label(RichText::new(format!("{name}{sep}")).color(color));
+    }
 }
 
 /// Card names, each with its details on hover.

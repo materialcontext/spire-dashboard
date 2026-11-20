@@ -54,6 +54,15 @@ the card you took, HP and gold after. Then it re-analyses the run.
   treasure room and how often its chest gives one of those relics, and how
   often community runs come to each in this act. Events you've had this run,
   and those the act doesn't allow, are left out.
+- **Watch for events**: the same, for event options that do what your deck
+  needs: take out a removable curse, raise max HP when you're desperately
+  short of it, heal when HP is under 30%. What an option does comes from
+  community runs that took it (Slippery Bridge's Overcome removed a card
+  every time; Wood Carvings' Bird never touched a curse), so each source says
+  how often it delivers and what it cost them (HP, max HP, a curse, gold), in
+  red when the HP would kill you. Options that undo the point (a removal that
+  adds a curse) are left out. Up to three places each, the rest on hover.
+  While following the game, the current event marks the options you want.
 - **Look for in card rewards**: up to three suggestions, from the cards you
   already have. First, *lines within reach*: two or three cards that
   community decks beat this act's boss with more often together than apart,
@@ -269,6 +278,8 @@ Everything the dashboard *believes* lives in `data/playbook.json`, not in code:
 - when a relic is crucial to a deck (`relic_fits`: the cards it counts and
   how many, or the shortfall it fixes) and when a deck counts as desperately
   short of Block or max HP (`short`)
+- when an event option is worth looking for (`event_fits`: what it must do,
+  what rules it out, and when the deck needs it, by the same tests plus HP)
 - what card-reward suggestions show (`picks`): how many, how much of a line
   may be missing, how often its missing card must be offered, and how much
   better a line or filler must do

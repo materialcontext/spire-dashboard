@@ -38512,12 +38512,38 @@
       ],
       "options": [
         {
+          "id": "IMMERSE",
           "title": "Immerse",
-          "text": "Gain 2 Max HP. Take 3 damage."
+          "text": "Gain 2 Max HP. Take 3 damage.",
+          "effects": [
+            {
+              "kind": "heal",
+              "rate": 1.0,
+              "amount": 9.289277
+            },
+            {
+              "kind": "max_hp",
+              "rate": 1.0,
+              "amount": 9.276808
+            },
+            {
+              "kind": "damage",
+              "rate": 1.0,
+              "amount": 24.877806
+            }
+          ]
         },
         {
+          "id": "ABSTAIN",
           "title": "Abstain",
-          "text": "Heal 10 HP."
+          "text": "Heal 10 HP.",
+          "effects": [
+            {
+              "kind": "heal",
+              "rate": 0.99464285,
+              "amount": 9.9874325
+            }
+          ]
         }
       ],
       "met": {
@@ -38533,12 +38559,38 @@
       ],
       "options": [
         {
+          "id": "COMBINE_STRIKES",
           "title": "Combine Strikes",
-          "text": "Remove 2 Strikes. Add Ultimate Strike to your Deck."
+          "text": "Remove 2 Strikes. Add Ultimate Strike to your Deck.",
+          "effects": [
+            {
+              "kind": "remove",
+              "rate": 1.0,
+              "amount": 2.0
+            },
+            {
+              "kind": "card",
+              "rate": 1.0,
+              "amount": 1.0057971
+            }
+          ]
         },
         {
+          "id": "COMBINE_DEFENDS",
           "title": "Combine Defends",
-          "text": "Remove 2 Defends. Add Ultimate Defend to your Deck."
+          "text": "Remove 2 Defends. Add Ultimate Defend to your Deck.",
+          "effects": [
+            {
+              "kind": "remove",
+              "rate": 1.0,
+              "amount": 2.0
+            },
+            {
+              "kind": "card",
+              "rate": 1.0,
+              "amount": 1.0138888
+            }
+          ]
         }
       ],
       "requires": [
@@ -38558,12 +38610,33 @@
       ],
       "options": [
         {
+          "id": "LET_GO",
           "title": "Let Go",
-          "text": "Transform a card in your Deck."
+          "text": "Transform a card in your Deck.",
+          "effects": [
+            {
+              "kind": "transform",
+              "rate": 1.0,
+              "amount": 1.0025575
+            },
+            {
+              "kind": "uncurse",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "MAINTAIN_CONTROL",
           "title": "Maintain Control",
-          "text": "Upgrade a card in your Deck."
+          "text": "Upgrade a card in your Deck.",
+          "effects": [
+            {
+              "kind": "upgrade",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         }
       ],
       "met": {
@@ -38579,16 +38652,70 @@
       ],
       "options": [
         {
+          "id": "SETTING_1",
           "title": "Setting 1",
-          "text": "Fight a 75 HP dummy. Procure 1 random Potion."
+          "text": "Fight a 75 HP dummy. Procure 1 random Potion.",
+          "effects": [
+            {
+              "kind": "potion",
+              "rate": 0.8979592,
+              "amount": 1.1818181
+            },
+            {
+              "kind": "heal",
+              "rate": 0.3877551,
+              "amount": 6.5263157
+            },
+            {
+              "kind": "max_hp",
+              "rate": 0.10204082,
+              "amount": 1.4
+            }
+          ]
         },
         {
+          "id": "SETTING_2",
           "title": "Setting 2",
-          "text": "Fight a 150 HP dummy. Upgrade 2 random cards."
+          "text": "Fight a 150 HP dummy. Upgrade 2 random cards.",
+          "effects": [
+            {
+              "kind": "upgrade",
+              "rate": 0.6284722,
+              "amount": 2.0165746
+            },
+            {
+              "kind": "heal",
+              "rate": 0.39583334,
+              "amount": 4.982456
+            },
+            {
+              "kind": "damage",
+              "rate": 0.14930555,
+              "amount": 3.4651163
+            }
+          ]
         },
         {
+          "id": "SETTING_3",
           "title": "Setting 3",
-          "text": "Fight a 300 HP dummy. Obtain a random Relic."
+          "text": "Fight a 300 HP dummy. Obtain a random Relic.",
+          "effects": [
+            {
+              "kind": "heal",
+              "rate": 0.44354838,
+              "amount": 6.7636366
+            },
+            {
+              "kind": "relic",
+              "rate": 0.29032257,
+              "amount": 1.0
+            },
+            {
+              "kind": "damage",
+              "rate": 0.24193548,
+              "amount": 5.3333335
+            }
+          ]
         }
       ],
       "met": {
@@ -38602,12 +38729,33 @@
       "acts": [],
       "options": [
         {
+          "id": "SHARE_KNOWLEDGE",
           "title": "Share Knowledge",
-          "text": "Choose 1 of 5 random cards to add to your Deck."
+          "text": "Choose 1 of 5 random cards to add to your Deck.",
+          "effects": [
+            {
+              "kind": "card",
+              "rate": 1.0,
+              "amount": 1.0031747
+            }
+          ]
         },
         {
+          "id": "RIP",
           "title": "Rip the Leech Off",
-          "text": "Lose 5 HP. Gain a Colorless card reward."
+          "text": "Lose 5 HP. Gain a Colorless card reward.",
+          "effects": [
+            {
+              "kind": "damage",
+              "rate": 1.0,
+              "amount": 4.991573
+            },
+            {
+              "kind": "card",
+              "rate": 0.98595506,
+              "amount": 1.0014246
+            }
+          ]
         }
       ],
       "requires": [
@@ -38632,12 +38780,28 @@
       ],
       "options": [
         {
+          "id": "EXTERMINATION",
           "title": "Learn Extermination Technique",
-          "text": "Add Exterminate to your Deck."
+          "text": "Add Exterminate to your Deck.",
+          "effects": [
+            {
+              "kind": "card",
+              "rate": 1.0,
+              "amount": 1.0103092
+            }
+          ]
         },
         {
+          "id": "SQUASH",
           "title": "Learn Squash Technique",
-          "text": "Add Squash to your Deck."
+          "text": "Add Squash to your Deck.",
+          "effects": [
+            {
+              "kind": "card",
+              "rate": 1.0,
+              "amount": 1.0086455
+            }
+          ]
         }
       ],
       "met": {
@@ -38653,12 +38817,33 @@
       ],
       "options": [
         {
+          "id": "EAT",
           "title": "Eat the Egg",
-          "text": "Gain 7 Max HP."
+          "text": "Gain 7 Max HP.",
+          "effects": [
+            {
+              "kind": "heal",
+              "rate": 1.0,
+              "amount": 7.0459557
+            },
+            {
+              "kind": "max_hp",
+              "rate": 1.0,
+              "amount": 7.0
+            }
+          ]
         },
         {
+          "id": "TAKE",
           "title": "Take the Egg",
-          "text": "Add Byrdonis Egg to your Deck."
+          "text": "Add Byrdonis Egg to your Deck.",
+          "effects": [
+            {
+              "kind": "card",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         }
       ],
       "requires": [
@@ -38677,28 +38862,74 @@
       ],
       "options": [
         {
+          "id": "DEFECT",
           "title": "Blue",
-          "text": "Obtain 3 Defect cards."
+          "text": "Obtain 3 Defect cards.",
+          "effects": [
+            {
+              "kind": "card",
+              "rate": 0.96153843,
+              "amount": 2.3066666
+            },
+            {
+              "kind": "heal",
+              "rate": 0.15384616,
+              "amount": 10.833333
+            }
+          ]
         },
         {
+          "id": "FOOL",
           "title": "Yellow",
           "text": "Obtain 3 Fool cards."
         },
         {
+          "id": "IRONCLAD",
           "title": "Red",
-          "text": "Obtain 3 Ironclad cards."
+          "text": "Obtain 3 Ironclad cards.",
+          "effects": [
+            {
+              "kind": "card",
+              "rate": 0.9661017,
+              "amount": 2.2280703
+            }
+          ]
         },
         {
+          "id": "NECROBINDER",
           "title": "Pink",
-          "text": "Obtain 3 Necrobinder cards."
+          "text": "Obtain 3 Necrobinder cards.",
+          "effects": [
+            {
+              "kind": "card",
+              "rate": 0.9263158,
+              "amount": 2.0
+            }
+          ]
         },
         {
+          "id": "REGENT",
           "title": "Orange",
-          "text": "Obtain 3 Regent cards."
+          "text": "Obtain 3 Regent cards.",
+          "effects": [
+            {
+              "kind": "card",
+              "rate": 0.9423077,
+              "amount": 2.142857
+            }
+          ]
         },
         {
+          "id": "SILENT",
           "title": "Green",
-          "text": "Obtain 3 Silent cards."
+          "text": "Obtain 3 Silent cards.",
+          "effects": [
+            {
+              "kind": "card",
+              "rate": 0.95757574,
+              "amount": 2.056962
+            }
+          ]
         }
       ],
       "met": {
@@ -38714,12 +38945,38 @@
       ],
       "options": [
         {
+          "id": "EXTRACT_CURRENT_PRIZE_1",
           "title": "Extract Nectar",
-          "text": "Gain 35 Gold."
+          "text": "Gain 35 Gold.",
+          "effects": [
+            {
+              "kind": "gold",
+              "rate": 0.99680513,
+              "amount": 35.275642
+            }
+          ]
         },
         {
+          "id": "REACH_DEEPER_1",
           "title": "Reach Deeper",
-          "text": "Enter deeper. Lose 5 HP."
+          "text": "Enter deeper. Lose 5 HP.",
+          "effects": [
+            {
+              "kind": "damage",
+              "rate": 1.0,
+              "amount": 13.605422
+            },
+            {
+              "kind": "gold",
+              "rate": 0.5180723,
+              "amount": 121.51744
+            },
+            {
+              "kind": "relic",
+              "rate": 0.48192772,
+              "amount": 1.0
+            }
+          ]
         }
       ],
       "requires": [
@@ -38743,12 +39000,68 @@
       "acts": [],
       "options": [
         {
+          "id": "UNCOVER_FUTURE",
           "title": "Uncover Future",
-          "text": "Pay 51-99 Gold. Divine 3 times."
+          "text": "Pay 51-99 Gold. Divine 3 times.",
+          "effects": [
+            {
+              "kind": "gold_cost",
+              "rate": 1.0,
+              "amount": 74.10914
+            },
+            {
+              "kind": "gold",
+              "rate": 0.7817259,
+              "amount": 29.652597
+            },
+            {
+              "kind": "card",
+              "rate": 0.5939086,
+              "amount": 1.4059829
+            },
+            {
+              "kind": "potion",
+              "rate": 0.3604061,
+              "amount": 1.1408451
+            }
+          ]
         },
         {
+          "id": "PAYMENT_PLAN",
           "title": "Payment Plan",
-          "text": "Gain a Debt. Divine 6 times."
+          "text": "Gain a Debt. Divine 6 times.",
+          "effects": [
+            {
+              "kind": "curse",
+              "rate": 1.0,
+              "amount": 1.2078947
+            },
+            {
+              "kind": "gold",
+              "rate": 0.95,
+              "amount": 44.67867
+            },
+            {
+              "kind": "card",
+              "rate": 0.7973684,
+              "amount": 1.5214522
+            },
+            {
+              "kind": "relic",
+              "rate": 0.75789475,
+              "amount": 1.0034722
+            },
+            {
+              "kind": "potion",
+              "rate": 0.6157895,
+              "amount": 1.3034188
+            },
+            {
+              "kind": "heal",
+              "rate": 0.15526316,
+              "amount": 10.881356
+            }
+          ]
         }
       ],
       "requires": [
@@ -38780,12 +39093,63 @@
       ],
       "options": [
         {
+          "id": "TRUDGE_ON",
           "title": "Trudge On",
-          "text": "Gain 61-99 Gold. Lose 8 HP."
+          "text": "Gain 61-99 Gold. Lose 8 HP.",
+          "effects": [
+            {
+              "kind": "damage",
+              "rate": 1.0,
+              "amount": 8.368853
+            },
+            {
+              "kind": "gold",
+              "rate": 0.8770492,
+              "amount": 79.53037
+            },
+            {
+              "kind": "remove",
+              "rate": 0.12295082,
+              "amount": 1.05
+            },
+            {
+              "kind": "uncurse",
+              "rate": 0.12295082,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "REST",
           "title": "Rest",
-          "text": "Heal 30% Max HP. Fight some enemies."
+          "text": "Heal 30% Max HP. Fight some enemies.",
+          "effects": [
+            {
+              "kind": "heal",
+              "rate": 0.9655172,
+              "amount": 20.738094
+            },
+            {
+              "kind": "gold",
+              "rate": 0.95019156,
+              "amount": 12.487904
+            },
+            {
+              "kind": "damage",
+              "rate": 0.8467433,
+              "amount": 15.764706
+            },
+            {
+              "kind": "card",
+              "rate": 0.8007663,
+              "amount": 1.0143541
+            },
+            {
+              "kind": "potion",
+              "rate": 0.42911878,
+              "amount": 1.0178572
+            }
+          ]
         }
       ],
       "met": {
@@ -38799,16 +39163,50 @@
       "acts": [],
       "options": [
         {
+          "id": "RANDOM",
           "title": "Pick at Random",
-          "text": "Obtain a random Doll Relic."
+          "text": "Obtain a random Doll Relic.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "TAKE_SOME_TIME",
           "title": "Take Some Time",
-          "text": "Lose 5 HP. Choose 1 of 2 Doll Relics."
+          "text": "Lose 5 HP. Choose 1 of 2 Doll Relics.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "damage",
+              "rate": 1.0,
+              "amount": 4.9894366
+            }
+          ]
         },
         {
+          "id": "EXAMINE",
           "title": "Examine Each and Make the Best Choice",
-          "text": "Lose 15 HP. Choose 1 of 3 Doll Relics."
+          "text": "Lose 15 HP. Choose 1 of 3 Doll Relics.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "damage",
+              "rate": 1.0,
+              "amount": 14.96748
+            }
+          ]
         }
       ],
       "requires": [
@@ -38848,12 +39246,33 @@
       ],
       "options": [
         {
+          "id": "LIGHT",
           "title": "Light Door",
-          "text": "Upgrade a card."
+          "text": "Upgrade a card.",
+          "effects": [
+            {
+              "kind": "upgrade",
+              "rate": 1.0,
+              "amount": 2.0
+            }
+          ]
         },
         {
+          "id": "DARK",
           "title": "Dark Door",
-          "text": "Remove 1 card from your Deck."
+          "text": "Remove 1 card from your Deck.",
+          "effects": [
+            {
+              "kind": "remove",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "uncurse",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         }
       ],
       "met": {
@@ -38869,12 +39288,38 @@
       ],
       "options": [
         {
+          "id": "BOTTLE",
           "title": "Bottle",
-          "text": "Procure Glowwater Potion."
+          "text": "Procure Glowwater Potion.",
+          "effects": [
+            {
+              "kind": "potion",
+              "rate": 0.83627206,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "CLIMB",
           "title": "Climb",
-          "text": "Obtain Fresnel Lens. Lose 13 Max HP."
+          "text": "Obtain Fresnel Lens. Lose 13 Max HP.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "max_hp_loss",
+              "rate": 1.0,
+              "amount": 13.0
+            },
+            {
+              "kind": "damage",
+              "rate": 0.17864078,
+              "amount": 7.576087
+            }
+          ]
         }
       ],
       "relics": [
@@ -38897,8 +39342,16 @@
       ],
       "options": [
         {
+          "id": "OBSERVE_CHEF",
           "title": "Observe the Chef",
-          "text": "Upgrade a random card in your Deck."
+          "text": "Upgrade a random card in your Deck.",
+          "effects": [
+            {
+              "kind": "upgrade",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         }
       ],
       "requires": [
@@ -38979,12 +39432,38 @@
       ],
       "options": [
         {
+          "id": "RESIST",
           "title": "Resist",
-          "text": "Remove 2 cards from your Deck. Add Normality to your Deck."
+          "text": "Remove 2 cards from your Deck. Add Normality to your Deck.",
+          "effects": [
+            {
+              "kind": "remove",
+              "rate": 1.0,
+              "amount": 2.0
+            },
+            {
+              "kind": "curse",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "uncurse",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "ENTER_YOUR_HOLE",
           "title": "Enter Your Hole",
-          "text": "Enchant a card with Perfect Fit."
+          "text": "Enchant a card with Perfect Fit.",
+          "effects": [
+            {
+              "kind": "enchant",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         }
       ],
       "met": {
@@ -39000,16 +39479,38 @@
       ],
       "options": [
         {
+          "id": "CONFRONT_LOCKED",
           "title": "Locked",
           "text": "You have no cards with Exhaust that can be Enchanted."
         },
         {
+          "id": "CONFRONT",
           "title": "Confront with Truth",
-          "text": "Add Decay to your Deck. Enchant a card that Exhausts with Soul's Power."
+          "text": "Add Decay to your Deck. Enchant a card that Exhausts with Soul's Power.",
+          "effects": [
+            {
+              "kind": "enchant",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "curse",
+              "rate": 1.0,
+              "amount": 1.0091324
+            }
+          ]
         },
         {
+          "id": "ACCEPT",
           "title": "Accept the Forgotten Soul",
-          "text": "Obtain Forgotten Soul."
+          "text": "Obtain Forgotten Soul.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         }
       ],
       "relics": [
@@ -39032,12 +39533,48 @@
       ],
       "options": [
         {
+          "id": "BIG_MUSHROOM",
           "title": "Big Mushroom",
-          "text": "Obtain Big Mushroom. Upon pickup, raise your Max HP by 20. At the start of each combat, draw 2 fewer cards."
+          "text": "Obtain Big Mushroom. Upon pickup, raise your Max HP by 20. At the start of each combat, draw 2 fewer cards.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "heal",
+              "rate": 1.0,
+              "amount": 20.186047
+            },
+            {
+              "kind": "max_hp",
+              "rate": 1.0,
+              "amount": 20.0
+            }
+          ]
         },
         {
+          "id": "FRAGRANT_MUSHROOM",
           "title": "Fragrant Mushroom",
-          "text": "Obtain Fragrant Mushroom. Upon pickup, lose 15 HP and Upgrade 2 random cards."
+          "text": "Obtain Fragrant Mushroom. Upon pickup, lose 15 HP and Upgrade 2 random cards.",
+          "effects": [
+            {
+              "kind": "upgrade",
+              "rate": 1.0,
+              "amount": 2.1176472
+            },
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "damage",
+              "rate": 1.0,
+              "amount": 14.94958
+            }
+          ]
         }
       ],
       "relics": [
@@ -39065,12 +39602,28 @@
       ],
       "options": [
         {
+          "id": "STUDY",
           "title": "Study",
-          "text": "Obtain a random Power."
+          "text": "Obtain a random Power.",
+          "effects": [
+            {
+              "kind": "card",
+              "rate": 1.0,
+              "amount": 1.0069444
+            }
+          ]
         },
         {
+          "id": "TOUCH_CORE",
           "title": "Touch the Core",
-          "text": "Obtain a random 0 cost card."
+          "text": "Obtain a random 0 cost card.",
+          "effects": [
+            {
+              "kind": "card",
+              "rate": 1.0,
+              "amount": 1.0094787
+            }
+          ]
         }
       ],
       "met": {
@@ -39086,12 +39639,33 @@
       ],
       "options": [
         {
+          "id": "SOLO_QUEST",
           "title": "Solo Quest",
-          "text": "Gain 135-165 Gold. Lose 18 HP."
+          "text": "Gain 135-165 Gold. Lose 18 HP.",
+          "effects": [
+            {
+              "kind": "damage",
+              "rate": 1.0,
+              "amount": 17.983957
+            },
+            {
+              "kind": "gold",
+              "rate": 0.9973262,
+              "amount": 149.06166
+            }
+          ]
         },
         {
+          "id": "JOIN_FORCES",
           "title": "Join Forces",
-          "text": "Gain 35-65 Gold."
+          "text": "Gain 35-65 Gold.",
+          "effects": [
+            {
+              "kind": "gold",
+              "rate": 1.0,
+              "amount": 50.36951
+            }
+          ]
         }
       ],
       "met": {
@@ -39107,12 +39681,33 @@
       ],
       "options": [
         {
+          "id": "CLAIM",
           "title": "Capture the Wisp",
-          "text": "Add Decay to your Deck. Obtain the Lost Wisp."
+          "text": "Add Decay to your Deck. Obtain the Lost Wisp.",
+          "effects": [
+            {
+              "kind": "curse",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "SEARCH",
           "title": "Search the Nearby Area",
-          "text": "Gain 45-75 Gold."
+          "text": "Gain 45-75 Gold.",
+          "effects": [
+            {
+              "kind": "gold",
+              "rate": 0.99590164,
+              "amount": 60.64403
+            }
+          ]
         }
       ],
       "relics": [
@@ -39135,14 +39730,46 @@
       ],
       "options": [
         {
+          "id": "REACH_INTO_THE_FLESH",
           "title": "Reach into the Flesh",
-          "text": "Remove 2 cards from your Deck. Add Spore Mind to your Deck."
+          "text": "Remove 2 cards from your Deck. Add Spore Mind to your Deck.",
+          "effects": [
+            {
+              "kind": "remove",
+              "rate": 1.0,
+              "amount": 2.0
+            },
+            {
+              "kind": "curse",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "uncurse",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "OFFER_TRIBUTE",
           "title": "Offer Tribute",
-          "text": "Pay 100-149 Gold. Obtain a random Relic."
+          "text": "Pay 100-149 Gold. Obtain a random Relic.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "gold_cost",
+              "rate": 1.0,
+              "amount": 126.625
+            }
+          ]
         },
         {
+          "id": "OFFER_TRIBUTE_LOCKED",
           "title": "Locked",
           "text": "Requires 100-149 Gold."
         }
@@ -39163,12 +39790,38 @@
       ],
       "options": [
         {
+          "id": "GROUP",
           "title": "Group",
-          "text": "Lose ALL of your Gold. Transform 2 cards."
+          "text": "Lose ALL of your Gold. Transform 2 cards.",
+          "effects": [
+            {
+              "kind": "transform",
+              "rate": 1.0,
+              "amount": 2.0
+            },
+            {
+              "kind": "uncurse",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "LONER",
           "title": "Loner",
-          "text": "Gain 5 Max HP."
+          "text": "Gain 5 Max HP.",
+          "effects": [
+            {
+              "kind": "heal",
+              "rate": 1.0,
+              "amount": 5.031646
+            },
+            {
+              "kind": "max_hp",
+              "rate": 1.0,
+              "amount": 5.0
+            }
+          ]
         }
       ],
       "requires": [
@@ -39185,6 +39838,7 @@
       "acts": [],
       "options": [
         {
+          "id": "CONTINUE",
           "title": "Continue",
           "text": ""
         }
@@ -39241,12 +39895,28 @@
       "acts": [],
       "options": [
         {
+          "id": "GRAB_POTIONS",
           "title": "Grab Potions",
-          "text": "Procure 3 Foul Potions."
+          "text": "Procure 3 Foul Potions.",
+          "effects": [
+            {
+              "kind": "potion",
+              "rate": 0.98367345,
+              "amount": 2.373444
+            }
+          ]
         },
         {
+          "id": "RANSACK",
           "title": "Ransack",
-          "text": "Procure 1 random Uncommon Potion."
+          "text": "Procure 1 random Uncommon Potion.",
+          "effects": [
+            {
+              "kind": "potion",
+              "rate": 0.76480544,
+              "amount": 1.0
+            }
+          ]
         }
       ],
       "requires": [
@@ -39270,12 +39940,58 @@
       ],
       "options": [
         {
+          "id": "NAB",
           "title": "Nab",
-          "text": "Add Injury to your Deck. Obtain a random Relic."
+          "text": "Add Injury to your Deck. Obtain a random Relic.",
+          "effects": [
+            {
+              "kind": "curse",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "relic",
+              "rate": 0.9631579,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "I_CAN_TAKE_THEM",
           "title": "I Can Take Them",
-          "text": "Fight them for Greater Rewards."
+          "text": "Fight them for Greater Rewards.",
+          "effects": [
+            {
+              "kind": "damage",
+              "rate": 0.9691358,
+              "amount": 24.643312
+            },
+            {
+              "kind": "relic",
+              "rate": 0.8518519,
+              "amount": 1.0
+            },
+            {
+              "kind": "gold",
+              "rate": 0.8518519,
+              "amount": 14.246377
+            },
+            {
+              "kind": "potion",
+              "rate": 0.8271605,
+              "amount": 1.4104477
+            },
+            {
+              "kind": "card",
+              "rate": 0.7592593,
+              "amount": 1.0081301
+            },
+            {
+              "kind": "heal",
+              "rate": 0.27160493,
+              "amount": 8.227273
+            }
+          ]
         }
       ],
       "met": {
@@ -39289,22 +40005,58 @@
       "acts": [],
       "options": [
         {
+          "id": "POTION",
           "title": "Give Potion",
-          "text": "Obtain a random Relic."
+          "text": "Obtain a random Relic.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "POTION_LOCKED",
           "title": "Locked",
           "text": "You don't have any Potions that can be given."
         },
         {
+          "id": "GOLD",
           "title": "Give 100 Gold",
-          "text": "Obtain a random Relic."
+          "text": "Obtain a random Relic.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "gold_cost",
+              "rate": 1.0,
+              "amount": 100.0
+            }
+          ]
         },
         {
+          "id": "RELIC",
           "title": "Give Relic",
-          "text": "Obtain 2 random Relics."
+          "text": "Obtain 2 random Relics.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 2.0
+            },
+            {
+              "kind": "heal",
+              "rate": 0.15,
+              "amount": 7.6410255
+            }
+          ]
         },
         {
+          "id": "POTION_LOCKED",
           "title": "Locked",
           "text": "You don't have any Relics that can be given."
         }
@@ -39331,12 +40083,38 @@
       ],
       "options": [
         {
+          "id": "TOUCH_A_MIRROR",
           "title": "Touch a Mirror",
-          "text": "Downgrade 2 random cards. Upgrade 4 random cards."
+          "text": "Downgrade 2 random cards. Upgrade 4 random cards.",
+          "effects": [
+            {
+              "kind": "upgrade",
+              "rate": 1.0,
+              "amount": 4.0
+            }
+          ]
         },
         {
+          "id": "SHATTER",
           "title": "Shatter",
-          "text": "Duplicate your Deck. Receive Bad Luck."
+          "text": "Duplicate your Deck. Receive Bad Luck.",
+          "effects": [
+            {
+              "kind": "card",
+              "rate": 1.0,
+              "amount": 33.0
+            },
+            {
+              "kind": "curse",
+              "rate": 1.0,
+              "amount": 2.4787233
+            },
+            {
+              "kind": "heal",
+              "rate": 0.10638298,
+              "amount": 18.6
+            }
+          ]
         }
       ],
       "met": {
@@ -39350,16 +40128,50 @@
       "acts": [],
       "options": [
         {
+          "id": "TOP",
           "title": "Take the Top One",
-          "text": "Trade one of your Relics for a random Relic."
+          "text": "Trade one of your Relics for a random Relic.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "heal",
+              "rate": 0.14354067,
+              "amount": 6.6
+            }
+          ]
         },
         {
+          "id": "MIDDLE",
           "title": "Take the Middle One",
-          "text": "Trade one of your Relics for a random Relic."
+          "text": "Trade one of your Relics for a random Relic.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "heal",
+              "rate": 0.119791664,
+              "amount": 6.7826085
+            }
+          ]
         },
         {
+          "id": "BOTTOM",
           "title": "Take the Bottom One",
-          "text": "Trade one of your Relics for a random Relic."
+          "text": "Trade one of your Relics for a random Relic.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         }
       ],
       "requires": [
@@ -39382,12 +40194,33 @@
       "acts": [],
       "options": [
         {
+          "id": "GORGE",
           "title": "Gorge",
-          "text": "Choose 2 of 8 random Common cards to add to your Deck."
+          "text": "Choose 2 of 8 random Common cards to add to your Deck.",
+          "effects": [
+            {
+              "kind": "card",
+              "rate": 0.9980769,
+              "amount": 2.0038536
+            }
+          ]
         },
         {
+          "id": "SEARCH",
           "title": "Search",
-          "text": "Lose 14 HP. Obtain the Chosen Cheese."
+          "text": "Lose 14 HP. Obtain the Chosen Cheese.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "damage",
+              "rate": 1.0,
+              "amount": 13.994065
+            }
+          ]
         }
       ],
       "requires": [
@@ -39419,12 +40252,38 @@
       ],
       "options": [
         {
+          "id": "ENJOY_TEA",
           "title": "Enjoy Your Tea",
-          "text": "Obtain Royal Poison. Heal to full HP."
+          "text": "Obtain Royal Poison. Heal to full HP.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "heal",
+              "rate": 1.0,
+              "amount": 40.22619
+            }
+          ]
         },
         {
+          "id": "PICK_FIGHT",
           "title": "Pick a Fight",
-          "text": "Lose 11 HP. Obtain a random Relic."
+          "text": "Lose 11 HP. Obtain a random Relic.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "damage",
+              "rate": 1.0,
+              "amount": 10.953728
+            }
+          ]
         }
       ],
       "requires": [
@@ -39450,12 +40309,33 @@
       ],
       "options": [
         {
+          "id": "EAT",
           "title": "Consume",
-          "text": "Heal 9 HP. Upgrade a card in your Deck."
+          "text": "Heal 9 HP. Upgrade a card in your Deck.",
+          "effects": [
+            {
+              "kind": "upgrade",
+              "rate": 0.9981982,
+              "amount": 1.0
+            },
+            {
+              "kind": "heal",
+              "rate": 0.96216214,
+              "amount": 8.662921
+            }
+          ]
         },
         {
+          "id": "PLANT",
           "title": "Plant and Nourish",
-          "text": "Enchant a card with Sown."
+          "text": "Enchant a card with Sown.",
+          "effects": [
+            {
+              "kind": "enchant",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         }
       ],
       "met": {
@@ -39469,30 +40349,58 @@
       "acts": [],
       "options": [
         {
+          "id": "READ_THE_BACK",
           "title": "Read the Back",
-          "text": "Choose an Attack to Enchant with Sharp 2."
+          "text": "Choose an Attack to Enchant with Sharp 2.",
+          "effects": [
+            {
+              "kind": "enchant",
+              "rate": 0.9990494,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "READ_THE_BACK_LOCKED",
           "title": "Locked",
           "text": "You don't have any Attacks that can be Enchanted."
         },
         {
+          "id": "READ_PASSAGE",
           "title": "Read a Random Passage",
-          "text": "Choose a Skill to Enchant with Nimble 2."
+          "text": "Choose a Skill to Enchant with Nimble 2.",
+          "effects": [
+            {
+              "kind": "enchant",
+              "rate": 0.99873096,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "READ_THE_BACK_LOCKED",
           "title": "Locked",
           "text": "You don't have any Skills that can be Enchanted."
         },
         {
+          "id": "READ_ENTIRE_BOOK",
           "title": "Read the Entire Book",
-          "text": "Choose a Power to Enchant with Swift 2."
+          "text": "Choose a Power to Enchant with Swift 2.",
+          "effects": [
+            {
+              "kind": "enchant",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "READ_THE_BACK_LOCKED",
           "title": "Locked",
           "text": "You don't have any Powers that can be Enchanted."
         },
         {
+          "id": "NO_OPTIONS",
           "title": "Move On",
           "text": "You don't have any cards that can be Enchanted."
         }
@@ -39513,14 +40421,17 @@
       ],
       "options": [
         {
+          "id": "TAKE_WEAPON",
           "title": "Take the Weapon",
           "text": "Add Mighty Weapon to your Deck."
         },
         {
+          "id": "TAKE_SHIELD",
           "title": "Take the Shield",
           "text": "Add Mighty Shield to your Deck."
         },
         {
+          "id": "TAKE_WINGS",
           "title": "Take the Wings",
           "text": "Add a Clumsy to your Deck. Obtain Mighty Wings."
         }
@@ -39540,12 +40451,43 @@
       "acts": [],
       "options": [
         {
+          "id": "OVERCOME",
           "title": "Overcome",
-          "text": "a random Card is removed from your Deck."
+          "text": "a random Card is removed from your Deck.",
+          "effects": [
+            {
+              "kind": "remove",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "uncurse",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "HOLD_ON_0",
           "title": "Hold On",
-          "text": "Lose 3 HP. The card in the above option is randomized."
+          "text": "Lose 3 HP. The card in the above option is randomized.",
+          "effects": [
+            {
+              "kind": "damage",
+              "rate": 1.0,
+              "amount": 7.1554403
+            },
+            {
+              "kind": "remove",
+              "rate": 0.9948186,
+              "amount": 1.0
+            },
+            {
+              "kind": "uncurse",
+              "rate": 0.9948186,
+              "amount": 1.0
+            }
+          ]
         }
       ],
       "requires": [
@@ -39568,12 +40510,28 @@
       ],
       "options": [
         {
+          "id": "OBSERVE",
           "title": "Observe",
-          "text": "Enchant a Basic Strike or Defend with Spiral."
+          "text": "Enchant a Basic Strike or Defend with Spiral.",
+          "effects": [
+            {
+              "kind": "enchant",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "DRINK",
           "title": "Drink",
-          "text": "Heal 33% Max HP."
+          "text": "Heal 33% Max HP.",
+          "effects": [
+            {
+              "kind": "heal",
+              "rate": 1.0,
+              "amount": 22.28395
+            }
+          ]
         }
       ],
       "met": {
@@ -39589,12 +40547,48 @@
       ],
       "options": [
         {
+          "id": "LET_IT_IN",
           "title": "Let It In",
-          "text": "Heal 25 HP. Add Metamorphosis to your Deck."
+          "text": "Heal 25 HP. Add Metamorphosis to your Deck.",
+          "effects": [
+            {
+              "kind": "card",
+              "rate": 1.0,
+              "amount": 1.0136611
+            },
+            {
+              "kind": "heal",
+              "rate": 0.9699454,
+              "amount": 21.659155
+            }
+          ]
         },
         {
+          "id": "REJECTION",
           "title": "Rejection",
-          "text": "Lose 10 HP. Upgrade a card."
+          "text": "Lose 10 HP. Upgrade a card.",
+          "effects": [
+            {
+              "kind": "damage",
+              "rate": 1.0,
+              "amount": 9.820988
+            },
+            {
+              "kind": "upgrade",
+              "rate": 0.8518519,
+              "amount": 1.0
+            },
+            {
+              "kind": "remove",
+              "rate": 0.14814815,
+              "amount": 1.0
+            },
+            {
+              "kind": "uncurse",
+              "rate": 0.14814815,
+              "amount": 1.0
+            }
+          ]
         }
       ],
       "met": {
@@ -39608,20 +40602,48 @@
       "acts": [],
       "options": [
         {
+          "id": "LIFT",
           "title": "Drink and Lift",
-          "text": "Lose a random Potion. Gain 10 Max HP."
+          "text": "Lose a random Potion. Gain 10 Max HP.",
+          "effects": [
+            {
+              "kind": "heal",
+              "rate": 1.0,
+              "amount": 10.228487
+            },
+            {
+              "kind": "max_hp",
+              "rate": 1.0,
+              "amount": 10.0
+            }
+          ]
         },
         {
+          "id": "LIFT_LOCKED",
           "title": "Locked",
           "text": "Requires a Potion."
         },
         {
+          "id": "LIFT_LOCKED",
           "title": "Locked",
           "text": "Requires an Attack."
         },
         {
+          "id": "PUSH",
           "title": "Push",
-          "text": "Lose 6 HP. Enchant an Attack with Vigorous 8."
+          "text": "Lose 6 HP. Enchant an Attack with Vigorous 8.",
+          "effects": [
+            {
+              "kind": "enchant",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "damage",
+              "rate": 1.0,
+              "amount": 5.980392
+            }
+          ]
         }
       ],
       "requires": [
@@ -39646,12 +40668,33 @@
       ],
       "options": [
         {
+          "id": "GRAB_SWORD",
           "title": "Grab the Sword",
-          "text": "Obtain the Sword of Stone."
+          "text": "Obtain the Sword of Stone.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "DIVE_INTO_WATER",
           "title": "Dive into the Water",
-          "text": "Gain 101-121 Gold. Lose 7 HP."
+          "text": "Gain 101-121 Gold. Lose 7 HP.",
+          "effects": [
+            {
+              "kind": "damage",
+              "rate": 1.0,
+              "amount": 6.9975033
+            },
+            {
+              "kind": "gold",
+              "rate": 1.0,
+              "amount": 111.18602
+            }
+          ]
         }
       ],
       "relics": [
@@ -39675,12 +40718,33 @@
       ],
       "options": [
         {
+          "id": "FIRST_CHEST",
           "title": "First Chest",
-          "text": "Gain 52-67 Gold."
+          "text": "Gain 52-67 Gold.",
+          "effects": [
+            {
+              "kind": "gold",
+              "rate": 1.0,
+              "amount": 59.328
+            }
+          ]
         },
         {
+          "id": "SECOND_CHEST",
           "title": "Second Chest",
-          "text": "Gain 303-363 Gold. Receive Greed."
+          "text": "Gain 303-363 Gold. Receive Greed.",
+          "effects": [
+            {
+              "kind": "curse",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "gold",
+              "rate": 1.0,
+              "amount": 333.47485
+            }
+          ]
         }
       ],
       "met": {
@@ -39694,16 +40758,38 @@
       "acts": [],
       "options": [
         {
+          "id": "APPROACH_LOCKED",
           "title": "Locked",
           "text": "None of your Attacks can be Enchanted."
         },
         {
+          "id": "APPROACH",
           "title": "Approach",
-          "text": "Enchant an Attack with Corrupted."
+          "text": "Enchant an Attack with Corrupted.",
+          "effects": [
+            {
+              "kind": "enchant",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "KILL_WITH_FIRE",
           "title": "Kill with Fire",
-          "text": "Choose a card to Transform."
+          "text": "Choose a card to Transform.",
+          "effects": [
+            {
+              "kind": "transform",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "uncurse",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         }
       ],
       "requires": [
@@ -39727,12 +40813,38 @@
       ],
       "options": [
         {
+          "id": "DECIPHER_1",
           "title": "Decipher",
-          "text": "Lose 3 Max HP. Upgrade a random card."
+          "text": "Lose 3 Max HP. Upgrade a random card.",
+          "effects": [
+            {
+              "kind": "upgrade",
+              "rate": 1.0,
+              "amount": 2.911315
+            },
+            {
+              "kind": "max_hp_loss",
+              "rate": 1.0,
+              "amount": 15.262997
+            },
+            {
+              "kind": "damage",
+              "rate": 0.42201835,
+              "amount": 19.014492
+            }
+          ]
         },
         {
+          "id": "SMASH",
           "title": "Smash",
-          "text": "Heal 20 HP."
+          "text": "Heal 20 HP.",
+          "effects": [
+            {
+              "kind": "heal",
+              "rate": 0.99117,
+              "amount": 18.728285
+            }
+          ]
         }
       ],
       "met": {
@@ -39755,24 +40867,60 @@
       "acts": [],
       "options": [
         {
+          "id": "BONE_TEA",
           "title": "Bone Tea",
-          "text": "Pay 50 Gold. At the start of the next combat, Upgrade your starting hand."
+          "text": "Pay 50 Gold. At the start of the next combat, Upgrade your starting hand.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "gold_cost",
+              "rate": 1.0,
+              "amount": 50.0
+            }
+          ]
         },
         {
+          "id": "BONE_TEA_LOCKED",
           "title": "Locked",
           "text": "Requires 50 Gold."
         },
         {
+          "id": "EMBER_TEA",
           "title": "Ember Tea",
-          "text": "Pay 150 Gold. At the start of the next 5 combats, gain 2 Strength."
+          "text": "Pay 150 Gold. At the start of the next 5 combats, gain 2 Strength.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "gold_cost",
+              "rate": 1.0,
+              "amount": 150.0
+            }
+          ]
         },
         {
+          "id": "BONE_TEA_LOCKED",
           "title": "Locked",
           "text": "Requires 150 Gold."
         },
         {
+          "id": "TEA_OF_DISCOURTESY",
           "title": "Tea of Discourtesy",
-          "text": "At the start of the next combat, shuffle 2 Dazed into your Draw Pile."
+          "text": "At the start of the next combat, shuffle 2 Dazed into your Draw Pile.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         }
       ],
       "requires": [
@@ -39829,22 +40977,27 @@
       "acts": [],
       "options": [
         {
+          "id": "POTION_COMMON",
           "title": "Insert Common Potion",
           "text": "Lose a Potion. Obtain an Upgraded Common Attack/Skill."
         },
         {
+          "id": "POTION_UNCOMMON",
           "title": "Insert Uncommon Potion",
           "text": "Lose a Potion. Obtain an Upgraded Uncommon Attack/Skill/Power."
         },
         {
+          "id": "POTION_RARE",
           "title": "Insert Rare Potion",
           "text": "Lose a Potion. Obtain an Upgraded Rare Attack/Skill/Power."
         },
         {
+          "id": "POTION_EVENT",
           "title": "Insert Event Potion",
           "text": "Lose a Potion. Obtain an Upgraded Rare Attack/Skill/Power."
         },
         {
+          "id": "POTION_TOKEN",
           "title": "Insert Token Potion",
           "text": "Lose a Potion. Obtain an Upgraded Common Attack/Skill."
         }
@@ -39865,12 +41018,48 @@
       ],
       "options": [
         {
+          "id": "RETURN_THE_KEY",
           "title": "Return the Key",
-          "text": "Gain 100 Gold."
+          "text": "Gain 100 Gold.",
+          "effects": [
+            {
+              "kind": "gold",
+              "rate": 1.0,
+              "amount": 100.95607
+            }
+          ]
         },
         {
+          "id": "KEEP_THE_KEY",
           "title": "Keep the Key",
-          "text": "Fight to obtain the Key."
+          "text": "Fight to obtain the Key.",
+          "effects": [
+            {
+              "kind": "card",
+              "rate": 0.9681275,
+              "amount": 1.8271605
+            },
+            {
+              "kind": "gold",
+              "rate": 0.9561753,
+              "amount": 14.929167
+            },
+            {
+              "kind": "damage",
+              "rate": 0.8804781,
+              "amount": 20.61991
+            },
+            {
+              "kind": "potion",
+              "rate": 0.45816734,
+              "amount": 1.0695652
+            },
+            {
+              "kind": "heal",
+              "rate": 0.41434264,
+              "amount": 7.7211537
+            }
+          ]
         }
       ],
       "met": {
@@ -39884,12 +41073,33 @@
       "acts": [],
       "options": [
         {
+          "id": "NAB_THE_MAP",
           "title": "Nab the Map",
-          "text": "Receive the Spoils Map."
+          "text": "Receive the Spoils Map.",
+          "effects": [
+            {
+              "kind": "card",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "SLOWLY_FIND_AN_EXIT",
           "title": "Slowly Find an Exit",
-          "text": "Lose 8 HP. Procure 1 random Potion."
+          "text": "Lose 8 HP. Procure 1 random Potion.",
+          "effects": [
+            {
+              "kind": "damage",
+              "rate": 1.0,
+              "amount": 8.0
+            },
+            {
+              "kind": "potion",
+              "rate": 0.9411765,
+              "amount": 1.0
+            }
+          ]
         }
       ],
       "requires": [
@@ -39914,14 +41124,17 @@
       ],
       "options": [
         {
+          "id": "THERMAL_BATHS",
           "title": "Thermal Baths",
           "text": "Pay 88 Gold. At the start of each combat, heal 8 HP."
         },
         {
+          "id": "PRIVATE_OASIS",
           "title": "Private Oasis",
           "text": "Lose ALL your Gold. At the start of the next Boss combat, heal all of your HP."
         },
         {
+          "id": "DRINK_WATERS",
           "title": "Drink Bath Water",
           "text": "Lose 31 HP. Add 3 Guilty to your Deck. Obtain a random Relic."
         }
@@ -39937,12 +41150,38 @@
       "acts": [],
       "options": [
         {
+          "id": "PLAIN",
           "title": "This",
-          "text": "Lose 6 HP. Gain 41-68 Gold."
+          "text": "Lose 6 HP. Gain 41-68 Gold.",
+          "effects": [
+            {
+              "kind": "damage",
+              "rate": 1.0,
+              "amount": 5.990345
+            },
+            {
+              "kind": "gold",
+              "rate": 1.0,
+              "amount": 55.107586
+            }
+          ]
         },
         {
+          "id": "ORNATE",
           "title": "That",
-          "text": "Add Clumsy to your Deck. Obtain a random Relic."
+          "text": "Add Clumsy to your Deck. Obtain a random Relic.",
+          "effects": [
+            {
+              "kind": "curse",
+              "rate": 1.0,
+              "amount": 1.005644
+            },
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         }
       ],
       "met": {
@@ -39961,8 +41200,16 @@
       ],
       "options": [
         {
+          "id": "CHOOSE_CARD_TYPE",
           "title": "Accept",
-          "text": "Create a custom card to add to your Deck."
+          "text": "Create a custom card to add to your Deck.",
+          "effects": [
+            {
+              "kind": "card",
+              "rate": 1.0,
+              "amount": 1.011583
+            }
+          ]
         }
       ],
       "met": {
@@ -39978,12 +41225,38 @@
       ],
       "options": [
         {
+          "id": "DIVE_IN",
           "title": "Dive In",
-          "text": "Lose 8 HP. Obtain a random forgotten Relic from the past."
+          "text": "Lose 8 HP. Obtain a random forgotten Relic from the past.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "damage",
+              "rate": 1.0,
+              "amount": 7.997685
+            }
+          ]
         },
         {
+          "id": "GRAB",
           "title": "Grab Random Junk",
-          "text": "Gain 100 Gold. Obtain a random forgotten card from the past."
+          "text": "Gain 100 Gold. Obtain a random forgotten card from the past.",
+          "effects": [
+            {
+              "kind": "card",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "gold",
+              "rate": 1.0,
+              "amount": 100.24359
+            }
+          ]
         }
       ],
       "relics": [
@@ -40021,12 +41294,93 @@
       ],
       "options": [
         {
+          "id": "ACCEPT",
           "title": "Accept",
-          "text": "Serve as today's Decider."
+          "text": "Serve as today's Decider.",
+          "effects": [
+            {
+              "kind": "curse",
+              "rate": 0.75053304,
+              "amount": 1.0198864
+            },
+            {
+              "kind": "heal",
+              "rate": 0.31343284,
+              "amount": 8.693877
+            },
+            {
+              "kind": "transform",
+              "rate": 0.20682302,
+              "amount": 2.0
+            },
+            {
+              "kind": "uncurse",
+              "rate": 0.20682302,
+              "amount": 1.0
+            },
+            {
+              "kind": "relic",
+              "rate": 0.20469083,
+              "amount": 2.0
+            },
+            {
+              "kind": "gold",
+              "rate": 0.14712153,
+              "amount": 222.95653
+            },
+            {
+              "kind": "upgrade",
+              "rate": 0.12579957,
+              "amount": 2.0
+            }
+          ]
         },
         {
+          "id": "REJECT",
           "title": "Reject",
-          "text": "You are not allowed to Reject."
+          "text": "You are not allowed to Reject.",
+          "effects": [
+            {
+              "kind": "curse",
+              "rate": 0.75,
+              "amount": 1.0476191
+            },
+            {
+              "kind": "heal",
+              "rate": 0.2857143,
+              "amount": 10.25
+            },
+            {
+              "kind": "upgrade",
+              "rate": 0.21428572,
+              "amount": 2.0
+            },
+            {
+              "kind": "relic",
+              "rate": 0.17857143,
+              "amount": 2.0
+            },
+            {
+              "kind": "card",
+              "rate": 0.14285715,
+              "amount": 2.25
+            },
+            {
+              "kind": "gold",
+              "rate": 0.14285715,
+              "amount": 251.25
+            },
+            {
+              "kind": "transform",
+              "rate": 0.10714286,
+              "amount": 2.0
+            },
+            {
+              "kind": "uncurse",
+              "rate": 0.10714286,
+              "amount": 1.0
+            }
+          ]
         }
       ],
       "met": {
@@ -40042,12 +41396,38 @@
       ],
       "options": [
         {
+          "id": "REST",
           "title": "Rest Anyways",
-          "text": "Heal to full HP. Receive Poor Sleep."
+          "text": "Heal to full HP. Receive Poor Sleep.",
+          "effects": [
+            {
+              "kind": "curse",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "heal",
+              "rate": 1.0,
+              "amount": 42.675
+            }
+          ]
         },
         {
+          "id": "KILL",
           "title": "Kill the Trees",
-          "text": "Lose 8 Max HP. Obtain a random Relic."
+          "text": "Lose 8 Max HP. Obtain a random Relic.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "max_hp_loss",
+              "rate": 1.0,
+              "amount": 8.0
+            }
+          ]
         }
       ],
       "requires": [
@@ -40073,12 +41453,53 @@
       "acts": [],
       "options": [
         {
+          "id": "UNLOCK_CAGE",
           "title": "Unlock the Cage",
-          "text": "Lose Lantern Key. Obtain History Course."
+          "text": "Lose Lantern Key. Obtain History Course.",
+          "effects": [
+            {
+              "kind": "remove",
+              "rate": 1.0,
+              "amount": 1.0210526
+            },
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0210526
+            }
+          ]
         },
         {
+          "id": "UNLOCK_CHEST",
           "title": "Unlock the Chest",
-          "text": "Lose Lantern Key. Procure 2 random Potions. Obtain 2 random Relics."
+          "text": "Lose Lantern Key. Procure 2 random Potions. Obtain 2 random Relics.",
+          "effects": [
+            {
+              "kind": "remove",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 2.0
+            },
+            {
+              "kind": "potion",
+              "rate": 0.85,
+              "amount": 1.7647059
+            },
+            {
+              "kind": "upgrade",
+              "rate": 0.15,
+              "amount": 2.0
+            },
+            {
+              "kind": "heal",
+              "rate": 0.1,
+              "amount": 10.5
+            }
+          ]
         }
       ],
       "relics": [
@@ -40101,6 +41522,7 @@
       ],
       "options": [
         {
+          "id": "ENTER",
           "title": "Enter Waterfall",
           "text": ""
         }
@@ -40115,22 +41537,63 @@
       ],
       "options": [
         {
+          "id": "BLOODY_INK",
           "title": "Bloody Ink",
-          "text": "Gain 6 Max HP."
+          "text": "Gain 6 Max HP.",
+          "effects": [
+            {
+              "kind": "heal",
+              "rate": 1.0,
+              "amount": 6.0214796
+            },
+            {
+              "kind": "max_hp",
+              "rate": 1.0,
+              "amount": 6.0
+            }
+          ]
         },
         {
+          "id": "TENTACLE_QUILL",
           "title": "Tentacle Quill",
-          "text": "Pay 55 Gold. Enchant a card with Steady."
+          "text": "Pay 55 Gold. Enchant a card with Steady.",
+          "effects": [
+            {
+              "kind": "enchant",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "gold_cost",
+              "rate": 1.0,
+              "amount": 57.21374
+            }
+          ]
         },
         {
+          "id": "TENTACLE_QUILL_LOCKED",
           "title": "Locked",
           "text": "Requires 55 Gold."
         },
         {
+          "id": "PRICKLY_SPONGE",
           "title": "Prickly Sponge",
-          "text": "Pay 120 Gold. Enchant 2 cards with Steady."
+          "text": "Pay 120 Gold. Enchant 2 cards with Steady.",
+          "effects": [
+            {
+              "kind": "enchant",
+              "rate": 1.0,
+              "amount": 2.0
+            },
+            {
+              "kind": "gold_cost",
+              "rate": 1.0,
+              "amount": 99.71795
+            }
+          ]
         },
         {
+          "id": "TENTACLE_QUILL_LOCKED",
           "title": "Locked",
           "text": "Requires 120 Gold."
         }
@@ -40149,30 +41612,73 @@
       "acts": [],
       "options": [
         {
+          "id": "BARGAIN_BIN",
           "title": "Wongo's Bargain Bin",
-          "text": "Pay 100 Gold. Obtain 1 random Common Relic."
+          "text": "Pay 100 Gold. Obtain 1 random Common Relic.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "gold_cost",
+              "rate": 1.0,
+              "amount": 100.0
+            }
+          ]
         },
         {
+          "id": "BARGAIN_BIN_LOCKED",
           "title": "Locked",
           "text": "Requires 100 Gold."
         },
         {
+          "id": "FEATURED_ITEM",
           "title": "Wongo's Featured Item",
-          "text": "Pay 200 Gold. Obtain a random Relic."
+          "text": "Pay 200 Gold. Obtain a random Relic.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "gold_cost",
+              "rate": 1.0,
+              "amount": 200.0
+            }
+          ]
         },
         {
+          "id": "BARGAIN_BIN_LOCKED",
           "title": "Locked",
           "text": "Requires 200 Gold."
         },
         {
+          "id": "MYSTERY_BOX",
           "title": "Wongo's Mystery Box",
-          "text": "Pay 300 Gold. Obtain 3 random Relics after 5 combats."
+          "text": "Pay 300 Gold. Obtain 3 random Relics after 5 combats.",
+          "effects": [
+            {
+              "kind": "relic",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "gold_cost",
+              "rate": 1.0,
+              "amount": 300.0
+            }
+          ]
         },
         {
+          "id": "BARGAIN_BIN_LOCKED",
           "title": "Locked",
           "text": "Requires 300 Gold."
         },
         {
+          "id": "LEAVE",
           "title": "Leave",
           "text": "Downgrade a random card."
         }
@@ -40204,12 +41710,38 @@
       ],
       "options": [
         {
+          "id": "BOTTLE",
           "title": "Bottle",
-          "text": "Procure 1 random Potion."
+          "text": "Procure 1 random Potion.",
+          "effects": [
+            {
+              "kind": "potion",
+              "rate": 0.94814813,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "BATHE",
           "title": "Bathe",
-          "text": "Remove 1 card from your Deck. Add 1 Guilty to your Deck."
+          "text": "Remove 1 card from your Deck. Add 1 Guilty to your Deck.",
+          "effects": [
+            {
+              "kind": "remove",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "curse",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "uncurse",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         }
       ],
       "met": {
@@ -40225,12 +41757,43 @@
       ],
       "options": [
         {
+          "id": "GOLD",
           "title": "Exchange Gold",
-          "text": "Lose 26-44 Gold. Procure 2 random Potions."
+          "text": "Lose 26-44 Gold. Procure 2 random Potions.",
+          "effects": [
+            {
+              "kind": "gold_cost",
+              "rate": 1.0,
+              "amount": 36.944057
+            },
+            {
+              "kind": "potion",
+              "rate": 0.97202796,
+              "amount": 1.7050359
+            }
+          ]
         },
         {
+          "id": "HUG",
           "title": "Hug the Tree",
-          "text": "Lose 9 HP. Choose a card to Transform."
+          "text": "Lose 9 HP. Choose a card to Transform.",
+          "effects": [
+            {
+              "kind": "transform",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "damage",
+              "rate": 1.0,
+              "amount": 8.985944
+            },
+            {
+              "kind": "uncurse",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         }
       ],
       "requires": [
@@ -40249,20 +41812,45 @@
       ],
       "options": [
         {
+          "id": "BIRD",
           "title": "Bird",
-          "text": "Choose 1 starter card to Transform into Peck."
+          "text": "Choose 1 starter card to Transform into Peck.",
+          "effects": [
+            {
+              "kind": "transform",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "SNAKE",
           "title": "Snake",
-          "text": "Enchant 1 card with Slither."
+          "text": "Enchant 1 card with Slither.",
+          "effects": [
+            {
+              "kind": "enchant",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "SNAKE_LOCKED",
           "title": "Locked",
           "text": "None of your cards can be Enchanted with Slither."
         },
         {
+          "id": "TORUS",
           "title": "Torus",
-          "text": "Choose 1 starter card to Transform into Toric Toughness."
+          "text": "Choose 1 starter card to Transform into Toric Toughness.",
+          "effects": [
+            {
+              "kind": "transform",
+              "rate": 0.9928058,
+              "amount": 1.0
+            }
+          ]
         }
       ],
       "requires": [
@@ -40281,14 +41869,17 @@
       ],
       "options": [
         {
+          "id": "HELP_IMMEDIATELY",
           "title": "Help Immediately",
           "text": "Add an Injury to your Deck. Obtain Wuppy with 60 HP."
         },
         {
+          "id": "BE_CAUTIOUS",
           "title": "Be Cautious",
           "text": "Lose 0 HP. Obtain Wuppy with 30 HP."
         },
         {
+          "id": "IGNORE",
           "title": "Ignore",
           "text": "Procure a random potion."
         }
@@ -40313,18 +41904,68 @@
       ],
       "options": [
         {
+          "id": "BREATHING_TECHNIQUES",
           "title": "Breathing Techniques",
-          "text": "Pay 25 Gold. Add an Enlightenment to your Deck."
+          "text": "Pay 25 Gold. Add an Enlightenment to your Deck.",
+          "effects": [
+            {
+              "kind": "card",
+              "rate": 1.0,
+              "amount": 2.012739
+            },
+            {
+              "kind": "gold_cost",
+              "rate": 1.0,
+              "amount": 50.0
+            }
+          ]
         },
         {
+          "id": "EMOTIONAL_AWARENESS",
           "title": "Emotional Awareness",
-          "text": "Pay 125 Gold. Remove 1 card from your Deck."
+          "text": "Pay 125 Gold. Remove 1 card from your Deck.",
+          "effects": [
+            {
+              "kind": "remove",
+              "rate": 1.0,
+              "amount": 1.0
+            },
+            {
+              "kind": "gold_cost",
+              "rate": 1.0,
+              "amount": 125.0
+            },
+            {
+              "kind": "uncurse",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "ARACHNID_ACUPUNCTURE",
           "title": "Arachnid Acupuncture",
-          "text": "Pay 250 Gold. Remove 2 cards from your Deck."
+          "text": "Pay 250 Gold. Remove 2 cards from your Deck.",
+          "effects": [
+            {
+              "kind": "remove",
+              "rate": 1.0,
+              "amount": 2.0
+            },
+            {
+              "kind": "gold_cost",
+              "rate": 1.0,
+              "amount": 250.0
+            },
+            {
+              "kind": "uncurse",
+              "rate": 1.0,
+              "amount": 1.0
+            }
+          ]
         },
         {
+          "id": "LOCKED",
           "title": "Locked",
           "text": "Not enough Gold."
         }
