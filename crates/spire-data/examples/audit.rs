@@ -14,6 +14,9 @@
 //! reader leaves untagged.
 //! `--lines` prints the card lines in the catalog: per character and act,
 //! the boss fights behind them and the best lines.
+//! `--fights <page.gz>...` rebuilds A10 decks going into every elite and
+//! boss fight and shows, per encounter, how the death rate moves with each
+//! role's job and share, next to the playbook's demands for it.
 //! `--lookout <page.gz>...` rebuilds community decks at the end of each act
 //! they cleared (run export pages) and counts, per `relic_fits` rule, the
 //! share that qualify: a lookout warning should be rare.
@@ -55,6 +58,11 @@ fn main() {
     if std::env::args().any(|a| a == "--roles") {
         let pages: Vec<String> = std::env::args().skip_while(|a| a != "--roles").skip(1).collect();
         roles(&cat, &pb, &pages);
+        return;
+    }
+    if std::env::args().any(|a| a == "--fights") {
+        let pages: Vec<String> = std::env::args().skip_while(|a| a != "--fights").skip(1).collect();
+        fights(&cat, &pb, &pages);
         return;
     }
     if std::env::args().any(|a| a == "--lookout") {
@@ -626,6 +634,148 @@ fn pooled(names: &[String], fights: &Fights) {
                 h.0 * 100.0,
                 h.1 * 100.0,
                 mark(h.0, h.1)
+            );
+        }
+    }
+}
+
+/// Research for the fight demands: A10 decks going into each elite and boss
+/// (deduplicated, each player capped at 20 runs), and per encounter how
+/// each measure separates the decks that died there from those that won.
+fn fights(cat: &Catalog, pb: &spire_core::Playbook, paths: &[String]) {
+    use spire_core::analysis::jobs;
+    use spire_core::analysis::sim::simulate;
+    use spire_core::analysis::threats::{Scaling, demands};
+    use spire_core::run::NodeKind;
+    use std::collections::{BTreeSet, HashMap};
+    let asc: u32 = std::env::var("ASC").ok().and_then(|a| a.parse().ok()).unwrap_or(10);
+    let version =
+        |b: &str| -> Vec<u32> { b.trim_start_matches('v').split('.').map(|p| p.parse().unwrap_or(0)).collect() };
+    let min = version(&pb.composition.min_build);
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut runs = Vec::new();
+    for p in paths {
+        let bytes = std::fs::read(p).unwrap_or_else(|e| panic!("{p}: {e}"));
+        let Ok(text) = spire_data::fetch::decode_maybe_gzip(&bytes) else { continue };
+        for line in text.lines() {
+            let r = spire_data::benchmarks::fight_decks(line, cat, &[NodeKind::Elite, NodeKind::Boss]);
+            if r.boss_decks.is_empty() || r.meta.ascension != asc {
+                continue;
+            }
+            if r.meta.build.as_deref().is_none_or(|b| version(b) < min) {
+                continue;
+            }
+            if r.meta.hash.as_ref().is_some_and(|h| !seen.insert(h.clone())) {
+                continue;
+            }
+            runs.push(r);
+        }
+        eprint!(".");
+    }
+    eprintln!();
+    let mut per_player: HashMap<Option<String>, usize> = HashMap::new();
+    for r in &runs {
+        *per_player.entry(r.meta.player.clone()).or_default() += 1;
+    }
+    let weight = |r: &spire_data::benchmarks::RunDecks| match &r.meta.player {
+        None => 1.0,
+        Some(_) => (PLAYER_CAP / per_player[&r.meta.player] as f64).min(1.0),
+    };
+    let mut names: Vec<String> = Role::ALL.iter().map(|r| format!("job {}", r.label())).collect();
+    names.extend(Role::ALL.iter().map(|r| format!("share {}", r.label())));
+    names.extend(["deck size", "damage:block", "dead draws", "entering HP%"].map(String::from));
+    let measure = |state: &spire_core::run::RunState| -> Vec<f64> {
+        let sim = simulate(state, cat, &pb.simulation);
+        let j = jobs::measure(&sim);
+        let p = spire_core::analysis::deck::run_profile(state, cat, pb);
+        let n = p.total.max(1) as f64;
+        let mut v: Vec<f64> = Role::ALL.iter().map(|r| j.value(*r) as f64).collect();
+        v.extend(Role::ALL.iter().map(|r| (p.role(*r) + p.starter_role(*r)) as f64 / n));
+        v.extend([
+            n,
+            j.fast_damage as f64 / (3.0 * j.mitigation as f64).max(1.0),
+            sim.dead_draws as f64,
+            state.hp as f64 / state.max_hp.max(1) as f64,
+        ]);
+        v
+    };
+    // encounter -> [(measures, won, weight)]
+    let mut by_enc: BTreeMap<String, Vec<(Vec<f64>, bool, f64)>> = BTreeMap::new();
+    let mut kind_of: BTreeMap<String, (NodeKind, u8)> = BTreeMap::new();
+    for r in &runs {
+        let w = weight(r);
+        for d in &r.boss_decks {
+            let Some(e) = &d.encounter else { continue };
+            kind_of.insert(e.to_string(), (d.kind, d.sample.act));
+            by_enc.entry(e.to_string()).or_default().push((measure(&d.sample.state), d.won, w));
+        }
+    }
+    println!(
+        "== A{asc}, builds >= {}: {} runs, {} fights",
+        pb.composition.min_build,
+        runs.len(),
+        by_enc.values().map(Vec::len).sum::<usize>()
+    );
+    let mut keys: Vec<&String> = by_enc.keys().collect();
+    keys.sort_by_key(|k| (kind_of[*k].1, kind_of[*k].0 == NodeKind::Boss, (*k).clone()));
+    for k in keys {
+        let fs = &by_enc[k];
+        let (kind, act) = kind_of[k];
+        let tw: f64 = fs.iter().map(|f| f.2).sum();
+        let lost: f64 = fs.iter().filter(|f| !f.1).map(|f| f.2).sum();
+        let enc = cat.encounters.get(&spire_core::EncounterId::new(k));
+        let asks: Vec<String> = enc
+            .map(|e| {
+                let t = threat_profile(e, cat, pb, Scaling { tough: asc >= 8, deadly: asc >= 9 });
+                demands(&t, e.room, pb.act(act))
+                    .into_iter()
+                    .map(|d| format!("{} ({})", d.role.label(), d.reason))
+                    .collect()
+            })
+            .unwrap_or_default();
+        println!(
+            "\n{} [{:?}, act {}]: {:.0} fights, {:.0} deaths ({:.1}%)",
+            enc.map_or(k.as_str(), |e| e.name.as_str()),
+            kind,
+            act + 1,
+            tw,
+            lost,
+            lost / tw * 100.0
+        );
+        println!("   playbook asks: {}", if asks.is_empty() { "nothing".into() } else { asks.join("; ") });
+        if lost < 15.0 {
+            println!("   (too few deaths to measure)");
+            continue;
+        }
+        println!("   {:<22} {:>7} {:>7} | death% low q / mid / high q | AUC", "measure", "p25", "p75");
+        for (m, name) in names.iter().enumerate() {
+            let vals: Vec<(f64, f64)> = fs.iter().map(|f| (f.0[m], f.2)).collect();
+            let (p25, p75) = (wquantile(&vals, 0.25), wquantile(&vals, 0.75));
+            let rate = |pick: &dyn Fn(f64) -> bool| {
+                let (n, d) = fs
+                    .iter()
+                    .filter(|f| pick(f.0[m]))
+                    .fold((0.0, 0.0), |(n, d), f| (n + f.2, d + if f.1 { 0.0 } else { f.2 }));
+                if n > 0.0 { format!("{:>5.1}", d / n * 100.0) } else { "    -".into() }
+            };
+            let (mut num, mut den) = (0.0, 0.0);
+            for a in fs.iter().filter(|f| f.1) {
+                for b in fs.iter().filter(|f| !f.1) {
+                    let w = a.2 * b.2;
+                    den += w;
+                    num += w * match a.0[m].total_cmp(&b.0[m]) {
+                        std::cmp::Ordering::Greater => 1.0,
+                        std::cmp::Ordering::Equal => 0.5,
+                        std::cmp::Ordering::Less => 0.0,
+                    };
+                }
+            }
+            println!(
+                "   {name:<22} {p25:>7.2} {p75:>7.2} | {} {} {} | {:.2}",
+                rate(&|v| v < p25),
+                rate(&|v| v >= p25 && v <= p75),
+                rate(&|v| v > p75),
+                num / den.max(1e-9)
             );
         }
     }

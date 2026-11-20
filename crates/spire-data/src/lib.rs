@@ -159,6 +159,22 @@ mod tests {
     }
 
     #[test]
+    fn orbs_tag_their_cards() {
+        use spire_core::analysis::tags::{Tag, tags};
+        let (cat, pb) = (bundled_catalog(), bundled_playbook());
+        let has = |id: &str| -> Vec<Tag> {
+            let card = &cat.cards[&spire_core::CardId::new(id)];
+            tags(card, false, &pb).iter().map(|t| t.tag).collect()
+        };
+        // Lightning: Damage and Chip. Glass: Chip and Area.
+        let zap = has("ZAP");
+        assert!(zap.contains(&Tag::Damage) && zap.contains(&Tag::ChipDamage), "{zap:?}");
+        let glass = has("GLASSWORK");
+        assert!(glass.contains(&Tag::ChipDamage) && glass.contains(&Tag::Area), "{glass:?}");
+        assert!(!glass.contains(&Tag::Damage));
+    }
+
+    #[test]
     fn role_criteria_say_how_a_card_gets_each_role() {
         use spire_core::playbook::Role;
         let pb = bundled_playbook();

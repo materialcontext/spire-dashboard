@@ -105,7 +105,7 @@ Gzipped JSON lines, one game run file each, read through the shared `run_file.rs
 | `codex_events.rs` | Event relics seen given, how often runs meet each event per act, each option's measured `effects` (incl. `uncurse`), `?`-room treasure odds and chest rarities |
 | `card_lines.rs` | Card rewards offered per act, for `lines::measure` (every ascension) |
 
-`audit --roles` and `audit --lookout` rerun these analyses against saved pages.
+`audit --roles`, `--fights` and `--lookout` rerun these analyses against saved pages.
 
 ## Extension points
 

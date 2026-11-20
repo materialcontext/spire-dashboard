@@ -1,8 +1,7 @@
 {
   "version": 1,
   "tag_lines": {
-    "chip_damage": 4,
-    "chip_cost": 1
+    "chip_damage": 4
   },
   "tag_rules": [
     {
@@ -14,6 +13,45 @@
           },
           {
             "text_contains": "lightning"
+          }
+        ]
+      }
+    },
+    {
+      "tag": "chip_damage",
+      "when": {
+        "all": [
+          {
+            "text_contains": "channel"
+          },
+          {
+            "text_contains": "lightning"
+          }
+        ]
+      }
+    },
+    {
+      "tag": "chip_damage",
+      "when": {
+        "all": [
+          {
+            "text_contains": "channel"
+          },
+          {
+            "text_contains": "glass"
+          }
+        ]
+      }
+    },
+    {
+      "tag": "area",
+      "when": {
+        "all": [
+          {
+            "text_contains": "channel"
+          },
+          {
+            "text_contains": "glass"
           }
         ]
       }
@@ -330,7 +368,7 @@
     {
       "role": "fast_damage",
       "tag": "area",
-      "min": 1
+      "min": 5
     },
     {
       "role": "fast_damage",
@@ -459,6 +497,9 @@
       "fast_damage"
     ],
     "KNIFE_TRAP": [
+      "scaling_damage"
+    ],
+    "MURDER": [
       "scaling_damage"
     ],
     "NOCK": [

@@ -41,11 +41,14 @@ pub struct RunMeta {
     pub build: Option<String>,
 }
 
-/// A deck going into a boss fight, and whether the run got past it.
+/// A deck going into a boss (or elite) fight, and whether the run got past
+/// it.
 #[derive(Clone, Debug)]
 pub struct BossDeck {
     pub sample: Sample,
     pub won: bool,
+    pub encounter: Option<spire_core::EncounterId>,
+    pub kind: NodeKind,
 }
 
 /// One run's decks going into each boss fight: as samples for the
@@ -75,6 +78,12 @@ fn reward_cards(state: &RunState, catalog: &Catalog) -> Vec<spire_core::ids::Car
 }
 
 pub fn run_decks(line: &str, catalog: &Catalog) -> RunDecks {
+    fight_decks(line, catalog, &[NodeKind::Boss])
+}
+
+/// A run's decks going into each fight of the `kinds` given (the card lines
+/// keep bosses only).
+pub fn fight_decks(line: &str, catalog: &Catalog, kinds: &[NodeKind]) -> RunDecks {
     let mut out = RunDecks::default();
     let Ok(run) = serde_json::from_str::<WRun>(line) else { return out };
     let modded = run.modifiers.as_ref().is_some_and(|m| !m.is_null() && m.as_array().is_none_or(|a| !a.is_empty()));
@@ -96,7 +105,7 @@ pub fn run_decks(line: &str, catalog: &Catalog) -> RunDecks {
         // Going into a boss fight: lost only when the run died there, on
         // its last floor; a run abandoned there says nothing.
         if let RunEvent::Node(n) = e
-            && n.kind == NodeKind::Boss
+            && kinds.contains(&n.kind)
             && let Some(character) = &state.character
         {
             let last = Some(i) == last_node;
@@ -110,7 +119,11 @@ pub fn run_decks(line: &str, catalog: &Catalog) -> RunDecks {
             if let Some(won_fight) = outcome {
                 let sample =
                     Sample { character: character.clone(), act: state.act_index, state: state.clone(), weight: 1.0 };
-                out.boss_decks.push(BossDeck { sample, won: won_fight });
+                out.boss_decks.push(BossDeck { sample, won: won_fight, encounter: n.encounter.clone(), kind: n.kind });
+            }
+            if n.kind == NodeKind::Boss
+                && let Some(won_fight) = outcome
+            {
                 out.bosses.push(BossFight {
                     character: character.clone(),
                     act: state.act_index,

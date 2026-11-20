@@ -256,15 +256,14 @@ pub struct TagRole {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TagLines {
-    /// Damage per hit at or under this is Chip Damage, on a cheap card.
+    /// A card's damage (all its hits) at or under this is Chip Damage, not
+    /// Damage.
     pub chip_damage: u32,
-    /// Costs at or under this count as cheap.
-    pub chip_cost: u8,
 }
 
 impl Default for TagLines {
     fn default() -> Self {
-        TagLines { chip_damage: 4, chip_cost: 1 }
+        TagLines { chip_damage: 4 }
     }
 }
 
