@@ -5,14 +5,14 @@
 //! - **Causes**: the likely reasons, ranked: the deck short for the fight
 //!   that ended it (the survival outlook with the deck it had then), low HP
 //!   going in, fights costing more than the community's, the act's role
-//!   targets unmet, gaps against decks that cleared the act, and missed
+//!   composition warnings going into the boss, and missed
 //!   fixes (an upgrade at a rest site on low HP, gold left unspent,
 //!   removable curses kept). Thresholds are the playbook's `report` lines.
 //! - **Deciding fight**: the one that ended it, else the one that cost most,
 //!   with the deck's outlook there.
 //! - **Acts**: a card per act: HP in and out, damage against the community,
-//!   elites, deck changes, the act's role targets, gaps against decks that
-//!   cleared it, and the outlook against its boss.
+//!   elites, deck changes, the composition warnings going into its boss,
+//!   and the outlook against it.
 //! - **Turning points**: the fights that cost far more than usual, elites,
 //!   rest sites (for markers on the HP chart).
 //! - **Decisions**: per floor, what was taken and passed over, bought,
@@ -21,9 +21,8 @@
 //! Pure: a few deck simulations per run (one per act and the deciding
 //! fight), so compute it once per run shown, not per frame.
 
-use crate::analysis::benchmark::{self, Comparison};
+use crate::analysis::composition::{self, Row};
 use crate::analysis::deck::run_profile;
-use crate::analysis::jobs;
 use crate::analysis::sim::simulate;
 use crate::analysis::survival::{self, Outlook, Verdict};
 use crate::catalog::{Catalog, NodeKind};
@@ -95,12 +94,8 @@ pub struct ActCard {
     pub added: u32,
     pub removed: u32,
     pub upgraded: u32,
-    /// The act's role targets: the role, cards for it at the act's end, and
-    /// the target.
-    pub roles: Vec<(Role, u32, u32)>,
-    /// Where the deck going into the boss fell short of decks that cleared
-    /// the act.
-    pub short: Vec<Comparison>,
+    /// Composition warnings going into the boss, biggest win-rate gap first.
+    pub flags: Vec<Row>,
     /// The boss: the deck's outlook going in, and whether it was beaten.
     pub boss: Option<(EncounterId, Verdict, u32, Option<bool>)>,
 }
@@ -312,26 +307,14 @@ fn act_card(
     }
     let count =
         |want: fn(&Change) -> bool| floors.iter().flat_map(|f| &f.node.changes).filter(|c| want(c)).count() as u32;
-    let profile = run_profile(last, catalog, playbook);
-    let roles = playbook
-        .act(index)
-        .map(|p| p.targets.iter().map(|t| (t.role, profile.role(t.role), t.min)).collect())
-        .unwrap_or_default();
     // The deck going into the boss (or at the act's end): its outlook there,
-    // and how it compares with decks that cleared the act.
+    // and its composition warnings next to decks that beat that boss.
     let boss_floor = floors.iter().find(|f| f.node.kind == NodeKind::Boss);
     let at_boss = boss_floor.map_or(last, |f| &f.before);
     let sim = simulate(at_boss, catalog, &playbook.simulation);
-    let short = at_boss
-        .character
-        .as_ref()
-        .and_then(|c| benchmark::for_run(catalog, c, index))
-        .map(|b| {
-            benchmark::compare(b, &run_profile(at_boss, catalog, playbook), &jobs::measure(&sim))
-                .into_iter()
-                .filter(|c| c.short)
-                .collect()
-        })
+    let values = composition::values(&sim, &run_profile(at_boss, catalog, playbook));
+    let flags: Vec<Row> = composition::standing(at_boss, catalog, &values, &Default::default())
+        .map(|c| c.flags().into_iter().cloned().collect())
         .unwrap_or_default();
     let boss = boss_floor.and_then(|f| {
         let enc = f.node.encounter.clone()?;
@@ -355,8 +338,7 @@ fn act_card(
         added: count(|c| matches!(c, Change::AddCard(_))),
         removed: count(|c| matches!(c, Change::RemoveCard(_))),
         upgraded: count(|c| matches!(c, Change::UpgradeCard(_))),
-        roles,
-        short,
+        flags,
         boss,
     }
 }
@@ -459,28 +441,18 @@ pub fn report(run: &Run, catalog: &Catalog, playbook: &Playbook) -> RunReport {
             });
         }
     }
-    if let Some(a) = acts.last().filter(|_| died || end.outcome.is_none()) {
-        let missing: Vec<String> = a
-            .roles
-            .iter()
-            .filter(|(_, have, min)| have < min)
-            .map(|(r, have, min)| format!("{} {have}/{min}", r.label()))
-            .collect();
-        if !missing.is_empty() {
-            causes.push(Cause {
-                text: format!("Act {} targets unmet: {}", a.index + 1, missing.join(", ")),
-                detail: "Cards added for each role, against the playbook's target for the act.".into(),
-                weight: 0.5 * missing.len() as f32,
-            });
-        }
-        if let Some(worst) = a.short.first() {
-            let names: Vec<&str> = a.short.iter().take(2).map(|c| c.measure.label()).collect();
-            causes.push(Cause {
-                text: format!("Behind decks that cleared Act {}: {}", a.index + 1, names.join(", ")),
-                detail: "Worse than 3 in 4 community decks that cleared the act, going into its boss.".into(),
-                weight: worst.by.min(2.0),
-            });
-        }
+    if let Some(a) = acts.last().filter(|a| (died || end.outcome.is_none()) && !a.flags.is_empty()) {
+        let names: Vec<String> =
+            a.flags.iter().take(2).filter_map(|r| r.flag.map(|f| composition::phrase(r.measure, f.side))).collect();
+        let detail: Vec<String> =
+            a.flags.iter().map(|r| format!("{}. {}", r.summary(), r.evidence().unwrap_or_default())).collect();
+        // A cause weighs what the warnings cost in boss win rate.
+        let gap: f32 = a.flags.iter().filter_map(|r| r.flag).map(|f| f.typical - f.rate).sum();
+        causes.push(Cause {
+            text: format!("Going into the Act {} boss: {}", a.index + 1, names.join(", ")),
+            detail: detail.join("\n"),
+            weight: (gap * 10.0).min(2.5),
+        });
     }
     if died {
         let final_act = end.act_index;

@@ -4,7 +4,6 @@
 //! (`analysis::report`), never per frame.
 
 use eframe::egui::{self, RichText, Ui};
-use spire_core::analysis::benchmark::Comparison;
 use spire_core::analysis::report::{ActCard, Bleed, Decision, FloorDecisions, RunReport};
 use spire_core::analysis::survival::Verdict;
 use spire_core::catalog::NodeKind;
@@ -101,7 +100,7 @@ fn headline(v: &ViewCtx, r: &RunReport) -> String {
 }
 
 /// One row per act: HP in and out, damage against the community's, elites,
-/// deck changes, unmet targets and the boss.
+/// deck changes, composition warnings and the boss.
 fn acts(ui: &mut Ui, v: &ViewCtx, r: &RunReport) {
     egui::Grid::new("report-acts").num_columns(5).spacing([12.0, 4.0]).show(ui, |ui| {
         for h in ["", "HP out", "Damage", "Deck", "Boss"] {
@@ -144,20 +143,20 @@ fn act_row(ui: &mut Ui, v: &ViewCtx, a: &ActCard) {
     });
 
     let deck = format!("+{} −{}", a.added, a.removed);
-    let unmet: Vec<&(spire_core::playbook::Role, u32, u32)> = a.roles.iter().filter(|(_, n, t)| n < t).collect();
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
         ui.label(RichText::new(deck).color(text()))
             .on_hover_text(format!("{} cards added, {} removed, {} upgraded", a.added, a.removed, a.upgraded));
-        let gaps = unmet.len() + a.short.len();
-        if gaps > 0 {
-            ui.label(RichText::new(format!("{gaps} short")).small().color(warn())).on_hover_ui(|ui| {
-                ui.set_max_width(320.0);
-                for (role, n, t) in &unmet {
-                    ui.label(format!("{}: {n} of {t} (act target)", role.label()));
-                }
-                for c in &a.short {
-                    ui.label(comparison(c));
+        if !a.flags.is_empty() {
+            let n = a.flags.len();
+            let word = if n == 1 { "warning" } else { "warnings" };
+            ui.label(RichText::new(format!("{n} {word}")).small().color(warn())).on_hover_ui(|ui| {
+                ui.set_max_width(360.0);
+                for r in &a.flags {
+                    ui.label(r.summary());
+                    if let Some(e) = r.evidence() {
+                        ui.label(secondary(e));
+                    }
                 }
             });
         }
@@ -205,11 +204,6 @@ fn bleed_line(ui: &mut Ui, room: &str, b: &Bleed) {
     }
     let typical = if b.typical > 0.0 { format!(", players {:.0}", b.typical) } else { String::new() };
     ui.label(secondary(format!("{room}: {} fights, you {:.0}{typical}", b.fights, b.yours)));
-}
-
-fn comparison(c: &Comparison) -> String {
-    let fmt = |x: f32| if c.measure.is_share() { format!("{:.0}%", x * 100.0) } else { format!("{x:.1}") };
-    format!("{}: {} (cleared decks {}–{})", c.measure.label(), fmt(c.yours), fmt(c.range.p25), fmt(c.range.p75))
 }
 
 /// Floor-by-floor decisions; clicking a floor replays it. `at` is the floor

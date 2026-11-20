@@ -3,6 +3,7 @@
 pub mod advice;
 pub mod balance;
 pub mod benchmark;
+pub mod composition;
 pub mod deck;
 pub mod events;
 pub mod floors;

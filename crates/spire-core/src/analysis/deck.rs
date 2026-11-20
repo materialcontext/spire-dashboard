@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use crate::analysis::tags::{self, Tag, Tagged};
 use crate::catalog::{Card, CardType, Catalog, Rarity};
-use crate::playbook::{ActPlan, Playbook, Role};
+use crate::playbook::{Playbook, Role};
 use crate::run::{DeckCard, RunState};
 
 /// One deck card with its catalog entry and derived roles.
@@ -194,11 +194,11 @@ pub fn run_profile(state: &RunState, catalog: &Catalog, playbook: &Playbook) -> 
     profile(&classify_run(state, catalog, playbook))
 }
 
-/// How well a deck covers something a fight or act demands.
+/// Whether a deck has anything for what a fight demands. How much it has
+/// is the survival outlook's question, against the fight itself.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Coverage {
     Missing,
-    Thin,
     Covered,
 }
 
@@ -206,21 +206,12 @@ impl Coverage {
     pub fn label(self) -> &'static str {
         match self {
             Coverage::Missing => "missing",
-            Coverage::Thin => "thin",
             Coverage::Covered => "covered",
         }
     }
 }
 
-/// Coverage of a role, judged against the act plan's target for it.
-/// Without a target, two cards count as covered.
-pub fn coverage(profile: &DeckProfile, role: Role, plan: Option<&ActPlan>) -> Coverage {
-    let have = profile.role(role);
-    let want =
-        plan.and_then(|p| p.targets.iter().find(|t| t.role == role).map(|t| t.min)).filter(|w| *w > 0).unwrap_or(2);
-    match have {
-        0 => Coverage::Missing,
-        h if h < want => Coverage::Thin,
-        _ => Coverage::Covered,
-    }
+/// Whether the deck has any card added for a role.
+pub fn coverage(profile: &DeckProfile, role: Role) -> Coverage {
+    if profile.role(role) == 0 { Coverage::Missing } else { Coverage::Covered }
 }

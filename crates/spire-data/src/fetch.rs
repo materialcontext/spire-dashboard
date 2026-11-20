@@ -179,11 +179,24 @@ pub fn add_community_data(pack: &mut DataPack, pages: &[String], notes: &mut Vec
     ));
     let events = codex_events::enrich(pack, &codex_events::sightings(pages, &codex_events::curses(pack)));
     notes.push(format!("Community runs: event relics found for {events} events, and how often each event comes up."));
-    let (decks, bosses) = crate::benchmarks::add(pack, pages, &crate::bundled_playbook());
+    let playbook = crate::bundled_playbook();
+    let (decks, bosses) = crate::benchmarks::add(pack, pages, &playbook);
     notes.push(format!(
-        "Community runs: {decks} decks rebuilt at the acts they cleared, {} benchmarks.",
-        pack.benchmarks.len()
+        "Community runs: {decks} A{} decks rebuilt going into each boss, {} benchmarks, {} composition risks.",
+        playbook.composition.ascension,
+        pack.benchmarks.len(),
+        pack.risks.len()
     ));
+    for r in &pack.risks {
+        notes.push(format!(
+            "  Act {}: {} — boss won {:.0}% vs {:.0}% ({:.0} decks)",
+            r.act + 1,
+            spire_core::analysis::composition::phrase(r.measure, r.side),
+            r.rate * 100.0,
+            r.typical * 100.0,
+            r.decks
+        ));
+    }
     let lines = crate::card_lines::add(pack, &bosses, pages);
     notes.push(format!("Community runs: {} boss fights, {lines} card lines.", bosses.len()));
 }

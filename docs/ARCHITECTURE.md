@@ -48,8 +48,10 @@ still there.
 - When an event option is worth looking for (`event_fits`).
 - When a relic is crucial to a deck (`relic_fits`), and what counts as
   desperately short of Block or max HP (`short`).
-- Per-act targets and thresholds, and what the run report counts as a
-  likely cause (`report`).
+- Per-act thresholds, what the run report counts as a likely cause
+  (`report`), and how composition is measured (`composition`: ascension,
+  builds, player cap, confidence, smallest gap). There are no role targets:
+  ranges and warnings are measured from community runs.
 
 None of this is a game fact, so it is kept apart from the catalog. It can be
 tuned, or replaced by the user, without a rebuild.
@@ -81,7 +83,18 @@ for the run report only: `apply` never reads it.
 - `deck`: classify cards into roles (Mitigation, Survival, Fast Damage,
   Scaling Damage, AoE, Chip: the problems a deck solves); `DeckProfile` (by
   type and by role, with starter cards counted separately); `coverage`
-  against act targets.
+  (whether the deck has any card for a role a fight demands; how much is
+  the survival outlook's question).
+- `composition`: the deck's `Measure`s (each role's job and share, damage
+  to Block, deck size, dead draws) on the range of decks that beat the act's
+  boss going into it, the range moving from entering the act to its boss by
+  floors played (act 1 starts from the starting deck). A measure is flagged
+  only when a `Risk` says that side loses the boss more often. `risks` (run
+  at data refresh) bands every deck going into a boss against its
+  character's range, pools characters, and keeps a side when its win-rate
+  gap to the middle half is at least `min_gap`, its bootstrap interval
+  (resampling players, not decks) stays below zero, and both halves of the
+  players agree.
 - `jobs`: how well the deck does each role, measured from the simulator's
   spreads (Block on an ordinary and a defending turn, damage over turns
   1–3, growth, area share, hits a turn), plus a bad-draw note.
@@ -150,7 +163,7 @@ for the run report only: `apply` never reads it.
   limits, then the boss check's gaps), ranked by high-skill card lift and
   kept only when the simulator loses less HP to the boss with them. On
   held-out runs mined lines beat the baseline by a few points on average.
-- `advice`: act targets, boss gaps, area damage and removable curses (run-specific only).
+- `advice`: what bosses ask for that the deck has no card for, removable curses, and one line per composition warning (`advice::composition`).
 - `healing`: the rest heal (rules percent plus "heal an additional N" relics); the Ancient heal and starting HP are `GameRules` methods.
 - `tags`: what each card does, in 14 tags (Damage, Chip Damage,
   Multi-Hit, Area, Block, Weak, Vulnerable, Draw, Energy, Scaling and Setup
@@ -164,8 +177,8 @@ for the run report only: `apply` never reads it.
 - `report`: a run's report for History, answer first: how it ended, the
   likely causes of a death (ranked; thresholds are the playbook's `report`
   lines), the deciding fight with its survival outlook, a card per act (HP,
-  damage against the community's, deck changes, role targets, benchmark
-  gaps, the boss outlook), turning points for the HP chart, and each floor's
+  damage against the community's, deck changes, composition warnings going
+  into the boss, the boss outlook), turning points for the HP chart, and each floor's
   decisions (taken against passed over, from `FloorRecord`). A few
   simulations per run: History computes it once per selected run.
 - `sim`: the deck simulator. It plays seeded fights against a passive target
@@ -355,11 +368,16 @@ The aggregation:
 6. Average damage taken and turns per encounter go into `stats`.
 
 `spire-data/src/benchmarks.rs` reads the same pages a second way: each run
-replays through `game_run::read`, and the deck at the end of every act it
-cleared becomes a sample. `analysis::benchmark::measure` tags and simulates
-them into `Catalog::benchmarks` (quartiles per character and act, plus all
-characters), and `benchmark::compare` lines the run's deck up against them
-for the deck panel.
+replays through `game_run::read`, and the deck going into every boss is a
+sample. Only runs at the playbook's `composition.ascension` (A10) on builds
+from `min_build` count, each once (by its `run_hash`), and each player
+weighs at most `player_cap` runs (anonymous runs are their own player).
+Every deck is tagged and simulated once (`benchmark::measured`): decks that
+won make `Catalog::benchmarks` (weighted quartiles per character and act,
+all characters as the fallback under `min_decks` runs' worth), and every
+deck, won or lost, goes to `composition::risks` for `Catalog::risks`.
+`audit --roles` shows the same analysis in full, per character and pooled,
+with `BUILD=` to check one build against the others.
 
 `spire-data/src/codex_events.rs` reads them a third way, for events: the
 event relics picked up on each event's floor fill in the relics no option

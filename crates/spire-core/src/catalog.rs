@@ -1201,6 +1201,9 @@ pub struct DataPack {
     /// the source's card metrics).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub card_lift: BTreeMap<CardId, CardLift>,
+    /// Composition risks that hold up in community runs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub risks: Vec<Risk>,
 }
 
 /// The middle half and median of a measure across community decks.
@@ -1226,13 +1229,81 @@ impl Quartiles {
         };
         Quartiles { p25: at(0.25), p50: at(0.5), p75: at(0.75) }
     }
+
+    /// From unsorted `(value, weight)` pairs: each quartile is the first
+    /// value whose running weight reaches that share of the total. All zero
+    /// when there are none.
+    pub fn weighted(mut values: Vec<(f32, f32)>) -> Quartiles {
+        values.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let total: f32 = values.iter().map(|v| v.1.max(0.0)).sum();
+        let at = |p: f32| {
+            let mut acc = 0.0;
+            for (x, w) in &values {
+                acc += w.max(0.0);
+                if acc >= p * total {
+                    return *x;
+                }
+            }
+            values.last().map_or(0.0, |v| v.0)
+        };
+        Quartiles { p25: at(0.25), p50: at(0.5), p75: at(0.75) }
+    }
+
+    /// Each quartile `t` of the way from `self` to `to`.
+    pub fn lerp(self, to: Quartiles, t: f32) -> Quartiles {
+        let l = |a: f32, b: f32| a + (b - a) * t.clamp(0.0, 1.0);
+        Quartiles { p25: l(self.p25, to.p25), p50: l(self.p50, to.p50), p75: l(self.p75, to.p75) }
+    }
 }
 
-/// What the decks that cleared an act had at its end: their size, how much
-/// of them was starter Strikes and Defends, the share of cards carrying
-/// each tag, and each role's job as the deck simulator measures it.
-/// Built from community runs when the data is refreshed, with the bundled
-/// playbook's tags.
+/// What a deck's composition is measured by (`analysis::composition`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Measure {
+    /// How well the deck does a role, by the deck simulator.
+    Job(crate::playbook::Role),
+    /// Share of the deck's cards with a role.
+    Share(crate::playbook::Role),
+    /// Damage over the first turns against three turns of ordinary Block.
+    Balance,
+    /// Cards in the deck.
+    Size,
+    /// Share of draws that can't be played.
+    Dead,
+}
+
+/// Which end of a measure's range.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Side {
+    /// Under the 25th percentile of decks that beat the act's boss.
+    Low,
+    /// Over the 75th.
+    High,
+}
+
+/// A side of a measure that community runs show losing the act's boss more
+/// often than decks in the middle half: kept only when the gap holds up
+/// (see `analysis::composition::risks`).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Risk {
+    pub measure: Measure,
+    /// 0-based act whose boss it's measured against.
+    pub act: u8,
+    pub side: Side,
+    /// Boss win rate of decks on that side, and of the middle half (0–1).
+    pub rate: f32,
+    pub typical: f32,
+    /// Effective decks on that side.
+    pub decks: f32,
+}
+
+/// What decks that beat an act's boss had going into it: their size, how
+/// much of them was starter Strikes and Defends, the share of cards
+/// carrying each tag or each role, each role's job as the deck simulator
+/// measures it, damage against Block, dead draws and max HP gained. Built
+/// from community runs (one ascension, each player's weight capped) when
+/// the data is refreshed, with the bundled playbook's tags.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Benchmark {
@@ -1242,6 +1313,8 @@ pub struct Benchmark {
     /// 0-based act the decks cleared.
     pub act: u8,
     pub decks: u32,
+    /// Runs' worth of decks once each player's weight is capped.
+    pub effective: f32,
     pub size: Quartiles,
     /// Share of the deck that is starter Strikes and Defends (0–1).
     pub starter: Quartiles,
@@ -1249,6 +1322,12 @@ pub struct Benchmark {
     pub tags: BTreeMap<crate::analysis::tags::Tag, Quartiles>,
     /// Each role's job (`analysis::jobs::Jobs::value`).
     pub jobs: BTreeMap<crate::playbook::Role, Quartiles>,
+    /// Share of the deck with each role (0–1).
+    pub shares: BTreeMap<crate::playbook::Role, Quartiles>,
+    /// Damage over the first turns against three turns of ordinary Block.
+    pub balance: Quartiles,
+    /// Share of draws that can't be played (0–1).
+    pub dead: Quartiles,
     /// Max HP gained since the start of the run (negative when lost).
     #[serde(default)]
     pub max_hp_gained: Quartiles,
@@ -1352,6 +1431,9 @@ pub struct Catalog {
     pub card_lines: Vec<ActLines>,
     /// From the last layer that has any.
     pub card_lift: BTreeMap<CardId, CardLift>,
+    /// From the last layer that has any benchmarks: risks are measured
+    /// with them.
+    pub risks: Vec<Risk>,
 }
 
 fn merge<K: Ord, V>(map: &mut BTreeMap<K, V>, items: Vec<V>, key: impl Fn(&V) -> K) {
@@ -1385,6 +1467,7 @@ impl Catalog {
             }
             if !pack.benchmarks.is_empty() {
                 cat.benchmarks = pack.benchmarks;
+                cat.risks = pack.risks;
             }
             if !pack.card_lines.is_empty() {
                 cat.card_lines = pack.card_lines;

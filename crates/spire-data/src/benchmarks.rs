@@ -1,6 +1,12 @@
-//! Community decks at the end of each act they cleared, for the deck
-//! benchmarks (`spire_core::analysis::benchmark`), and at every boss fight,
-//! for the card lines (`spire_core::analysis::lines`).
+//! Community decks going into every boss fight: for the deck benchmarks
+//! and composition risks (`spire_core::analysis::benchmark`,
+//! `composition`), and for the card lines (`spire_core::analysis::lines`).
+//!
+//! Which runs count for the benchmarks and risks (the playbook's
+//! `composition` lines): one ascension, builds at or after `min_build`, each
+//! run once (by its hash), and each player weighed so they count for at most
+//! `player_cap` runs. Anonymous runs each count as their own player. Card
+//! lines keep every ascension (repeats dropped).
 //!
 //! Each run in the Spire Codex export is read the way monitored runs are
 //! ([`crate::game_run::read`]): its floors replay onto the character's
@@ -12,9 +18,13 @@
 //!
 //! Pure: JSONL text and a catalog in, samples out.
 
-use spire_core::analysis::benchmark::{self, Sample};
+use std::collections::{BTreeMap, BTreeSet};
+
+use spire_core::analysis::benchmark::{self, Measured, Sample};
+use spire_core::analysis::composition::{self, BossSample};
 use spire_core::analysis::lines::BossFight;
 use spire_core::catalog::Rarity;
+use spire_core::playbook::CompositionLines;
 use spire_core::run::{NodeKind, Outcome, RunEvent, RunState, apply};
 use spire_core::{Catalog, DataPack, Playbook};
 
@@ -93,7 +103,12 @@ pub fn run_decks(line: &str, catalog: &Catalog) -> RunDecks {
             && state.act.is_some()
             && let Some(character) = &state.character
         {
-            out.cleared.push(Sample { character: character.clone(), act: state.act_index, state: state.clone() });
+            out.cleared.push(Sample {
+                character: character.clone(),
+                act: state.act_index,
+                state: state.clone(),
+                weight: 1.0,
+            });
         }
         // Going into a boss fight: lost only when the run died there, on
         // its last floor; a run abandoned there says nothing.
@@ -110,7 +125,8 @@ pub fn run_decks(line: &str, catalog: &Catalog) -> RunDecks {
                 _ => Some(true),
             };
             if let Some(won_fight) = outcome {
-                let sample = Sample { character: character.clone(), act: state.act_index, state: state.clone() };
+                let sample =
+                    Sample { character: character.clone(), act: state.act_index, state: state.clone(), weight: 1.0 };
                 out.boss_decks.push(BossDeck { sample, won: won_fight });
                 out.bosses.push(BossFight {
                     character: character.clone(),
@@ -127,7 +143,12 @@ pub fn run_decks(line: &str, catalog: &Catalog) -> RunDecks {
         && state.act.is_some()
         && let Some(character) = &state.character
     {
-        out.cleared.push(Sample { character: character.clone(), act: state.act_index, state: state.clone() });
+        out.cleared.push(Sample {
+            character: character.clone(),
+            act: state.act_index,
+            state: state.clone(),
+            weight: 1.0,
+        });
     }
     out
 }
@@ -156,21 +177,85 @@ pub fn samples(jsonl: &str, catalog: &Catalog) -> Vec<Sample> {
     jsonl.lines().flat_map(|line| run_samples(line, catalog)).collect()
 }
 
-/// Rebuilds the community decks in `pages` and stores their benchmarks in
-/// the pack (tagged with `playbook`, simulated against the pack's own
-/// data). Returns how many decks were measured, and every boss fight's deck
-/// (one replay serves both).
+/// A game build's version numbers ("v0.107.1" is 0, 107, 1).
+fn version(build: &str) -> Vec<u32> {
+    build.trim_start_matches('v').split('.').map(|p| p.parse().unwrap_or(0)).collect()
+}
+
+/// A stable id for a run's player: its token, else the run itself.
+fn player_id(meta: &RunMeta) -> u64 {
+    // FNV-1a: stable across builds and platforms, unlike the std hasher.
+    let key = meta.player.as_deref().or(meta.hash.as_deref()).unwrap_or("");
+    key.bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x100000001b3))
+}
+
+/// The runs that count for benchmarks and risks, each with its weight.
+pub fn weighted_runs<'a>(runs: &'a [RunDecks], lines: &CompositionLines) -> Vec<(&'a RunDecks, f32)> {
+    let min = version(&lines.min_build);
+    let kept: Vec<&RunDecks> = runs
+        .iter()
+        .filter(|r| r.meta.ascension == lines.ascension)
+        .filter(|r| r.meta.build.as_deref().is_some_and(|b| version(b) >= min))
+        .collect();
+    let mut per_player: BTreeMap<&str, u32> = BTreeMap::new();
+    for r in &kept {
+        if let Some(p) = &r.meta.player {
+            *per_player.entry(p).or_default() += 1;
+        }
+    }
+    kept.into_iter()
+        .map(|r| {
+            let w = r.meta.player.as_deref().map_or(1.0, |p| (lines.player_cap / per_player[p] as f32).min(1.0));
+            (r, w)
+        })
+        .collect()
+}
+
+/// Rebuilds the community decks in `pages`, once each, and stores the
+/// benchmarks (decks that beat each boss, going in) and the composition
+/// risks in the pack (tagged with `playbook`, simulated against the pack's
+/// own data). Returns how many decks were measured, and every boss fight's
+/// deck for the card lines (one replay serves both).
 pub fn add(pack: &mut DataPack, pages: &[String], playbook: &Playbook) -> (usize, Vec<BossFight>) {
     let catalog = Catalog::from_layers([pack.clone()]);
-    let mut samples: Vec<Sample> = Vec::new();
-    let mut bosses: Vec<BossFight> = Vec::new();
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut runs: Vec<RunDecks> = Vec::new();
     for line in pages.iter().flat_map(|p| p.lines()) {
-        let decks = run_decks(line, &catalog);
-        samples.extend(decks.cleared);
-        bosses.extend(decks.bosses);
+        let r = run_decks(line, &catalog);
+        if r.meta.hash.as_ref().is_some_and(|h| !seen.insert(h.clone())) {
+            continue;
+        }
+        runs.push(r);
     }
-    pack.benchmarks = benchmark::measure(&samples, &catalog, playbook);
-    (samples.len(), bosses)
+    let bosses: Vec<BossFight> = runs.iter().flat_map(|r| r.bosses.iter().cloned()).collect();
+    let lines = &playbook.composition;
+    // Every deck going into a boss, weighted and measured once.
+    let mut decks: Vec<(Sample, bool, u64, Measured)> = Vec::new();
+    for (r, w) in weighted_runs(&runs, lines) {
+        let player = player_id(&r.meta);
+        for b in &r.boss_decks {
+            let sample = Sample { weight: w, ..b.sample.clone() };
+            let m = benchmark::measured(&sample.state, &catalog, playbook);
+            decks.push((sample, b.won, player, m));
+        }
+    }
+    // Benchmarks: the decks that beat each boss.
+    let winners: Vec<(&Sample, &Measured)> = decks.iter().filter(|d| d.1).map(|d| (&d.0, &d.3)).collect();
+    pack.benchmarks = benchmark::measure(&winners, lines.min_decks);
+    // Risks: every deck, won or lost.
+    let samples: Vec<BossSample> = decks
+        .iter()
+        .map(|(s, won, player, m)| BossSample {
+            character: s.character.clone(),
+            act: s.act,
+            values: m.values.clone(),
+            won: *won,
+            weight: s.weight,
+            player: *player,
+        })
+        .collect();
+    pack.risks = composition::risks(&samples, &pack.benchmarks, lines);
+    (decks.len(), bosses)
 }
 
 #[cfg(test)]
