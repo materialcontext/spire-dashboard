@@ -18,6 +18,7 @@ pub mod log;
 pub mod lookout;
 pub mod picks;
 pub mod relics;
+pub mod report;
 pub mod start;
 pub mod threats;
 pub mod top;

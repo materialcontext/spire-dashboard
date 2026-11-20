@@ -47,7 +47,8 @@ still there.
   saved apart (`my_tags.json`, `my_roles.json`).
 - When a relic is crucial to a deck (`relic_fits`), and what counts as
   desperately short of Block or max HP (`short`).
-- Per-act targets and thresholds.
+- Per-act targets and thresholds, and what the run report counts as a
+  likely cause (`report`).
 
 None of this is a game fact, so it is kept apart from the catalog. It can be
 tuned, or replaced by the user, without a rebuild.
@@ -65,6 +66,12 @@ tuned, or replaced by the user, without a rebuild.
 `RunState` is `events.fold(default, apply)`. Undo pops the log, saving writes
 the log, and replay is deterministic. `Start` carries the resolved starting
 kit, so old runs replay even after a data update.
+
+A `NodeReport` may carry a `FloorRecord`: what the floor offered and what was
+taken (cards, relics, potions, each a `Choice`), the rest site's choice,
+potions used and discarded, and gold spent. Monitored runs fill it from the
+game's run file; logged rest sites and shops fill the choice and gold. It's
+for the run report only: `apply` never reads it.
 
 ## Analysis
 
@@ -147,6 +154,13 @@ kit, so old runs replay even after a data update.
 - `timeline`: a run floor by floor (HP, gold, roles, dead cards, damage per
   fight against the community average, elites per act), folded from the event
   log, so archived runs work the same as the live one.
+- `report`: a run's report for History, answer first: how it ended, the
+  likely causes of a death (ranked; thresholds are the playbook's `report`
+  lines), the deciding fight with its survival outlook, a card per act (HP,
+  damage against the community's, deck changes, role targets, benchmark
+  gaps, the boss outlook), turning points for the HP chart, and each floor's
+  decisions (taken against passed over, from `FloorRecord`). A few
+  simulations per run: History computes it once per selected run.
 - `sim`: the deck simulator. It plays seeded fights against a passive target
   with two policies, one leaning to damage and one to block, that share
   shuffles. The per-card data it reads:
@@ -168,7 +182,8 @@ kit, so old runs replay even after a data update.
 `Dashboard::compute` bundles everything the Run tab needs. The app recomputes
 it only when the run or data changes, never per frame. Analytics (`timeline` +
 `sim`, a few ms) are built lazily, only while the Analytics tab is open; History
-reads archived runs from disk when its tab opens.
+reads archived runs from disk when its tab opens, and builds the selected run's
+`timeline` and `report` once when it's picked.
 
 ## App
 

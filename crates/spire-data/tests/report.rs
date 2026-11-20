@@ -18,6 +18,7 @@ fn a_won_run_reports_its_acts_turning_points_and_decisions() {
     let r = report(&run(include_str!("fixtures/finished.run")), &cat, &pb);
     assert_eq!(r.ending.outcome, Some(Outcome::Victory));
     assert!(r.causes.is_empty(), "a win has nothing to explain");
+    assert!(r.deciding.as_ref().is_some_and(|d| d.won && d.lost > 0), "the costliest fight, and what it cost");
     assert_eq!(r.acts.len(), 3);
     assert!(r.acts.iter().all(|a| a.boss.as_ref().is_some_and(|b| b.3 == Some(true))), "every boss beaten");
     // The first shop: two cards bought, the rest of the shelf passed over,
@@ -49,6 +50,7 @@ fn a_death_names_its_fight_and_ranked_causes() {
     let d = r.deciding.as_ref().expect("the fight that ended it");
     assert_eq!(d.encounter.as_str(), "SOUL_FYSH_BOSS");
     assert!(!d.won);
+    assert_eq!(d.lost, d.hp.0, "it cost every HP left");
     assert!(!r.causes.is_empty() && r.causes.len() <= pb.report.causes as usize);
     assert!(r.causes.windows(2).all(|w| w[0].weight >= w[1].weight), "ranked");
     assert_eq!(r.acts.len(), 1);

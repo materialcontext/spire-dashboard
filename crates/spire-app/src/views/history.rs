@@ -5,6 +5,7 @@
 
 use eframe::egui::{self, RichText, Ui};
 use spire_core::analysis::deck;
+use spire_core::analysis::report::{RunReport, report};
 use spire_core::analysis::sim::{DeckSim, simulate};
 use spire_core::analysis::timeline::{Timeline, timeline};
 use spire_core::ids::CharacterId;
@@ -13,7 +14,7 @@ use spire_core::run::{Outcome, Run, RunState, RunSummary};
 use crate::actions::Action;
 use crate::app::ViewCtx;
 use crate::style::{self, color::*};
-use crate::views::analytics;
+use crate::views::{analytics, report as report_view};
 use crate::widgets::{caption, eyebrow, hairline, panel, secondary, segmented, stat};
 
 const GAP: f32 = 12.0;
@@ -48,6 +49,8 @@ impl OutcomeFilter {
 struct Detail {
     id: String,
     timeline: Timeline,
+    /// How it went, answer first.
+    report: RunReport,
     /// Index into `timeline.points`.
     floor: usize,
     /// State and deck simulation at `floor`, recomputed when it changes.
@@ -238,8 +241,9 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser, out: &mut Vec<Ac
     let Some(archived) = h.runs.iter().find(|r| r.id == selected) else { return };
     if h.detail.as_ref().is_none_or(|d| d.id != selected) {
         let timeline = timeline(&archived.run, v.catalog, v.playbook);
+        let report = report(&archived.run, v.catalog, v.playbook);
         let floor = timeline.points.len().saturating_sub(1);
-        h.detail = Some(Detail { id: selected.clone(), timeline, floor, at: None });
+        h.detail = Some(Detail { id: selected.clone(), timeline, report, floor, at: None });
     }
     let Some(d) = h.detail.as_mut() else { return };
 
@@ -276,11 +280,31 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, h: &mut HistoryBrowser, out: &mut Vec<Ac
         return;
     }
     let wide = ui.available_width() > 900.0;
+    if wide {
+        ui.columns(2, |cols| {
+            let [a, b] = cols else { return };
+            report_view::ending(a, v, &d.report);
+            report_view::acts(b, v, &d.report);
+        });
+    } else {
+        report_view::ending(ui, v, &d.report);
+        ui.add_space(GAP);
+        report_view::acts(ui, v, &d.report);
+    }
+    ui.add_space(GAP);
     let left = |ui: &mut Ui, d: &mut Detail| {
-        analytics::run_section(ui, &format!("hist-{}", d.id), v.catalog, v.playbook, &d.timeline, None);
+        let salt = format!("hist-{}", d.id);
+        analytics::run_section(ui, &salt, v.catalog, v.playbook, &d.timeline, None, &d.report.turning);
     };
     let right = |ui: &mut Ui, d: &mut Detail, show_all: &mut bool| {
         replay(ui, v, &archived.run, d);
+        ui.add_space(GAP);
+        let at = d.timeline.points.get(d.floor).map_or(0, |p| p.floor);
+        if let Some(floor) = report_view::decisions(ui, v, &d.report, at)
+            && let Some(i) = d.timeline.points.iter().position(|p| p.floor == floor)
+        {
+            d.floor = i;
+        }
         ui.add_space(GAP);
         if let Some((_, _, sim)) = &d.at {
             analytics::deck_section(ui, &format!("hist-{}", d.id), sim, show_all);

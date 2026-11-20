@@ -60,6 +60,8 @@ pub struct Deciding {
     pub floor: u32,
     /// HP and max HP going in.
     pub hp: (i32, i32),
+    /// HP it cost (all of it, when it ended the run).
+    pub lost: i32,
     pub outlook: Outlook,
     /// The run got past it.
     pub won: bool,
@@ -392,7 +394,8 @@ pub fn report(run: &Run, catalog: &Catalog, playbook: &Playbook) -> RunReport {
         let enc = f.node.encounter.clone()?;
         let outlook = outlook(&f.before, &enc, catalog, playbook)?;
         let won = killer.is_none_or(|k| !std::ptr::eq(k, f));
-        Some(Deciding { encounter: enc, floor: f.after.floor, hp: (f.before.hp, f.before.max_hp), outlook, won })
+        let lost = if won { f.before.hp - f.after.hp } else { f.before.hp };
+        Some(Deciding { encounter: enc, floor: f.after.floor, hp: (f.before.hp, f.before.max_hp), lost, outlook, won })
     });
 
     // Acts: the floors between one act's entry and the next.
