@@ -163,9 +163,9 @@ mod tests {
         use spire_core::playbook::Role;
         let pb = bundled_playbook();
         let m = pb.role_criteria(Role::Mitigation);
-        assert!(m.contains("Block") && m.contains("costs more than 1 energy"), "{m}");
+        assert!(m.contains("Block") && m.contains("over 1 energy"), "{m}");
         assert!(pb.role_criteria(Role::Survival).contains("Block 9+"));
-        assert!(pb.role_criteria(Role::FastDamage).contains("is a starter Strike"));
+        assert!(pb.role_criteria(Role::FastDamage).contains("Not: starter Strike"));
     }
 
     #[test]

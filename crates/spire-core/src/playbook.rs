@@ -62,15 +62,15 @@ impl Role {
         }
     }
 
-    /// What the role is for, in a line.
+    /// What the role is for: "Mitigation, for steady pressure".
     pub fn purpose(self) -> &'static str {
         match self {
-            Role::Mitigation => "Absorb steady pressure, turn after turn.",
-            Role::Survival => "Take a spike turn.",
-            Role::FastDamage => "Do most of the work before the fight turns.",
-            Role::ScalingDamage => "Win a long fight.",
-            Role::Aoe => "Handle a group.",
-            Role::Chip => "Wear down an enemy that has to be hit many times.",
+            Role::Mitigation => "steady pressure",
+            Role::Survival => "spike turns",
+            Role::FastDamage => "ending fights early",
+            Role::ScalingDamage => "long fights",
+            Role::Aoe => "groups",
+            Role::Chip => "enemies that need many hits",
         }
     }
 
@@ -765,12 +765,14 @@ impl Playbook {
         matched
     }
 
-    /// How a card (or relic) gets a role, in words, from the rules as they
-    /// stand: the tags that give it, the other rules, what rules it out,
-    /// and how relics get it. For tooltips on role names.
+    /// How a card gets a role, in words, from the rules as they stand: the
+    /// tags and other rules that give it, and what rules it out. For
+    /// tooltips on role names.
     pub fn role_criteria(&self, role: Role) -> String {
-        let mut lines = vec![format!("{}: {}", role.label(), role.purpose())];
-        let tags: Vec<String> = self
+        // "is a starter Strike" reads as "starter Strike" in a list.
+        let terse = |s: String| s.strip_prefix("is a ").or(s.strip_prefix("is ")).map_or(s.clone(), str::to_string);
+        let mut lines = vec![format!("{}, for {}.", role.label(), role.purpose())];
+        let mut counts: Vec<String> = self
             .tag_roles
             .iter()
             .filter(|t| t.role == role)
@@ -780,26 +782,29 @@ impl Playbook {
                 n => format!("{} {n}+", t.tag.label()),
             })
             .collect();
-        if !tags.is_empty() {
-            lines.push(format!("A card counts when it has: {}.", tags.join(", ")));
-        }
-        let rules: Vec<String> = self.role_rules.iter().filter(|r| r.role == role).map(|r| r.when.describe()).collect();
-        if !rules.is_empty() {
-            lines.push(format!("Or when it {}.", rules.join("; or ")));
+        counts.extend(self.role_rules.iter().filter(|r| r.role == role).map(|r| terse(r.when.describe())));
+        if !counts.is_empty() {
+            lines.push(format!("Counts: {}.", counts.join(", ")));
         }
         let mut never: Vec<String> = Vec::new();
         if let Some(max) = self.role_max_cost.get(&role) {
-            never.push(format!("costs more than {max} energy (or X)"));
+            never.push(format!("over {max} energy or X"));
         }
         never.extend(
             self.role_exclusions
                 .iter()
                 .filter(|x| x.role.is_none_or(|r| r == role))
-                .map(|x| x.why.clone().unwrap_or_else(|| x.when.describe())),
+                .map(|x| terse(x.why.clone().unwrap_or_else(|| x.when.describe()))),
         );
         if !never.is_empty() {
-            lines.push(format!("Not when it {}.", never.join("; or ")));
+            lines.push(format!("Not: {}.", never.join("; ")));
         }
+        lines.join("\n")
+    }
+
+    /// How a relic gets a role: what it does, or phrases in its text.
+    pub fn relic_criteria(&self, role: Role) -> String {
+        let mut lines = vec![format!("{}, for {}.", role.label(), role.purpose())];
         let mut relics: Vec<String> =
             self.relic_roles.iter().filter(|r| r.role == role).map(|r| r.effect.replace('_', " ")).collect();
         relics.dedup();
@@ -810,9 +815,8 @@ impl Playbook {
                 .flat_map(|r| r.any_text.iter().map(|t| format!("\"{t}\""))),
         );
         if !relics.is_empty() {
-            lines.push(format!("Relics count for: {}.", relics.join(", ")));
+            lines.push(format!("Relics: {}.", relics.join(", ")));
         }
-        lines.push("Your own role or tag edits on a card win over all of this.".into());
         lines.join("\n")
     }
 

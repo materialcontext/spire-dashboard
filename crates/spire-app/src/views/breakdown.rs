@@ -100,9 +100,8 @@ fn roles(ui: &mut Ui, v: &ViewCtx, c: &Composition) {
     let d = &v.dash.deck;
     let who = if c.all_characters { "all characters'" } else { "this character's" };
     ui.label(caption("Roles")).on_hover_text(format!(
-        "Each role's job, simulated, on the range of A10 decks ({who}, {:.0} effective) that beat the Act {} \
-         boss, going into it: band, the middle half; tick, the median. The range moves from entering the act to \
-         its boss as you play it. Amber: a side that loses the boss more often in community runs.",
+        "Winners: A10 decks ({who}, {:.0} effective) that beat the Act {} boss. Band: middle half; tick: \
+         median. Amber: a side that loses the boss more often.",
         c.effective,
         c.act + 1
     ));
@@ -127,23 +126,18 @@ fn roles(ui: &mut Ui, v: &ViewCtx, c: &Composition) {
                 ui.add_space(crate::style::space::xs());
             }
             ui.label(RichText::new(Measure::Job(role).describe()).strong());
-            ui.label(format!(
-                "{}; decks that beat the boss {}–{} (median {})",
-                job.measure.format(job.value),
-                job.measure.format(job.range.p25),
-                job.measure.format(job.range.p75),
-                job.measure.format(job.range.p50)
-            ));
-            if let Some(s) = share {
-                ui.label(format!(
-                    "{cards} cards, {} of the deck; decks that beat the boss {}–{}",
-                    s.measure.format(s.value),
-                    s.measure.format(s.range.p25),
-                    s.measure.format(s.range.p75)
-                ));
+            // The warned row's numbers are already in its warning.
+            let warned = |m: Measure| warning.is_some_and(|w| w.measure == m);
+            if !warned(job.measure) {
+                ui.label(job.numbers());
+            }
+            if let Some(s) = share.filter(|s| !warned(s.measure)) {
+                ui.label(format!("{cards} cards, {}; winners {}", s.measure.format(s.value), s.measure.range(s.range)));
             }
             ui.add_space(crate::style::space::xs());
-            ui.label(caption(v.playbook.role_criteria(role)));
+            // The role's name and purpose are in the line above.
+            let criteria = v.playbook.role_criteria(role);
+            ui.label(caption(criteria.split_once('\n').map_or(criteria.as_str(), |(_, rest)| rest)));
         });
     }
     for m in [Measure::Balance, Measure::Size, Measure::Dead] {
@@ -159,12 +153,9 @@ fn roles(ui: &mut Ui, v: &ViewCtx, c: &Composition) {
                 }
             }
             ui.label(RichText::new(m.describe()).strong());
-            ui.label(format!(
-                "Decks that beat the boss {}–{} (median {})",
-                m.format(r.range.p25),
-                m.format(r.range.p75),
-                m.format(r.range.p50)
-            ));
+            if r.flag.is_none() {
+                ui.label(r.numbers());
+            }
         });
     }
 }

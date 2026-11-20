@@ -395,7 +395,7 @@
           }
         ]
       },
-      "why": "deals 6 damage or less, in all or per energy (unless it applies Vulnerable)"
+      "why": "6 or less damage, total or per energy (unless it applies Vulnerable)"
     }
   ],
   "role_rules": [
