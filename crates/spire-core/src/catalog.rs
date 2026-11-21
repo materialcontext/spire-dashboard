@@ -1092,6 +1092,10 @@ pub struct GameRules {
     /// (measured from community runs; off when unmeasured).
     #[serde(default)]
     pub no_elite_twice_in_a_row: bool,
+    /// The card the first Forge each combat adds to the hand; every Forge
+    /// adds its amount to that card's damage (Spire Codex glossary, Forge).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forge_card: Option<CardId>,
 }
 
 fn full_heal() -> u32 {
@@ -1120,6 +1124,7 @@ impl Default for GameRules {
             rest_heal_pct: 30,
             unique_hallway_fights: false,
             no_elite_twice_in_a_row: false,
+            forge_card: None,
         }
     }
 }

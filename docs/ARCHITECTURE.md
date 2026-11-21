@@ -85,13 +85,14 @@ Pure functions over (state, catalog, playbook).
 
 ## Game rules
 
-`GameRules` holds the modelled StS2 mechanics: max ascension (10), potion slots and the ascension that removes one (A4), the starting curse (A5), ascension HP (A8) and damage (A9), the double boss (A10, Act 3), Vulnerable %, rest and weary heals, hallway and elite repeat rules. The Codex adapter reads them from ascension descriptions; a rule whose description disappears is switched off, not guessed. Weak-pool sizes (3/2/2) come from community runs; the playbook's `weak_fights` is a fallback.
+`GameRules` holds the modelled StS2 mechanics: max ascension (10), potion slots and the ascension that removes one (A4), the starting curse (A5), ascension HP (A8) and damage (A9), the double boss (A10, Act 3), Vulnerable %, rest and weary heals, hallway and elite repeat rules, the card Forge makes. The Codex adapter reads them from ascension descriptions and the glossary; a rule whose description disappears is switched off, not guessed. Weak-pool sizes (3/2/2) come from community runs; the playbook's `weak_fights` is a fallback.
 
 ## Spire Codex adapter (`spire-data/src/codex.rs`)
 
 - `/api/{acts,characters,cards,relics,potions,enchantments,monsters,encounters,events,ascensions,orbs,powers}?channel=beta`
 - `/api/beta/version` (`/api/versions` on stable): version label, optional.
 - `/api/runs/metrics/cards?bracket=wr50`: high-skill card lift, optional.
+- `/api/glossary`: the card Forge makes, optional.
 
 Beta by default. Wire structs name only used fields, all optional; `null` lists read empty. `strip_markup` removes Godot rich text; class names (`StrikeDefect`) map to ids (`STRIKE_DEFECT`). Event preconditions become `requires` and `act_span`. Keyless use allows 15 calls per minute per endpoint; an update makes one each.
 

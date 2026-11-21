@@ -109,6 +109,10 @@ pub fn codex_responses(base_url: &str, channel: Channel) -> Result<(Responses, O
     if let Ok(body) = get(&agent, &format!("{base}/api/{}", codex::CARD_METRICS_PATH)) {
         responses.insert(codex::CARD_METRICS, body);
     }
+    // The glossary only fills rules it spells out (Forge's card).
+    if let Ok(body) = get(&agent, &format!("{base}/api/{}", codex::GLOSSARY)) {
+        responses.insert(codex::GLOSSARY, body);
+    }
     // The version is informational; don't fail the update without it.
     let version = match channel {
         Channel::Beta => get(&agent, &format!("{base}/api/beta/version")).ok().and_then(|b| codex::beta_version(&b)),

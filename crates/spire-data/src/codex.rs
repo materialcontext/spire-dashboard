@@ -67,6 +67,10 @@ pub type Responses = BTreeMap<&'static str, String>;
 /// win rate): the `responses` key, and the path it's fetched from.
 pub const CARD_METRICS: &str = "card_metrics";
 pub const CARD_METRICS_PATH: &str = "runs/metrics/cards?bracket=wr50";
+/// The glossary of game terms (Forge, Channel…): the `responses` key and
+/// path. Optional: only rules a term spells out are read from it.
+pub const GLOSSARY: &str = "glossary";
+
 /// A card's lift is kept from this many seats.
 const MIN_LIFT_SEATS: u32 = 20;
 
@@ -814,6 +818,22 @@ struct WAscension {
     description: String,
 }
 
+#[derive(Deserialize)]
+struct WTerm {
+    id: String,
+    description: String,
+}
+
+/// The card Forge adds to the hand, from the glossary's Forge entry: "The
+/// first time you Forge each combat, add [gold]Sovereign Blade[/gold] into
+/// your Hand." `None` when the entry or the card is gone.
+pub fn forge_card(glossary: &str, cards: &[Card]) -> Option<CardId> {
+    let terms: Vec<WTerm> = serde_json::from_str(glossary).ok()?;
+    let text = &terms.iter().find(|t| t.id == "FORGE")?.description;
+    let name = text.split("add [gold]").nth(1)?.split("[/gold]").next()?;
+    cards.iter().find(|c| c.name == name).map(|c| c.id.clone())
+}
+
 /// Reads the mechanical ascension rules from the level descriptions.
 /// A rule whose description is gone is switched off, not guessed.
 pub fn rules_from(levels: &[AscensionLevel]) -> Option<GameRules> {
@@ -904,6 +924,9 @@ pub fn to_pack(
     let mut rules = rules_from(&ascensions);
     if let Some(r) = rules.as_mut().filter(|_| !powers.is_empty()) {
         r.vulnerable_pct = vulnerable_pct(&powers);
+    }
+    if let Some(r) = rules.as_mut() {
+        r.forge_card = responses.get(GLOSSARY).and_then(|b| forge_card(b, &cards));
     }
     let acts = acts.into_iter().map(map_act).collect();
 
@@ -1132,6 +1155,14 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn the_glossary_names_the_card_forge_makes() {
+        let cards = crate::bundled_pack().cards;
+        let glossary = r#"[{"id":"FORGE","name":"Forge","description":"The first time you [gold]Forge[/gold] each combat, add [gold]Sovereign Blade[/gold] into your [gold]Hand[/gold]. Adds additional damage to [gold]Sovereign Blade[/gold].","category":"mechanics"}]"#;
+        assert_eq!(forge_card(glossary, &cards), Some(CardId::new("SOVEREIGN_BLADE")));
+        assert_eq!(forge_card("[]", &cards), None, "no entry, no rule");
+    }
 
     #[test]
     fn strips_markup() {
