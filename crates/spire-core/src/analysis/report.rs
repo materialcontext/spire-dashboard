@@ -393,26 +393,20 @@ pub fn report(run: &Run, catalog: &Catalog, playbook: &Playbook) -> RunReport {
     let died = matches!(end.outcome, Some(Outcome::Died { .. }));
     if died {
         if let (Some(d), Some(k)) = (&deciding, killer)
-            && d.outlook.verdict != Verdict::OnTrack
+            && d.outlook.verdict == Verdict::AtRisk
         {
             let help: Vec<&str> = d.outlook.limits.iter().filter_map(|l| l.role.map(Role::label)).collect();
-            let mut detail = format!(
-                "{} way: {} turns",
-                d.outlook.lead.way.label(),
-                d.outlook.lead.kill_turn.map_or("no win in 20".into(), |t| t.to_string())
-            );
+            let mut detail = match d.outlook.died {
+                Some(died) => format!("Decks like it died there {:.0}%", died * 100.0),
+                None => format!("About {} HP lost there, with {}", d.outlook.lead.hp_loss, k.before.hp),
+            };
             if !help.is_empty() {
                 detail.push_str(&format!("; would help: {}", help.join(", ")));
             }
             causes.push(Cause {
-                text: format!(
-                    "Deck short for {}: about {} HP lost there, with {} HP",
-                    catalog.encounter_name(&d.encounter),
-                    d.outlook.lead.hp_loss,
-                    k.before.hp
-                ),
+                text: format!("Deck at risk at {}", catalog.encounter_name(&d.encounter)),
                 detail,
-                weight: if d.outlook.verdict == Verdict::AtRisk { 3.0 } else { 1.5 },
+                weight: 3.0,
             });
         }
         if let Some((hp, max)) = ending.hp_in.filter(|(hp, max)| *max > 0 && (*hp as f32 / *max as f32) < lines.low_hp)

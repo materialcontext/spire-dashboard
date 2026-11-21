@@ -65989,5 +65989,1141 @@
       "typical": 0.8269599,
       "decks": 1128.0626
     }
+  ],
+  "fights": [
+    {
+      "encounter": "AEONGLASS_BOSS",
+      "decks": 968.00525,
+      "death_rate": 0.23936597,
+      "outlook": {
+        "p25": 2.704918,
+        "p75": 5.0,
+        "rates": [
+          0.13004898,
+          0.17131738,
+          0.48807877
+        ],
+        "better": false,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "BYGONE_EFFIGY_ELITE",
+      "decks": 1870.5974,
+      "death_rate": 0.08908872,
+      "demands": [
+        {
+          "measure": {
+            "share": "fast_damage"
+          },
+          "rate": 0.1347627,
+          "typical": 0.07964921,
+          "decks": 344.24326,
+          "lines": {
+            "DEFECT": 0.1764706,
+            "FOOL": 0.1764706,
+            "IRONCLAD": 0.1764706,
+            "NECROBINDER": 0.06666667,
+            "REGENT": 0.13333334,
+            "SILENT": 0.04761905
+          },
+          "line": 0.11111111
+        }
+      ],
+      "outlook": {
+        "p25": 1.1538461,
+        "p75": 2.6785715,
+        "rates": [
+          0.015857255,
+          0.07468101,
+          0.19333737
+        ],
+        "better": true,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "BYRDONIS_ELITE",
+      "decks": 1895.7039,
+      "death_rate": 0.061844308,
+      "demands": [
+        {
+          "measure": {
+            "share": "chip"
+          },
+          "rate": 0.07481998,
+          "typical": 0.043666244,
+          "decks": 779.11017,
+          "lines": {
+            "DEFECT": 0.11111111,
+            "FOOL": 0.045454547,
+            "IRONCLAD": 0.04,
+            "NECROBINDER": 0.04,
+            "REGENT": 0.035714287,
+            "SILENT": 0.08695652
+          },
+          "line": 0.035714287
+        }
+      ],
+      "outlook": {
+        "p25": 1.0204082,
+        "p75": 1.9285715,
+        "rates": [
+          0.012717704,
+          0.04057151,
+          0.1545601
+        ],
+        "better": false,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "CEREMONIAL_BEAST_BOSS",
+      "decks": 731.3081,
+      "death_rate": 0.1544432,
+      "demands": [
+        {
+          "measure": {
+            "share": "scaling_damage"
+          },
+          "rate": 0.22912717,
+          "typical": 0.13620257,
+          "decks": 191.16768,
+          "lines": {
+            "DEFECT": 0.04761905,
+            "IRONCLAD": 0.035714287,
+            "NECROBINDER": 0.04761905,
+            "REGENT": 0.04761905,
+            "SILENT": 0.045454547
+          },
+          "line": 0.041666668
+        },
+        {
+          "measure": {
+            "share": "chip"
+          },
+          "rate": 0.1781959,
+          "typical": 0.12913245,
+          "decks": 264.18134,
+          "lines": {
+            "DEFECT": 0.11111111,
+            "IRONCLAD": 0.035714287,
+            "NECROBINDER": 0.03846154,
+            "REGENT": 0.035714287,
+            "SILENT": 0.09090909
+          },
+          "line": 0.033333335
+        }
+      ],
+      "outlook": {
+        "p25": 2.6923077,
+        "p75": 5.4054055,
+        "rates": [
+          0.071104065,
+          0.15097167,
+          0.24491568
+        ],
+        "better": true,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "DECIMILLIPEDE_ELITE",
+      "decks": 1859.2007,
+      "death_rate": 0.121294945,
+      "demands": [
+        {
+          "measure": {
+            "job": "survival"
+          },
+          "rate": 0.1897878,
+          "typical": 0.11187023,
+          "decks": 447.0027,
+          "lines": {
+            "DEFECT": 17.6,
+            "FOOL": 15.2,
+            "IRONCLAD": 16.2,
+            "NECROBINDER": 14.2,
+            "REGENT": 16.2,
+            "SILENT": 17.4
+          },
+          "line": 16.4
+        },
+        {
+          "measure": {
+            "job": "mitigation"
+          },
+          "rate": 0.18078071,
+          "typical": 0.112271726,
+          "decks": 447.23798,
+          "lines": {
+            "DEFECT": 8.4,
+            "FOOL": 6.6,
+            "IRONCLAD": 6.8,
+            "NECROBINDER": 5.8,
+            "REGENT": 6.4,
+            "SILENT": 8.8
+          },
+          "line": 7.0
+        },
+        {
+          "measure": {
+            "job": "fast_damage"
+          },
+          "rate": 0.17871982,
+          "typical": 0.12276298,
+          "decks": 470.29752,
+          "lines": {
+            "DEFECT": 67.4575,
+            "FOOL": 79.0525,
+            "IRONCLAD": 66.2575,
+            "NECROBINDER": 48.4725,
+            "REGENT": 46.385002,
+            "SILENT": 49.160004
+          },
+          "line": 55.644997
+        },
+        {
+          "measure": {
+            "share": "aoe"
+          },
+          "rate": 0.14659989,
+          "typical": 0.114928484,
+          "decks": 488.11026,
+          "lines": {
+            "DEFECT": 0.028571429,
+            "FOOL": 0.03125,
+            "IRONCLAD": 0.02173913,
+            "NECROBINDER": 0.037037037,
+            "REGENT": 0.028571429,
+            "SILENT": 0.03846154
+          },
+          "line": 0.032258064
+        }
+      ],
+      "outlook": {
+        "p25": 2.5490196,
+        "p75": 6.08,
+        "rates": [
+          0.029675521,
+          0.100684315,
+          0.2539657
+        ],
+        "better": true,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "ENTOMANCER_ELITE",
+      "decks": 1860.4379,
+      "death_rate": 0.07920476,
+      "demands": [
+        {
+          "measure": {
+            "job": "mitigation"
+          },
+          "rate": 0.11338407,
+          "typical": 0.07917905,
+          "decks": 452.7752,
+          "lines": {
+            "DEFECT": 8.4,
+            "FOOL": 6.6,
+            "IRONCLAD": 6.8,
+            "NECROBINDER": 5.8,
+            "REGENT": 6.4,
+            "SILENT": 8.8
+          },
+          "line": 7.0
+        }
+      ],
+      "outlook": {
+        "p25": 1.5789474,
+        "p75": 3.75,
+        "rates": [
+          0.011339746,
+          0.07081611,
+          0.16263467
+        ],
+        "better": true,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "INFESTED_PRISMS_ELITE",
+      "decks": 1845.9427,
+      "death_rate": 0.10312946,
+      "demands": [
+        {
+          "measure": {
+            "job": "survival"
+          },
+          "rate": 0.16032153,
+          "typical": 0.10114461,
+          "decks": 451.22723,
+          "lines": {
+            "DEFECT": 17.6,
+            "FOOL": 15.2,
+            "IRONCLAD": 16.2,
+            "NECROBINDER": 14.2,
+            "REGENT": 16.2,
+            "SILENT": 17.4
+          },
+          "line": 16.4
+        },
+        {
+          "measure": {
+            "job": "mitigation"
+          },
+          "rate": 0.1578539,
+          "typical": 0.09990823,
+          "decks": 466.32376,
+          "lines": {
+            "DEFECT": 8.4,
+            "FOOL": 6.6,
+            "IRONCLAD": 6.8,
+            "NECROBINDER": 5.8,
+            "REGENT": 6.4,
+            "SILENT": 8.8
+          },
+          "line": 7.0
+        }
+      ],
+      "outlook": {
+        "p25": 1.3384615,
+        "p75": 3.1,
+        "rates": [
+          0.0287181,
+          0.0741635,
+          0.23590726
+        ],
+        "better": true,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "KAISER_CRAB_BOSS",
+      "decks": 730.96466,
+      "death_rate": 0.21266298,
+      "demands": [
+        {
+          "measure": {
+            "job": "survival"
+          },
+          "rate": 0.3869152,
+          "typical": 0.19138557,
+          "decks": 160.34674,
+          "lines": {
+            "DEFECT": 19.4,
+            "IRONCLAD": 17.6,
+            "NECROBINDER": 14.8,
+            "REGENT": 17.0,
+            "SILENT": 18.2
+          },
+          "line": 17.4
+        },
+        {
+          "measure": {
+            "job": "mitigation"
+          },
+          "rate": 0.33824092,
+          "typical": 0.22344345,
+          "decks": 178.29173,
+          "lines": {
+            "DEFECT": 9.2,
+            "IRONCLAD": 7.6,
+            "NECROBINDER": 6.2,
+            "REGENT": 7.0,
+            "SILENT": 9.0
+          },
+          "line": 7.8
+        }
+      ],
+      "outlook": {
+        "p25": 4.362319,
+        "p75": 8.04878,
+        "rates": [
+          0.1108791,
+          0.20603555,
+          0.3279012
+        ],
+        "better": true,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "KNIGHTS_ELITE",
+      "decks": 919.41846,
+      "death_rate": 0.04496516,
+      "outlook": {
+        "p25": 3.7878788,
+        "p75": 8.620689,
+        "rates": [
+          0.011177524,
+          0.043020163,
+          0.0826059
+        ],
+        "better": true,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "KNOWLEDGE_DEMON_BOSS",
+      "decks": 809.295,
+      "death_rate": 0.2396994,
+      "demands": [
+        {
+          "measure": {
+            "job": "mitigation"
+          },
+          "rate": 0.33590084,
+          "typical": 0.2168194,
+          "decks": 200.19518,
+          "lines": {
+            "DEFECT": 9.2,
+            "IRONCLAD": 7.6,
+            "NECROBINDER": 6.2,
+            "REGENT": 7.0,
+            "SILENT": 9.0
+          },
+          "line": 7.8
+        },
+        {
+          "measure": {
+            "share": "survival"
+          },
+          "rate": 0.27844322,
+          "typical": 0.21156657,
+          "decks": 190.72691,
+          "lines": {
+            "DEFECT": 0.04761905,
+            "IRONCLAD": 0.03448276,
+            "NECROBINDER": 0.10344828,
+            "REGENT": 0.12,
+            "SILENT": 0.06896552
+          },
+          "line": 0.055555556
+        }
+      ],
+      "outlook": {
+        "p25": 2.2077923,
+        "p75": 4.78125,
+        "rates": [
+          0.17070432,
+          0.18524759,
+          0.4185251
+        ],
+        "better": false,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "LAGAVULIN_MATRIARCH_BOSS",
+      "decks": 702.08386,
+      "death_rate": 0.1798448,
+      "demands": [
+        {
+          "measure": {
+            "job": "scaling_damage"
+          },
+          "rate": 0.2822432,
+          "typical": 0.17018318,
+          "decks": 157.25505,
+          "lines": {
+            "DEFECT": 1.2881914,
+            "IRONCLAD": 1.1308657,
+            "NECROBINDER": 1.0559314,
+            "REGENT": 0.8221618,
+            "SILENT": 0.80549663
+          },
+          "line": 0.97729486
+        }
+      ],
+      "outlook": {
+        "p25": 1.6956521,
+        "p75": 4.0689654,
+        "rates": [
+          0.11441899,
+          0.21070631,
+          0.18326417
+        ],
+        "better": true,
+        "worse": false
+      }
+    },
+    {
+      "encounter": "MECHA_KNIGHT_ELITE",
+      "decks": 936.7602,
+      "death_rate": 0.049547635,
+      "outlook": {
+        "p25": 2.5142858,
+        "p75": 6.443038,
+        "rates": [
+          0.007222428,
+          0.03555093,
+          0.120000236
+        ],
+        "better": false,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "PHANTASMAL_GARDENERS_ELITE",
+      "decks": 1880.3922,
+      "death_rate": 0.078388564,
+      "demands": [
+        {
+          "measure": {
+            "share": "aoe"
+          },
+          "rate": 0.113027096,
+          "typical": 0.053747594,
+          "decks": 917.71045,
+          "lines": {
+            "DEFECT": 0.04,
+            "FOOL": 0.04347826,
+            "IRONCLAD": 0.04,
+            "NECROBINDER": 0.04,
+            "REGENT": 0.035714287,
+            "SILENT": 0.03448276
+          },
+          "line": 0.03448276
+        },
+        {
+          "measure": {
+            "job": "fast_damage"
+          },
+          "rate": 0.1228354,
+          "typical": 0.073899984,
+          "decks": 496.57028,
+          "lines": {
+            "DEFECT": 54.364998,
+            "FOOL": 63.11,
+            "IRONCLAD": 53.355,
+            "NECROBINDER": 42.2125,
+            "REGENT": 43.78,
+            "SILENT": 42.3675
+          },
+          "line": 47.5275
+        },
+        {
+          "measure": {
+            "job": "chip"
+          },
+          "rate": 0.10414243,
+          "typical": 0.07204372,
+          "decks": 491.6539,
+          "lines": {
+            "DEFECT": 1.5165,
+            "FOOL": 2.194,
+            "IRONCLAD": 1.9845,
+            "NECROBINDER": 1.7595,
+            "REGENT": 1.785,
+            "SILENT": 2.0155
+          },
+          "line": 1.8395
+        }
+      ],
+      "outlook": {
+        "p25": 1.9354838,
+        "p75": 4.0384617,
+        "rates": [
+          0.042627823,
+          0.06203441,
+          0.14689407
+        ],
+        "better": false,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "PHROG_PARASITE_ELITE",
+      "decks": 1881.742,
+      "death_rate": 0.089384206,
+      "demands": [
+        {
+          "measure": {
+            "job": "fast_damage"
+          },
+          "rate": 0.15415746,
+          "typical": 0.08387965,
+          "decks": 420.95795,
+          "lines": {
+            "DEFECT": 54.364998,
+            "FOOL": 63.11,
+            "IRONCLAD": 53.355,
+            "NECROBINDER": 42.2125,
+            "REGENT": 43.78,
+            "SILENT": 42.3675
+          },
+          "line": 47.5275
+        },
+        {
+          "measure": {
+            "share": "aoe"
+          },
+          "rate": 0.12230122,
+          "typical": 0.062048256,
+          "decks": 851.44385,
+          "lines": {
+            "DEFECT": 0.04,
+            "FOOL": 0.04347826,
+            "IRONCLAD": 0.04,
+            "NECROBINDER": 0.04,
+            "REGENT": 0.035714287,
+            "SILENT": 0.03448276
+          },
+          "line": 0.03448276
+        },
+        {
+          "measure": {
+            "share": "chip"
+          },
+          "rate": 0.11755657,
+          "typical": 0.07555437,
+          "decks": 779.39465,
+          "lines": {
+            "DEFECT": 0.11111111,
+            "FOOL": 0.045454547,
+            "IRONCLAD": 0.04,
+            "NECROBINDER": 0.04,
+            "REGENT": 0.035714287,
+            "SILENT": 0.08695652
+          },
+          "line": 0.035714287
+        },
+        {
+          "measure": {
+            "share": "scaling_damage"
+          },
+          "rate": 0.11470753,
+          "typical": 0.07388276,
+          "decks": 684.4482,
+          "lines": {
+            "DEFECT": 0.03846154,
+            "FOOL": 0.0,
+            "IRONCLAD": 0.04,
+            "NECROBINDER": 0.041666668,
+            "REGENT": 0.04,
+            "SILENT": 0.037037037
+          },
+          "line": 0.037037037
+        }
+      ],
+      "outlook": {
+        "p25": 1.4339622,
+        "p75": 3.511628,
+        "rates": [
+          0.021025367,
+          0.08232897,
+          0.17172462
+        ],
+        "better": true,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "QUEEN_BOSS",
+      "decks": 968.0216,
+      "death_rate": 0.21567225,
+      "demands": [
+        {
+          "measure": {
+            "job": "mitigation"
+          },
+          "rate": 0.29311824,
+          "typical": 0.20596689,
+          "decks": 236.3151,
+          "lines": {
+            "DEFECT": 11.8,
+            "IRONCLAD": 9.6,
+            "NECROBINDER": 7.4,
+            "REGENT": 9.2,
+            "SILENT": 11.2
+          },
+          "line": 9.8
+        }
+      ],
+      "outlook": {
+        "p25": 4.2739725,
+        "p75": 8.409091,
+        "rates": [
+          0.097168975,
+          0.14716586,
+          0.4710797
+        ],
+        "better": true,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "SKULKING_COLONY_ELITE",
+      "decks": 1826.374,
+      "death_rate": 0.07213016,
+      "demands": [
+        {
+          "measure": {
+            "share": "mitigation"
+          },
+          "rate": 0.13412517,
+          "typical": 0.065759,
+          "decks": 400.5626,
+          "lines": {
+            "DEFECT": 0.31578946,
+            "FOOL": 0.29411766,
+            "IRONCLAD": 0.2777778,
+            "NECROBINDER": 0.3809524,
+            "REGENT": 0.3529412,
+            "SILENT": 0.4117647
+          },
+          "line": 0.33333334
+        },
+        {
+          "measure": {
+            "job": "survival"
+          },
+          "rate": 0.13299918,
+          "typical": 0.06649315,
+          "decks": 376.7816,
+          "lines": {
+            "DEFECT": 12.6,
+            "FOOL": 12.0,
+            "IRONCLAD": 11.6,
+            "NECROBINDER": 11.0,
+            "REGENT": 12.0,
+            "SILENT": 15.0
+          },
+          "line": 12.6
+        }
+      ],
+      "outlook": {
+        "p25": 1.0487804,
+        "p75": 1.9090909,
+        "rates": [
+          0.01636678,
+          0.052384056,
+          0.16977523
+        ],
+        "better": true,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "SOUL_FYSH_BOSS",
+      "decks": 689.1738,
+      "death_rate": 0.17185152,
+      "demands": [
+        {
+          "measure": {
+            "share": "scaling_damage"
+          },
+          "rate": 0.2307064,
+          "typical": 0.15475619,
+          "decks": 203.3007,
+          "lines": {
+            "DEFECT": 0.04761905,
+            "IRONCLAD": 0.035714287,
+            "NECROBINDER": 0.04761905,
+            "REGENT": 0.04761905,
+            "SILENT": 0.045454547
+          },
+          "line": 0.041666668
+        },
+        {
+          "measure": {
+            "share": "mitigation"
+          },
+          "rate": 0.23536211,
+          "typical": 0.16161448,
+          "decks": 158.79051,
+          "lines": {
+            "DEFECT": 0.31578946,
+            "IRONCLAD": 0.27272728,
+            "NECROBINDER": 0.375,
+            "REGENT": 0.35,
+            "SILENT": 0.39130434
+          },
+          "line": 0.3181818
+        }
+      ],
+      "outlook": {
+        "p25": 2.8444443,
+        "p75": 4.375,
+        "rates": [
+          0.08912176,
+          0.17618942,
+          0.24607478
+        ],
+        "better": true,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "SOUL_NEXUS_ELITE",
+      "decks": 932.6359,
+      "death_rate": 0.033619054,
+      "demands": [
+        {
+          "measure": {
+            "job": "survival"
+          },
+          "rate": 0.068902075,
+          "typical": 0.02369833,
+          "decks": 245.03482,
+          "lines": {
+            "DEFECT": 22.2,
+            "IRONCLAD": 20.6,
+            "NECROBINDER": 17.2,
+            "REGENT": 19.8,
+            "SILENT": 21.2
+          },
+          "line": 20.2
+        },
+        {
+          "measure": {
+            "job": "mitigation"
+          },
+          "rate": 0.068875015,
+          "typical": 0.027603447,
+          "decks": 228.67328,
+          "lines": {
+            "DEFECT": 11.0,
+            "IRONCLAD": 9.2,
+            "NECROBINDER": 7.0,
+            "REGENT": 8.4,
+            "SILENT": 10.8
+          },
+          "line": 9.2
+        }
+      ],
+      "outlook": {
+        "p25": 2.2982457,
+        "p75": 4.962264,
+        "rates": [
+          0.017249627,
+          0.028059024,
+          0.061512765
+        ],
+        "better": false,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "TERROR_EEL_ELITE",
+      "decks": 1875.2142,
+      "death_rate": 0.10046426,
+      "demands": [
+        {
+          "measure": {
+            "job": "mitigation"
+          },
+          "rate": 0.13639557,
+          "typical": 0.08815402,
+          "decks": 546.9665,
+          "lines": {
+            "DEFECT": 5.8,
+            "FOOL": 5.2,
+            "IRONCLAD": 5.2,
+            "NECROBINDER": 5.2,
+            "REGENT": 5.2,
+            "SILENT": 7.8
+          },
+          "line": 5.0
+        },
+        {
+          "measure": {
+            "job": "fast_damage"
+          },
+          "rate": 0.13920885,
+          "typical": 0.09209168,
+          "decks": 519.99744,
+          "lines": {
+            "DEFECT": 54.364998,
+            "FOOL": 63.11,
+            "IRONCLAD": 53.355,
+            "NECROBINDER": 42.2125,
+            "REGENT": 43.78,
+            "SILENT": 42.3675
+          },
+          "line": 47.5275
+        },
+        {
+          "measure": {
+            "job": "survival"
+          },
+          "rate": 0.14083314,
+          "typical": 0.09921795,
+          "decks": 402.3758,
+          "lines": {
+            "DEFECT": 12.6,
+            "FOOL": 12.0,
+            "IRONCLAD": 11.6,
+            "NECROBINDER": 11.0,
+            "REGENT": 12.0,
+            "SILENT": 15.0
+          },
+          "line": 12.6
+        },
+        {
+          "measure": {
+            "job": "aoe"
+          },
+          "rate": 0.10498726,
+          "typical": 0.06776476,
+          "decks": 1090.2375,
+          "lines": {
+            "DEFECT": 0.003484143,
+            "FOOL": 0.001853759,
+            "IRONCLAD": 0.000096543736,
+            "NECROBINDER": 0.00007901391,
+            "REGENT": 0.0029603674,
+            "SILENT": 0.00013914012
+          },
+          "line": 0.00007901391
+        }
+      ],
+      "outlook": {
+        "p25": 1.5294118,
+        "p75": 3.0697675,
+        "rates": [
+          0.022051271,
+          0.07682525,
+          0.22602363
+        ],
+        "better": true,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "TEST_SUBJECT_BOSS",
+      "decks": 974.9793,
+      "death_rate": 0.19067353,
+      "demands": [
+        {
+          "measure": {
+            "share": "mitigation"
+          },
+          "rate": 0.27519184,
+          "typical": 0.1704542,
+          "decks": 227.20837,
+          "lines": {
+            "DEFECT": 0.2857143,
+            "IRONCLAD": 0.25,
+            "NECROBINDER": 0.35714287,
+            "REGENT": 0.3243243,
+            "SILENT": 0.35416666
+          },
+          "line": 0.2972973
+        },
+        {
+          "measure": {
+            "job": "survival"
+          },
+          "rate": 0.279513,
+          "typical": 0.18163157,
+          "decks": 250.45422,
+          "lines": {
+            "DEFECT": 24.0,
+            "IRONCLAD": 21.2,
+            "NECROBINDER": 18.2,
+            "REGENT": 20.2,
+            "SILENT": 22.2
+          },
+          "line": 21.0
+        }
+      ],
+      "outlook": {
+        "p25": 10.738636,
+        "p75": 20.067797,
+        "rates": [
+          0.088146955,
+          0.15472205,
+          0.36510915
+        ],
+        "better": true,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "THE_INSATIABLE_BOSS",
+      "decks": 830.3872,
+      "death_rate": 0.15616281,
+      "demands": [
+        {
+          "measure": {
+            "job": "mitigation"
+          },
+          "rate": 0.22103602,
+          "typical": 0.14695138,
+          "decks": 197.61234,
+          "lines": {
+            "DEFECT": 9.2,
+            "IRONCLAD": 7.6,
+            "NECROBINDER": 6.2,
+            "REGENT": 7.0,
+            "SILENT": 9.0
+          },
+          "line": 7.8
+        },
+        {
+          "measure": {
+            "job": "fast_damage"
+          },
+          "rate": 0.19868296,
+          "typical": 0.14333916,
+          "decks": 204.61679,
+          "lines": {
+            "DEFECT": 70.1025,
+            "IRONCLAD": 69.354996,
+            "NECROBINDER": 50.0675,
+            "REGENT": 46.332504,
+            "SILENT": 50.7625
+          },
+          "line": 57.127502
+        },
+        {
+          "measure": {
+            "job": "scaling_damage"
+          },
+          "rate": 0.2089243,
+          "typical": 0.1549083,
+          "decks": 189.32011,
+          "lines": {
+            "DEFECT": 1.1765652,
+            "IRONCLAD": 1.0957743,
+            "NECROBINDER": 1.0120354,
+            "REGENT": 0.7619948,
+            "SILENT": 0.6802216
+          },
+          "line": 0.91070074
+        }
+      ],
+      "outlook": {
+        "p25": 3.1,
+        "p75": 6.3265305,
+        "rates": [
+          0.0722449,
+          0.16636686,
+          0.21943979
+        ],
+        "better": true,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "THE_KIN_BOSS",
+      "decks": 730.5901,
+      "death_rate": 0.18916443,
+      "demands": [
+        {
+          "measure": {
+            "share": "scaling_damage"
+          },
+          "rate": 0.26080275,
+          "typical": 0.16437525,
+          "decks": 200.87383,
+          "lines": {
+            "DEFECT": 0.04761905,
+            "IRONCLAD": 0.035714287,
+            "NECROBINDER": 0.04761905,
+            "REGENT": 0.04761905,
+            "SILENT": 0.045454547
+          },
+          "line": 0.041666668
+        },
+        {
+          "measure": {
+            "job": "mitigation"
+          },
+          "rate": 0.26670575,
+          "typical": 0.17745656,
+          "decks": 143.30408,
+          "lines": {
+            "DEFECT": 6.8,
+            "IRONCLAD": 5.4,
+            "NECROBINDER": 5.0,
+            "REGENT": 5.0,
+            "SILENT": 7.8
+          },
+          "line": 5.8
+        }
+      ],
+      "outlook": {
+        "p25": 3.3,
+        "p75": 6.2391305,
+        "rates": [
+          0.098636836,
+          0.18170862,
+          0.2947212
+        ],
+        "better": true,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "VANTOM_BOSS",
+      "decks": 733.8804,
+      "death_rate": 0.23039106,
+      "outlook": {
+        "p25": 2.3636363,
+        "p75": 4.3529415,
+        "rates": [
+          0.107495576,
+          0.23830685,
+          0.3372818
+        ],
+        "better": true,
+        "worse": true
+      }
+    },
+    {
+      "encounter": "WATERFALL_GIANT_BOSS",
+      "decks": 711.132,
+      "death_rate": 0.21660036,
+      "demands": [
+        {
+          "measure": {
+            "job": "mitigation"
+          },
+          "rate": 0.31463158,
+          "typical": 0.21627915,
+          "decks": 117.3258,
+          "lines": {
+            "DEFECT": 6.8,
+            "IRONCLAD": 5.4,
+            "NECROBINDER": 5.0,
+            "REGENT": 5.0,
+            "SILENT": 7.8
+          },
+          "line": 5.8
+        },
+        {
+          "measure": {
+            "job": "survival"
+          },
+          "rate": 0.30447417,
+          "typical": 0.21953708,
+          "decks": 147.27269,
+          "lines": {
+            "DEFECT": 14.2,
+            "IRONCLAD": 13.4,
+            "NECROBINDER": 12.0,
+            "REGENT": 13.4,
+            "SILENT": 15.4
+          },
+          "line": 13.8
+        }
+      ],
+      "outlook": {
+        "p25": 0.7777778,
+        "p75": 2.6944444,
+        "rates": [
+          0.1637842,
+          0.2213096,
+          0.25983754
+        ],
+        "better": false,
+        "worse": false
+      }
+    }
   ]
 }

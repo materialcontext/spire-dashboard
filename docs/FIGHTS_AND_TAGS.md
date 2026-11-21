@@ -54,7 +54,7 @@ Fourteen, each with its number: Damage, Chip Damage, Multi-Hit, Area, Block, Wea
 | Windows | Block the spike turns, hit between them |
 | Scale | Set up, win late |
 
-Lead with the way losing least HP, unless it runs clearly past the community's pace in a fight with a clock or ramp; there, speed wins.
+Lead with the way losing least HP, unless it runs clearly past the community's pace in a fight with a clock or ramp (speed wins), or the data names what decides the fight and the way playing to it costs ≤ 10% of HP more.
 
 ## Decisions
 
@@ -67,6 +67,7 @@ Lead with the way losing least HP, unless it runs clearly past the community's p
 | D5 | Aim and Stretch last until first used, across turns |
 | D6 | Arrows return after 3 attack hits (each hit counts); Stars spent against gained |
 | D7 | Pattern gaps: move set first, then sourced research into `patterns.json` |
-| D8 | Choosing a way: least HP, unless too slow against a clock or ramp |
+| D8 | Choosing a way: least HP, unless too slow against a clock or ramp; else what decides the fight, if cheap |
+| D11 | Elite and boss demands measured from community decks (roles whose low quarter dies clearly more); thresholds only for hallway and unmeasured fights. Verdict relative to community decks at the fight |
 | D9 | Role names share nothing with cards or relics; jobs are internal |
 | D10 | Fight rules from monster powers, played into the ways |

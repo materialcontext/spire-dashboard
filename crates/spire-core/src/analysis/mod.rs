@@ -6,6 +6,7 @@ pub mod benchmark;
 pub mod composition;
 pub mod deck;
 pub mod events;
+pub mod fight_demands;
 pub mod floors;
 pub mod healing;
 pub mod jobs;
@@ -56,7 +57,7 @@ impl Dashboard {
         let rows = deck::deck_rows(&classified);
         let lookout = events::lookout(state, &classified, &deck, catalog, playbook);
         let bosses = advice::boss_previews(state, catalog, playbook, &deck);
-        let advice = advice::advise(state, catalog, playbook, &deck);
+        let advice = advice::advise(&deck);
         let threats = [NodeKind::Monster, NodeKind::Elite, NodeKind::Boss]
             .into_iter()
             .map(|k| (k, threats::next_threats(state, k, catalog, playbook, &deck)))

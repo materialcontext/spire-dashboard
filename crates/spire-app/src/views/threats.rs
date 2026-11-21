@@ -90,9 +90,7 @@ pub fn preview_body(
     ui.horizontal_wrapped(|ui| {
         for c in &t.checks {
             chip(ui, format!("{} · {}", c.demand.role.label(), c.coverage.label()), coverage_color(c.coverage))
-                .on_hover_ui(|ui| {
-                    ui.label(format!("{}. You have {}.", c.demand.reason, c.have));
-                });
+                .on_hover_text(format!("{}.", c.detail()));
         }
     });
 }
@@ -161,9 +159,16 @@ pub fn current(ui: &mut Ui, v: &ViewCtx, t: &ThreatPreview, out: &mut Vec<Action
     panel(ui, "Current fight", Some(room), |ui| fight_card(ui, v, t, out));
 }
 
+/// A fight's preview with its demands checked against the simulated deck,
+/// once it is.
+pub fn checked<'a>(v: &'a ViewCtx, t: &'a ThreatPreview) -> &'a ThreatPreview {
+    v.combat.and_then(|c| c.checked(&t.encounter)).unwrap_or(t)
+}
+
 /// One fight: its name (opens it in Enemies), whether it's covered, and
 /// its preview with the deck's outlook.
 fn fight_card(ui: &mut Ui, v: &ViewCtx, t: &ThreatPreview, out: &mut Vec<Action>) {
+    let t = checked(v, t);
     ui.horizontal(|ui| {
         let name = RichText::new(&t.name).family(crate::style::strong_family()).color(if t.seen {
             text_dim()

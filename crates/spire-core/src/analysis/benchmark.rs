@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 
 use crate::analysis::composition;
 use crate::analysis::deck::run_profile;
-use crate::analysis::sim::simulate;
+use crate::analysis::sim::{DeckSim, simulate};
 use crate::analysis::tags::Tag;
 use crate::catalog::{Benchmark, Catalog, Measure, Quartiles};
 use crate::ids::CharacterId;
@@ -49,11 +49,15 @@ pub struct Measured {
 /// A deck's measures: its composition values, tag shares, starter share and
 /// max HP gained.
 pub fn measured(state: &RunState, catalog: &Catalog, playbook: &Playbook) -> Measured {
+    measured_with(state, &simulate(state, catalog, &playbook.simulation), catalog, playbook)
+}
+
+/// [`measured`] with the deck already simulated.
+pub fn measured_with(state: &RunState, sim: &DeckSim, catalog: &Catalog, playbook: &Playbook) -> Measured {
     let p = run_profile(state, catalog, playbook);
     let n = p.total.max(1) as f32;
-    let sim = simulate(state, catalog, &playbook.simulation);
     Measured {
-        values: composition::values(&sim, &p),
+        values: composition::values(sim, &p),
         max_hp_gained: (state.max_hp - state.start_max_hp) as f32,
         starter: p.starter_basics as f32 / n,
         tags: Tag::ALL.iter().map(|t| (*t, p.tag(*t) as f32 / n)).collect(),

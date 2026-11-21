@@ -47,6 +47,11 @@ pub struct Combat {
     /// How well the deck does each role, from `sim`.
     pub jobs: spire_core::analysis::jobs::Jobs,
     pub outlooks: Vec<(spire_core::EncounterId, Outlook)>,
+    /// This act's elites and bosses with their demands checked against
+    /// `sim` (the dashboard's previews check measured jobs only roughly).
+    pub checked: Vec<spire_core::analysis::ThreatPreview>,
+    /// The deck's composition values, from `sim`.
+    pub values: std::collections::BTreeMap<spire_core::catalog::Measure, f32>,
     /// The deck next to community decks that beat this act's boss, when the
     /// data has a benchmark for it.
     pub composition: Option<spire_core::analysis::composition::Composition>,
@@ -62,6 +67,11 @@ pub struct Combat {
 impl Combat {
     pub fn outlook(&self, id: &spire_core::EncounterId) -> Option<&Outlook> {
         self.outlooks.iter().find(|(e, _)| e == id).map(|(_, o)| o)
+    }
+
+    /// An elite or boss with its demands checked against the simulated deck.
+    pub fn checked(&self, id: &spire_core::EncounterId) -> Option<&spire_core::analysis::ThreatPreview> {
+        self.checked.iter().find(|t| &t.encounter == id)
     }
 }
 
@@ -896,13 +906,20 @@ impl SpireApp {
         {
             c.outlooks.push((enc.id.clone(), o));
         }
+        if let (Some(c), Some((_, p))) = (self.combat.as_mut(), self.current_fight.as_ref())
+            && c.checked(&p.encounter).is_none()
+        {
+            c.checked.push(p.rechecked(&self.dash.deck, &c.values, self.state.character.as_ref()));
+        }
     }
 
     /// The deck against decks that beat this act's boss. In act 1 the range
     /// starts from the character's starting deck, simulated here.
-    fn composition(&self, sim: &DeckSim) -> Option<spire_core::analysis::composition::Composition> {
+    fn composition(
+        &self,
+        values: &std::collections::BTreeMap<spire_core::catalog::Measure, f32>,
+    ) -> Option<spire_core::analysis::composition::Composition> {
         use spire_core::analysis::composition;
-        let values = composition::values(sim, &self.dash.deck);
         let start = match (&self.state.character, self.state.act_index) {
             (Some(c), 0) => {
                 let begin = spire_core::RunEvent::start(&self.catalog, c, self.state.ascension)?;
@@ -913,7 +930,7 @@ impl SpireApp {
             }
             _ => Default::default(),
         };
-        composition::standing(&self.state, &self.catalog, &values, &start)
+        composition::standing(&self.state, &self.catalog, values, &start)
     }
 
     /// Builds what the open tab needs and nothing else: analytics for the
@@ -946,17 +963,44 @@ impl SpireApp {
                 }
             }
             let jobs = spire_core::analysis::jobs::measure(&sim);
-            let composition = self.composition(&sim);
-            let advice = composition.as_ref().map(spire_core::analysis::advice::composition).unwrap_or_default();
+            let values = spire_core::analysis::composition::values(&sim, &self.dash.deck);
+            let composition = self.composition(&values);
+            // Elites and bosses, their demands checked against the deck.
+            let mut checked: Vec<spire_core::analysis::ThreatPreview> = Vec::new();
+            for t in self.dash.threats.iter().flat_map(|(_, l)| l.iter()).chain(self.dash.bosses.iter()) {
+                if t.room != spire_core::catalog::RoomType::Monster
+                    && !checked.iter().any(|c| c.encounter == t.encounter)
+                {
+                    checked.push(t.rechecked(&self.dash.deck, &values, self.state.character.as_ref()));
+                }
+            }
+            let bosses: Vec<spire_core::analysis::ThreatPreview> = self
+                .dash
+                .bosses
+                .iter()
+                .filter_map(|b| checked.iter().find(|c| c.encounter == b.encounter).cloned())
+                .collect();
+            let mut advice = spire_core::analysis::advice::boss_gaps(&bosses);
+            advice.extend(composition.as_ref().map(spire_core::analysis::advice::composition).unwrap_or_default());
             let balance = spire_core::analysis::balance::warnings(&sim, &self.state, &self.catalog, &self.playbook);
             // The act's boss and how the deck fares against it, for the fillers.
-            let boss = self.dash.bosses.iter().find(|b| self.state.boss.as_ref() == Some(&b.encounter)).and_then(|b| {
+            let boss = bosses.iter().find(|b| self.state.boss.as_ref() == Some(&b.encounter)).and_then(|b| {
                 let o = outlooks.iter().find(|(e, _)| *e == b.encounter).map(|(_, o)| o)?;
                 Some((b, o))
             });
             let picks = spire_core::analysis::lines::suggest(&self.state, &self.catalog, &self.playbook, boss);
-            self.combat =
-                Some(Combat { generation: self.generation, sim, jobs, outlooks, composition, advice, balance, picks });
+            self.combat = Some(Combat {
+                generation: self.generation,
+                sim,
+                jobs,
+                outlooks,
+                checked,
+                values,
+                composition,
+                advice,
+                balance,
+                picks,
+            });
         }
         self.prepare_current_fight();
         match self.ui.tab {

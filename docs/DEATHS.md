@@ -59,13 +59,17 @@ Elite death rate roughly halves per 20% more HP. Bosses kill 13% of full-HP runs
 
 ## Survival check (`analysis::survival`)
 
-Plays the fight on the simulator's damage and block against the lineup's expected damage per turn, four ways (**Race**, **Wall**, **Windows** on spike turns, **Scale**), keeping the way that loses least HP.
+Plays the fight on the simulator's damage and block against the lineup's expected damage per turn, four ways (**Race**, **Wall**, **Windows** on spike turns, **Scale**). Lead: the way losing least HP; where the data names what decides the fight, the way playing to it if it costs ≤ 10% of HP more (Block → Wall/Windows, Fast Damage → Race, Scaling → Scale).
 
-| Verdict | Best plan |
+**Calibration.** On 29,700 A10 elite and boss fights the absolute rule (lose < 60% of HP: On track) called 93% of decks At risk; they died 12.8%. Played on averages, the check is too pessimistic, but it ranks decks: predicted to lose under their HP, 2–3% died; predicted no win, 23%. So the verdict is relative: the deck's score (predicted loss ÷ HP, +1 for no win) against community decks at the same fight.
+
+| Verdict | Score among community decks here |
 |---|---|
-| On track | Wins, losing < 60% of current HP |
-| Tight | Wins, losing 60–99% |
-| At risk | Loses all HP first, or no win within 20 turns |
+| On track | Best quarter, when it clearly dies less than the middle half |
+| Typical | Middle half, or a quarter that doesn't differ clearly |
+| At risk | Worst quarter, when it clearly dies more |
+
+The hover gives that band's death rate. Unmeasured fights (hallway) keep the absolute rule: < 60% of HP lost On track, < 100% Typical, else At risk.
 
 Included: fight rules (`rules` → `Mods`); Status cards thin the deck by `deck / (deck + added)` (`simulation.status_cards`, default 2 per Status move); on-death summons as a later stage (Infested, Stock; Axebot replaces itself one at a time).
 

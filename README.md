@@ -9,9 +9,9 @@ Log each floor by hand, or let it follow the game through a read-only companion 
 - **Vitals:** character, act, floor, HP, gold, potions, deck size.
 - **Deck, relics, potions:** each card's roles in a strip of columns (six roles, Draw, Energy); hover for why. Relics get roles when their text is plain (Vajra: Scaling Damage); potion-slot relics add slots.
 - **Deck composition:** each role's simulated job (Block on ordinary and defending turns, damage turns 1–3, growth, AoE share, hits a turn) on the range of **A10 community decks that beat this act's boss** going in: band = middle half, tick = median, your card count beside it. Damage to Block, deck size and dead draws below. The range moves from act entry to the boss as you play. **No hand-set targets:** a measure turns amber only where community runs show that side losing the boss more often (e.g. too little Block, too many AoE cards in Act 2); win rates on hover. Setup piling up (Aim, Vigor, Stretch) and Arrows or Stars running short are noted.
-- **Act and boss:** HP, turn-by-turn moves, demands (a gap only when no card in the deck answers it), and the **survival check**: On track, Tight or At risk from the simulator against the enemies' turns ([DEATHS.md](docs/DEATHS.md)).
+- **Act and boss:** HP, turn-by-turn moves, what decides the fight (roles whose weak decks die there clearly more in A10 community runs; a gap when your deck is under the line), and the **survival check**: the lead approach (Race, Wall, Windows, Scale) and On track, Typical or At risk against community decks at that fight ([DEATHS.md](docs/DEATHS.md)).
 - **Enemy turns:** each monster's move order (cycles, random picks with odds, conditional picks) with its Strength and the Vulnerable it applies; where community runs die and on which move.
-- **Next fight:** Monster, Elite and Boss for this act, weak pool first; hallway fights already had and the elite just fought are left out (they don't repeat).
+- **Next fight:** Monster, Elite and Boss for this act, weak pool first; hallway fights already had, the elite just fought and the fight being played are left out.
 - **Fish for relics:** only when a `?` room this act can still give a relic crucial to your deck, by its cards (Lost Wisp with 6+ Powers) or a desperate shortfall of Block or max HP (Orichalcum, Pear). Names the event and option (with cost) or the treasure-room odds, and how often runs meet each.
 - **Watch for events:** event options doing what the deck needs: take out a removable curse, raise max HP when short, heal under 30% HP. Each option's effects are measured from community runs (Slippery Bridge's Overcome always removes a card; Wood Carvings' Bird never touches a curse), with how often it delivers and what it costs (red if the HP would kill you). Three places each, the rest on hover.
 - **Look for in card rewards:** up to three. *Lines within reach*: cards community decks beat this boss with more often together, where you hold part. Then *cards for what you lack against the boss*: class cards high-skill players win more with, kept only if the simulator improves against the boss. Hover a label for numbers, a card for details.
@@ -71,7 +71,7 @@ While following: floors log themselves and the log is locked; the current fight 
 
 A full **StS2 beta** snapshot from [Spire Codex](https://spire-codex.com) ships with the app; it works offline. Ascension follows StS2 (A0–A10), read from the ascension data: A4 one fewer potion slot, A5 Ascender's Bane, A8/A9 enemy ascension HP/damage, A10 two Act 3 bosses.
 
-Community runs on Spire Codex supply exact enemy lineups, per-fight damage and deaths, event effects, card lines and the A10 composition ranges and risks.
+Community runs on Spire Codex supply exact enemy lineups, per-fight damage and deaths, event effects, card lines, the A10 composition ranges and risks, and what decides each elite and boss.
 
 - **Update:** **Data… → Update data now**. Never automatic. The download layers over the bundle; on failure the current data stays. **Revert to bundled** drops it. The Data window can switch to the stable branch or another source (a base URL is the Codex API; a `.json` URL is a data pack).
 - **Fix an entity:** a partial data pack in `user.json` in the data folder overrides by id.
@@ -79,7 +79,7 @@ Community runs on Spire Codex supply exact enemy lineups, per-fight damage and d
 
 ## Playbook (strategy as data)
 
-`data/playbook.json` holds what the dashboard believes: tag and role rules and per-card overrides, big-hit and long-fight thresholds, `relic_fits`, `event_fits` and `short`, card-reward `picks`, run-report `report` lines, simulator assumptions (`simulation`), and how composition is measured (`composition`: ascension, builds, player cap, confidence, smallest gap; the ranges and warnings themselves are measured at each data refresh). **Export playbook** in the Data window, edit, **Reload from disk**.
+`data/playbook.json` holds what the dashboard believes: tag and role rules and per-card overrides, big-hit and long-fight thresholds (hallway and unmeasured fights), `relic_fits`, `event_fits` and `short`, card-reward `picks`, run-report `report` lines, simulator assumptions (`simulation`), and how composition and fight demands are measured (`composition`: ascension, builds, player cap, confidence, smallest gap; the ranges, warnings and demands themselves are measured at each data refresh). **Export playbook** in the Data window, edit, **Reload from disk**.
 
 Inspect it with `cargo run --release -p spire-data --example audit -- --cards` (or `--sim`, `--tags`, `--roles <pages>`; full list in `CLAUDE.md`).
 

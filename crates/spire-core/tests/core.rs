@@ -534,8 +534,41 @@ fn dashboard_advice_flags_gaps_and_boss() {
     let s = started(&cat).state();
     let d = Dashboard::compute(&s, &cat, &pb);
     assert_eq!(d.bosses.len(), 1);
-    assert!(d.advice.iter().any(|a| a.severity == Severity::Urgent));
+    // Boss gaps come with the simulated deck, not with the dashboard.
+    assert!(d.advice.iter().all(|a| a.severity != Severity::Urgent));
+    assert!(spire_core::analysis::advice::boss_gaps(&d.bosses).iter().any(|a| a.severity == Severity::Urgent));
     assert_eq!(d.threats.len(), 3);
+}
+
+#[test]
+fn a_measured_boss_asks_only_for_what_decided_it() {
+    use spire_core::analysis::threats::check;
+    let mut cat = catalog();
+    let pb = playbook();
+    let s = started(&cat).state();
+    let boss = Dashboard::compute(&s, &cat, &pb).bosses[0].encounter.clone();
+    let survival = FightDemand {
+        measure: Measure::Job(Role::Survival),
+        rate: 0.34,
+        typical: 0.15,
+        decks: 200.0,
+        lines: [(s.character.clone().unwrap(), 14.0)].into_iter().collect(),
+        line: 12.0,
+    };
+    cat.fights =
+        vec![FightDemands { encounter: boss, decks: 800.0, death_rate: 0.2, demands: vec![survival], outlook: None }];
+    let d = Dashboard::compute(&s, &cat, &pb);
+    let checks = &d.bosses[0].checks;
+    assert_eq!(checks.len(), 1, "only the measured role");
+    assert_eq!(checks[0].demand.role, Role::Survival);
+    // Against the simulated deck: under its character's line is missing.
+    let at = |v: f32| {
+        let values = [(Measure::Job(Role::Survival), v)].into_iter().collect();
+        check(checks[0].demand.clone(), &d.deck, Some(&values), s.character.as_ref())
+    };
+    assert_eq!(at(10.0).coverage, Coverage::Missing);
+    assert_eq!(at(10.0).detail(), "You 10 Block; under 14 Block, 34% die here, the rest 15%");
+    assert_eq!(at(16.0).coverage, Coverage::Covered);
 }
 
 #[test]
