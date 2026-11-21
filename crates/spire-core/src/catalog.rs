@@ -1205,6 +1205,9 @@ pub struct DataPack {
     /// Composition risks that hold up in community runs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub risks: Vec<Risk>,
+    /// What decides each elite and boss fight in community runs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fights: Vec<FightDemands>,
 }
 
 /// The middle half and median of a measure across community decks.
@@ -1281,6 +1284,57 @@ pub enum Side {
     Low,
     /// Over the 75th.
     High,
+}
+
+/// What decides an elite or boss fight in community runs: the roles whose
+/// low side dies there clearly more often (`analysis::fight_demands`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FightDemands {
+    pub encounter: EncounterId,
+    /// Effective decks measured going in, and the share that died there.
+    pub decks: f32,
+    pub death_rate: f32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub demands: Vec<FightDemand>,
+    /// The survival check's score on community decks going in, banded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outlook: Option<OutlookBands>,
+}
+
+/// The survival check against community decks at one fight: its score's
+/// quartiles (lower is better) and the death rate in each band (best
+/// quarter, middle half, worst quarter). `better` and `worse` say whether
+/// the best and worst quarters differ from the middle half clearly (the
+/// composition risks' test).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct OutlookBands {
+    pub p25: f32,
+    pub p75: f32,
+    pub rates: [f32; 3],
+    pub better: bool,
+    pub worse: bool,
+}
+
+/// A role a fight asks for: decks under the line die there at `rate`,
+/// decks in the middle half at `typical`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FightDemand {
+    pub measure: Measure,
+    pub rate: f32,
+    pub typical: f32,
+    /// Effective decks under the line.
+    pub decks: f32,
+    /// The bottom quarter of decks going into the act's fights of this kind
+    /// (elite or boss), per character, and across all of them.
+    pub lines: BTreeMap<CharacterId, f32>,
+    pub line: f32,
+}
+
+impl FightDemand {
+    /// The line for a character, else across all.
+    pub fn line_for(&self, character: Option<&CharacterId>) -> f32 {
+        character.and_then(|c| self.lines.get(c)).copied().unwrap_or(self.line)
+    }
 }
 
 /// A side of a measure that community runs show losing the act's boss more
@@ -1434,6 +1488,8 @@ pub struct Catalog {
     pub card_lift: BTreeMap<CardId, CardLift>,
     /// From the same layer as `benchmarks`: risks are measured with them.
     pub risks: Vec<Risk>,
+    /// From the same layer as `benchmarks`.
+    pub fights: Vec<FightDemands>,
 }
 
 /// The decks a set of benchmarks was measured on: its sample size.
@@ -1452,8 +1508,8 @@ fn merge<K: Ord, V>(map: &mut BTreeMap<K, V>, items: Vec<V>, key: impl Fn(&V) ->
 
 impl Catalog {
     /// Builds a catalog from packs in priority order: later packs override
-    /// earlier ones entity-by-entity. Benchmarks (with their risks) and card
-    /// lines come whole from the pack measured on the most decks, a later
+    /// earlier ones entity-by-entity. Benchmarks (with their risks and fight
+    /// demands) and card lines come whole from the pack measured on the most decks, a later
     /// pack winning ties, so a small download doesn't replace a larger
     /// bundled sample.
     pub fn from_layers(packs: impl IntoIterator<Item = DataPack>) -> Catalog {
@@ -1481,6 +1537,7 @@ impl Catalog {
             if !pack.benchmarks.is_empty() && benchmark_decks(&pack.benchmarks) >= benchmark_decks(&cat.benchmarks) {
                 cat.benchmarks = pack.benchmarks;
                 cat.risks = pack.risks;
+                cat.fights = pack.fights;
             }
             if !pack.card_lines.is_empty() && line_fights(&pack.card_lines) >= line_fights(&cat.card_lines) {
                 cat.card_lines = pack.card_lines;
@@ -1490,6 +1547,11 @@ impl Catalog {
             }
             cat
         })
+    }
+
+    /// What decides an elite or boss fight, if it was measured.
+    pub fn fight(&self, id: &EncounterId) -> Option<&FightDemands> {
+        self.fights.iter().find(|f| &f.encounter == id)
     }
 
     pub fn card_name(&self, id: &CardId) -> String {

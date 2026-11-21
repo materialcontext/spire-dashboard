@@ -19,7 +19,7 @@ spire-app ──► spire-data ──► spire-core
 
 ## Domain
 
-**Catalog** (`catalog.rs`): game facts in a source-agnostic shape. A `DataPack` is the serialized form; a `Catalog` layers packs **bundled → downloaded → curated → user**, later winning by id. The curated layer (`data/patterns.json`) fixes sourced gaps in monster data, only while the gap remains. Measured layers come whole from one pack: `benchmarks` with their `risks`, and `card_lines`, from the pack measured on the most decks (later wins ties), so a small download never replaces a larger bundled sample; `card_lift` from the last pack that has it.
+**Catalog** (`catalog.rs`): game facts in a source-agnostic shape. A `DataPack` is the serialized form; a `Catalog` layers packs **bundled → downloaded → curated → user**, later winning by id. The curated layer (`data/patterns.json`) fixes sourced gaps in monster data, only while the gap remains. Measured layers come whole from one pack: `benchmarks` with their `risks` and `fights`, and `card_lines`, from the pack measured on the most decks (later wins ties), so a small download never replaces a larger bundled sample; `card_lift` from the last pack that has it.
 
 **Playbook** (`playbook.rs`, `data/playbook.json`): strategy as data, editable without a rebuild.
 
@@ -31,7 +31,7 @@ spire-app ──► spire-data ──► spire-core
 | `card_tags`, `card_roles` | Per-card overrides; the player's own are saved apart (`my_tags.json`, `my_roles.json`) |
 | `acts` | Weak-fight fallback, big-hit and long-fight thresholds |
 | `relic_fits`, `event_fits`, `short` | When a relic or event option is worth `?` rooms |
-| `composition` | Method settings for ranges and risks (ascension, min build, player cap, confidence, min gap) |
+| `composition` | Method settings for ranges, risks and fight demands (ascension, min build, player cap, confidence, min gap) |
 | `simulation`, `fights`, `balance`, `picks`, `report` | Simulator assumptions and analysis thresholds |
 
 There are no role targets: ranges and warnings are measured from community runs.
@@ -44,7 +44,7 @@ Pure functions over (state, catalog, playbook).
 
 | Module | Does |
 |---|---|
-| `deck` | Cards → roles (Mitigation, Survival, Fast Damage, Scaling Damage, AoE, Chip); `DeckProfile` with starters apart; `coverage` (any card for a role a fight demands) |
+| `deck` | Cards → roles (Mitigation, Survival, Fast Damage, Scaling Damage, AoE, Chip); `DeckProfile` with starters apart; `coverage` (any card for a role: unmeasured fights) |
 | `tags` | 14 tags with numbers, from card numbers, `mechanics` and `tag_rules`; roles come from tags |
 | `requirements` | Cards dead without something the run supplies (Growth without Sadness, Shoot without Arrows) |
 | `sim` | Deck simulator: seeded fights vs a passive target, a damage and a block policy sharing shuffles. Order of operations in `docs/SIMULATION.md` |
@@ -52,22 +52,23 @@ Pure functions over (state, catalog, playbook).
 | `composition` | The deck's `Measure`s (jobs, role shares, damage to Block, size, dead draws) on the range of A10 decks that beat this act's boss, moving from act entry to the boss by floors played. Flags only on a `Risk`. `risks` (data refresh) keeps a side when its boss win-rate gap is ≥ `min_gap`, its player-resampled bootstrap interval stays below zero, and both player halves agree |
 | `benchmark` | Weighted quartiles of those decks per character and act; all-character fallback under `min_decks` |
 | `balance` | Setup piling up (Aim, Vigor, Stretch) and Arrows or Stars running short |
-| `threats` | `ThreatProfile` per encounter, the `demands` it makes, `next_threats`, turn plans |
+| `threats` | `ThreatProfile` per encounter; `demands`: an elite or boss in `catalog.fights` asks for its measured roles only (missing when the deck is under its character's line), other fights by the act's thresholds; `next_threats`, turn plans |
+| `fight_demands` | Data refresh: per elite and boss, the roles whose bottom quarter (per character, act and kind) dies there clearly more often (the `risks` test); and the survival score's quartiles with each band's death rate |
 | `pattern` | A monster's turns from its move state machine; reachable moves once the order is lost |
 | `shape` | A fight's shape: pressure, spikes, quiet turns, ramp, clocks, stages, data gaps (`fights` thresholds) |
 | `rules` | Fight rules from monster power text (Slippery, Intangible, Hardened Shell…) and what each asks |
-| `survival` | Plays a fight out four ways (Race, Wall, Windows, Scale) on the sim's output against expected damage; verdict, lead way, `limits` (roles that would help) |
+| `survival` | Plays a fight out four ways (Race, Wall, Windows, Scale) on the sim's output against expected damage. Lead: least HP lost, unless a clock asks for speed; the way playing to the fight's top measured demand leads when it costs ≤ 10% of HP more. Verdict: the deck's `score` among community decks at the fight (worst quarter At risk, best On track, when clearly different; else Typical), absolute HP rule where unmeasured. `limits` (roles that would help; a measured fight keeps only its measured roles) |
 | `floors` | Act length (double-boss extra floor) and which room the next floor must be |
 | `healing` | Rest heal (rules percent plus relics) |
 | `events` | `lookout`: relics (`relic_fits`) and event options (`event_fits`) a `?` room this act can still give, with odds, how often runs meet each, and costs. Rules share `When` and its test `holds` |
 | `lines` | Card lines that beat the boss together (`measure`, data refresh) and card-reward `suggest`ions: lines within reach, then sim-checked fillers |
-| `advice` | Boss demands the deck has no card for, removable curses, one line per composition warning |
+| `advice` | Removable curses (dashboard); boss gaps against the simulated deck and one line per composition warning (combat stage) |
 | `timeline` | The run floor by floor, for charts |
 | `report` | History's report: ending, ranked causes, deciding fight, act rows, turning points, per-floor decisions |
 
 `mechanics` (top level) reads power and relic text into triggers and passives, keeping what it can't read for the UI.
 
-**Cost.** `Dashboard::compute` (the Run tab) runs only when the run or data changes. The combat stage (sim, outlooks, composition, picks) is rebuilt once the run settles. Analytics build lazily for their tab; History computes a run's timeline and report once on selection.
+**Cost.** `Dashboard::compute` (the Run tab) runs only when the run or data changes. The combat stage (sim, outlooks, demand checks, composition, picks) is rebuilt once the run settles. Analytics build lazily for their tab; History computes a run's timeline and report once on selection.
 
 ## App
 
@@ -101,7 +102,7 @@ Gzipped JSON lines, one game run file each, read through the shared `run_file.rs
 | Module | Reads |
 |---|---|
 | `codex_runs.rs` | Exact lineups: anchors (fixed count in ≥ 95% of fights), spawns, variants (≥ 3% share), per-encounter stats. Player-side allies and unknown monsters dropped |
-| `benchmarks.rs` | Decks going into each boss (A10, builds ≥ `min_build`, once by `run_hash`, each player capped at `player_cap` runs' worth). Winners → `benchmarks`; all → `risks` |
+| `benchmarks.rs` | Decks going into each elite and boss (A10, builds ≥ `min_build`, once by `run_hash`, each player capped at `player_cap` runs' worth), simulated once. Boss winners → `benchmarks`; all boss decks → `risks`; elites and bosses → `fights` |
 | `codex_events.rs` | Event relics seen given, how often runs meet each event per act, each option's measured `effects` (incl. `uncurse`), `?`-room treasure odds and chest rarities |
 | `card_lines.rs` | Card rewards offered per act, for `lines::measure` (every ascension) |
 
@@ -116,6 +117,6 @@ Gzipped JSON lines, one game run file each, read through the shared `run_file.rs
 | Add a composition measure | A `Measure` variant, its value in `composition::values`, its range in `Benchmark` |
 | Simulate a mechanic | Read its `vars` key in `sim::play_of`, carry it in `sim::Fight`, add a `Resource` to report it |
 | Add a run chart | A `FloorPoint` field in `timeline`, a panel in `views/analytics.rs::run_section` |
-| Add a threat signal | `ThreatProfile` and `demands()`; thresholds in `ActPlan` |
+| Add a threat signal | `ThreatProfile` and `demands()` (hallway and unmeasured fights); thresholds in `ActPlan` |
 | Add a run action | A `Change` variant in `apply_change`; UI in `views/log.rs` |
 | Add a panel | A file in `views/`, called from `views::root` |

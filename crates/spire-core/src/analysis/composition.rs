@@ -296,7 +296,7 @@ pub struct BossSample {
 
 /// A deck's band on a measure: 0 under the 25th percentile, 1 the middle
 /// half, 2 over the 75th.
-fn band(v: f32, q: Quartiles) -> usize {
+pub(crate) fn band(v: f32, q: Quartiles) -> usize {
     if v < q.p25 {
         0
     } else if v > q.p75 {
@@ -368,6 +368,22 @@ fn risk(
     lines: &CompositionLines,
     salt: u64,
 ) -> Option<Risk> {
+    let salt = salt << 8 ^ u64::from(act) << 4;
+    let (rate, typical, decks) = holds(band, rows, players, lines, salt)?;
+    Some(Risk { measure, act, side, rate, typical, decks })
+}
+
+/// Whether `band`'s win rate is clearly under the middle half's (band 1)
+/// in `(band, won, weight)` rows: the gap is at least `min_gap`, its
+/// interval (resampling players) stays below zero, and both halves of the
+/// players agree. Returns both win rates and the band's effective decks.
+pub(crate) fn holds(
+    band: usize,
+    rows: &[(usize, bool, f32)],
+    players: &[u64],
+    lines: &CompositionLines,
+    salt: u64,
+) -> Option<(f32, f32, f32)> {
     let gap = |rows: &[(usize, bool, f32)]| Some(rate(rows, band)? - rate(rows, 1)?);
     let full = gap(rows)?;
     if full > -lines.min_gap {
@@ -387,7 +403,7 @@ fn risk(
         by_player.entry(*p).or_default().push(*r);
     }
     let groups: Vec<&Vec<(usize, bool, f32)>> = by_player.values().collect();
-    let mut rng = Lcg(0x9E37_79B9_7F4A_7C15 ^ (salt << 8) ^ (u64::from(act) << 4) ^ band as u64);
+    let mut rng = Lcg(0x9E37_79B9_7F4A_7C15 ^ salt ^ band as u64);
     let mut gaps: Vec<f32> = (0..lines.resamples.max(1))
         .filter_map(|_| {
             let sample: Vec<(usize, bool, f32)> =
@@ -402,7 +418,7 @@ fn risk(
         return None;
     }
     let decks: f32 = rows.iter().filter(|r| r.0 == band).map(|r| r.2).sum();
-    Some(Risk { measure, act, side, rate: rate(rows, band)?, typical: rate(rows, 1)?, decks })
+    Some((rate(rows, band)?, rate(rows, 1)?, decks))
 }
 
 #[cfg(test)]

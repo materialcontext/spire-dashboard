@@ -701,6 +701,11 @@ fn fights(cat: &Catalog, pb: &spire_core::Playbook, paths: &[String]) {
     };
     // encounter -> [(measures, won, weight)]
     let mut by_enc: BTreeMap<String, Vec<(Vec<f64>, bool, f64)>> = BTreeMap::new();
+    // The survival check against what happened: (encounter, verdict, lead
+    // way, predicted loss over HP, won, weight).
+    type Called = (String, &'static str, &'static str, f64, bool, f64);
+    let mut called: Vec<Called> = Vec::new();
+    let check = std::env::var("OUTLOOK").is_ok();
     let mut kind_of: BTreeMap<String, (NodeKind, u8)> = BTreeMap::new();
     for r in &runs {
         let w = weight(r);
@@ -708,7 +713,19 @@ fn fights(cat: &Catalog, pb: &spire_core::Playbook, paths: &[String]) {
             let Some(e) = &d.encounter else { continue };
             kind_of.insert(e.to_string(), (d.kind, d.sample.act));
             by_enc.entry(e.to_string()).or_default().push((measure(&d.sample.state), d.won, w));
+            if check && let Some(enc) = cat.encounters.get(e) {
+                let st = &d.sample.state;
+                let sim = simulate(st, cat, &pb.simulation);
+                if let Some(o) = spire_core::analysis::survival::for_encounter(&sim, enc, cat, st, pb) {
+                    let loss = o.lead.hp_loss as f64 / st.hp.max(1) as f64;
+                    let loss = if o.lead.kill_turn.is_none() { 9.0 } else { loss };
+                    called.push((e.to_string(), o.verdict.label(), o.lead.way.label(), loss, d.won, w));
+                }
+            }
         }
+    }
+    if check {
+        calibration(&called, cat);
     }
     println!(
         "== A{asc}, builds >= {}: {} runs, {} fights",
@@ -727,7 +744,7 @@ fn fights(cat: &Catalog, pb: &spire_core::Playbook, paths: &[String]) {
         let asks: Vec<String> = enc
             .map(|e| {
                 let t = threat_profile(e, cat, pb, Scaling { tough: asc >= 8, deadly: asc >= 9 });
-                demands(&t, e.room, pb.act(act))
+                demands(&t, e.room, pb.act(act), None)
                     .into_iter()
                     .map(|d| format!("{} ({})", d.role.label(), d.reason))
                     .collect()
@@ -779,4 +796,39 @@ fn fights(cat: &Catalog, pb: &spire_core::Playbook, paths: &[String]) {
             );
         }
     }
+}
+
+/// The survival check's calls against what happened: death rate by verdict,
+/// by lead way and by predicted loss, overall and per encounter.
+fn calibration(called: &[(String, &'static str, &'static str, f64, bool, f64)], cat: &Catalog) {
+    let table = |title: &str, rows: &[&(String, &'static str, &'static str, f64, bool, f64)]| {
+        let mut by: BTreeMap<String, (f64, f64)> = BTreeMap::new();
+        for r in rows {
+            for key in [format!("verdict {}", r.1), format!("way {}", r.2), {
+                let b = if r.3 >= 9.0 {
+                    "no win".to_string()
+                } else {
+                    format!("loss {:.1}", (r.3 * 5.0).floor().min(6.0) / 5.0)
+                };
+                format!("pred {b}")
+            }] {
+                let e = by.entry(key).or_default();
+                e.0 += r.5;
+                e.1 += if r.4 { 0.0 } else { r.5 };
+            }
+        }
+        let cells: Vec<String> = by.iter().map(|(k, (n, d))| format!("{k}: {n:.0} {:.1}%", d / n * 100.0)).collect();
+        println!("{title}\n   {}", cells.join("\n   "));
+    };
+    let all: Vec<_> = called.iter().collect();
+    table("== survival check vs deaths, all elite and boss fights", &all);
+    let mut encs: Vec<&String> = called.iter().map(|c| &c.0).collect();
+    encs.sort();
+    encs.dedup();
+    for e in encs {
+        let rows: Vec<_> = called.iter().filter(|c| &c.0 == e).collect();
+        let name = cat.encounters.get(&spire_core::EncounterId::new(e)).map_or(e.as_str(), |x| x.name.as_str());
+        table(&format!("-- {name}"), &rows);
+    }
+    println!();
 }

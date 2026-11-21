@@ -195,6 +195,10 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
     };
     if b.view.as_ref().is_none_or(|(k, _)| *k != key) {
         let preview = preview(enc, v.catalog, v.playbook, act.map_or(0, |a| a.index), scaling, &v.dash.deck, false);
+        let preview = match v.combat.filter(|_| v.state.started()) {
+            Some(c) => preview.rechecked(&v.dash.deck, &c.values, v.state.character.as_ref()),
+            None => preview,
+        };
         // The survival check plays out this run, so only at its ascension.
         let outlook = v
             .combat

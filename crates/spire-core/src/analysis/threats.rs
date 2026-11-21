@@ -2,7 +2,9 @@
 
 use crate::analysis::deck::{Coverage, DeckProfile, coverage};
 use crate::analysis::pattern;
-use crate::catalog::{Catalog, Encounter, Monster, RoomType};
+use std::collections::BTreeMap;
+
+use crate::catalog::{Catalog, Encounter, Measure, Monster, RoomType};
 use crate::ids::EncounterId;
 use crate::playbook::{ActPlan, Playbook, Role};
 use crate::run::{NodeKind, RunState};
@@ -312,12 +314,35 @@ pub fn lineup_incoming(plans: &[MonsterPlan], turns: usize) -> Vec<(u32, f32, u3
 pub struct Demand {
     pub role: Role,
     pub reason: String,
+    /// Measured from community runs (elites and bosses), with its line.
+    pub measured: Option<crate::catalog::FightDemand>,
 }
 
-/// What an encounter asks of a deck, given the act's thresholds.
-pub fn demands(t: &ThreatProfile, room: RoomType, plan: Option<&ActPlan>) -> Vec<Demand> {
+/// What an encounter asks of a deck. An elite or boss measured from
+/// community runs asks for the roles that decided it there, nothing else;
+/// other fights, by the act's thresholds.
+pub fn demands(
+    t: &ThreatProfile,
+    room: RoomType,
+    plan: Option<&ActPlan>,
+    fight: Option<&crate::catalog::FightDemands>,
+) -> Vec<Demand> {
+    if let Some(f) = fight.filter(|_| room != RoomType::Monster) {
+        return f
+            .demands
+            .iter()
+            .filter_map(|d| match d.measure {
+                Measure::Job(role) | Measure::Share(role) => Some(Demand {
+                    role,
+                    reason: format!("low decks die here {:.0}%, the rest {:.0}%", d.rate * 100.0, d.typical * 100.0),
+                    measured: Some(d.clone()),
+                }),
+                _ => None,
+            })
+            .collect();
+    }
     let mut out = Vec::new();
-    let mut push = |role, reason: String| out.push(Demand { role, reason });
+    let mut push = |role, reason: String| out.push(Demand { role, reason, measured: None });
 
     if t.enemies >= 2 || t.group || t.summons {
         let why = match (t.summons, t.enemies) {
@@ -353,8 +378,60 @@ pub fn demands(t: &ThreatProfile, room: RoomType, plan: Option<&ActPlan>) -> Vec
 #[derive(Clone, Debug, PartialEq)]
 pub struct DemandCheck {
     pub demand: Demand,
+    /// Cards with the role.
     pub have: u32,
     pub coverage: Coverage,
+    /// A measured demand: the deck's value and its character's line.
+    pub against: Option<(f32, f32)>,
+}
+
+impl DemandCheck {
+    /// Its numbers for a hover: "You 9 Block; under 14 Block, 34% die here,
+    /// the rest 15%", or the rule's reason and your card count.
+    pub fn detail(&self) -> String {
+        match (&self.demand.measured, self.against) {
+            (Some(d), Some((value, line))) => format!(
+                "You {}; under {}, {:.0}% die here, the rest {:.0}%",
+                d.measure.format(value),
+                d.measure.format(line),
+                d.rate * 100.0,
+                d.typical * 100.0
+            ),
+            (Some(d), None) => format!(
+                "Under {}, {:.0}% die here, the rest {:.0}%",
+                d.measure.format(d.line),
+                d.rate * 100.0,
+                d.typical * 100.0
+            ),
+            (None, _) => format!("{}; you have {}", self.demand.reason, self.have),
+        }
+    }
+}
+
+/// A demand against the deck. A measured one is missing when the deck is
+/// under its line: by `values` (the simulated deck), else by the role's
+/// share of the deck; a job without `values` falls back to having a card.
+pub fn check(
+    demand: Demand,
+    deck: &DeckProfile,
+    values: Option<&BTreeMap<Measure, f32>>,
+    character: Option<&crate::ids::CharacterId>,
+) -> DemandCheck {
+    let have = deck.role(demand.role) + deck.starter_role(demand.role);
+    let against = demand.measured.as_ref().and_then(|d| {
+        let value = match (values.and_then(|v| v.get(&d.measure)), d.measure) {
+            (Some(v), _) => *v,
+            (None, Measure::Share(_)) => have as f32 / deck.total.max(1) as f32,
+            (None, _) => return None,
+        };
+        Some((value, d.line_for(character)))
+    });
+    let coverage = match against {
+        Some((value, line)) if value < line => Coverage::Missing,
+        Some(_) => Coverage::Covered,
+        None => coverage(deck, demand.role),
+    };
+    DemandCheck { have: deck.role(demand.role), coverage, against, demand }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -379,6 +456,17 @@ impl ThreatPreview {
     pub fn worst(&self) -> Option<Coverage> {
         self.checks.iter().map(|c| c.coverage).min()
     }
+
+    /// Its demands checked again against the simulated deck's `values`.
+    pub fn rechecked(
+        &self,
+        deck: &DeckProfile,
+        values: &BTreeMap<Measure, f32>,
+        character: Option<&crate::ids::CharacterId>,
+    ) -> ThreatPreview {
+        let checks = self.checks.iter().map(|c| check(c.demand.clone(), deck, Some(values), character)).collect();
+        ThreatPreview { checks, ..self.clone() }
+    }
 }
 
 pub fn preview(
@@ -393,9 +481,9 @@ pub fn preview(
     let plan = playbook.act(act_index);
     let profile = threat_profile(enc, catalog, playbook, scaling);
     let (plans, _) = lineup_plans(enc, catalog, scaling, pattern::HORIZON);
-    let checks = demands(&profile, enc.room, plan)
+    let checks = demands(&profile, enc.room, plan, catalog.fight(&enc.id))
         .into_iter()
-        .map(|d| DemandCheck { have: deck.role(d.role), coverage: coverage(deck, d.role), demand: d })
+        .map(|d| check(d, deck, None, None))
         .collect();
     ThreatPreview {
         encounter: enc.id.clone(),

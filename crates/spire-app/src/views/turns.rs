@@ -273,34 +273,27 @@ fn deaths_text(plans: &[MonsterPlan], s: &EncounterStats) -> String {
 fn verdict_color(v: Verdict) -> egui::Color32 {
     match v {
         Verdict::OnTrack => good(),
-        Verdict::Tight => warn(),
+        Verdict::Typical => text_dim(),
         Verdict::AtRisk => bad(),
     }
 }
 
-/// "On track · win in about 6 turns, losing about 24 of your 54 HP".
+/// "7 turns, ~40 of 54 HP" or "no kill in 20 turns".
+fn result(l: &spire_core::analysis::survival::Line, hp: i32) -> String {
+    match (l.kill_turn, l.blast_turn) {
+        (Some(t), Some(_)) => format!("{t} turns + blast, ~{} of {hp} HP", l.hp_loss),
+        (Some(t), None) => format!("{t} turns, ~{} of {hp} HP", l.hp_loss),
+        (None, _) => format!("no kill in {} turns", spire_core::analysis::survival::MAX_TURNS),
+    }
+}
+
+/// "At risk · Wall · 7 turns, ~40 of 54 HP"; the rest on hover.
 pub fn outlook(ui: &mut Ui, o: &Outlook, stats: Option<&EncounterStats>) {
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
         ui.label(RichText::new(o.verdict.label()).small().strong().color(verdict_color(o.verdict)));
         ui.label(RichText::new(o.lead.way.label()).small().strong());
-        let l = &o.lead;
-        let text = match (l.kill_turn, l.blast_turn) {
-            (Some(t), Some(b)) if l.hp_loss as i32 >= o.hp => format!(
-                "kill on about turn {t}, but its blast on turn {b} brings the loss to about {} HP; you have {}",
-                l.hp_loss, o.hp
-            ),
-            (Some(t), Some(b)) => format!(
-                "kill on about turn {t} and survive its blast on turn {b}, losing about {} of your {} HP",
-                l.hp_loss, o.hp
-            ),
-            (Some(t), None) if l.hp_loss as i32 >= o.hp => {
-                format!("would lose about {} HP over {t} turns; you have {}", l.hp_loss, o.hp)
-            }
-            (Some(t), None) => format!("win in about {t} turns, losing about {} of your {} HP", l.hp_loss, o.hp),
-            (None, _) => format!("no win within 20 turns; about {} HP lost by then", l.hp_loss),
-        };
-        ui.label(secondary(text));
+        ui.label(secondary(result(&o.lead, o.hp)));
     })
     .response
     .on_hover_ui(|ui| outlook_detail(ui, o, stats));
@@ -325,62 +318,45 @@ fn look_for(text: &str, tags: &[spire_core::analysis::tags::Tag]) -> String {
     format!("{text}\nLook for: {}", names.join(", "))
 }
 
-/// The outlook's hover: each way played, the rules, joins, junk and blast.
+/// The outlook's hover: how decks like this fare here, the lead and every
+/// way, then what changes the play.
 fn outlook_detail(ui: &mut Ui, o: &Outlook, stats: Option<&EncounterStats>) {
     ui.set_max_width(380.0);
-    ui.label(format!("Lead with {}: {}.", o.lead.way.label(), o.lead.way.describe()));
-    for l in &o.ways {
-        let result = match l.kill_turn {
-            Some(t) => format!("win on turn {t}, losing about {} HP", l.hp_loss),
-            None => format!("no win within 20 turns, about {} HP lost", l.hp_loss),
-        };
-        ui.label(secondary(format!("{}: {result}", l.way.label())));
+    if let Some(died) = o.died {
+        let all = stats.map_or(String::new(), |s| format!("; all decks {:.0}%", s.death_rate() * 100.0));
+        ui.label(format!("Decks like this died here {:.0}%{all}.", died * 100.0));
     }
+    let because = o.because.map_or(String::new(), |r| format!(" {} decides this fight.", r.label()));
+    ui.label(format!("Lead: {}, {}.{because}", o.lead.way.label(), o.lead.way.describe()));
+    let ways: Vec<String> = o.ways.iter().map(|l| format!("{} {}", l.way.label(), result(l, o.hp))).collect();
+    ui.label(secondary(ways.join(" · ")));
     if !o.spikes.is_empty() {
         let shown: Vec<String> = o
             .spikes
             .iter()
             .take(4)
-            .map(|s| format!("turn {} ({:.0}): {:.0}%", s.turn, s.damage, s.odds * 100.0))
+            .map(|s| format!("turn {} ({:.0}) {:.0}%", s.turn, s.damage, s.odds * 100.0))
             .collect();
-        let more = if o.spikes.len() > 4 { ", …" } else { "" };
-        ui.label(format!(
-            "Spikes blocked in full by a turn spent defending, counting bad draws: {}{more}.",
-            shown.join(", ")
-        ));
+        ui.label(format!("Spikes fully blocked when defending: {}.", shown.join(", ")));
     }
     for r in &o.rules {
         ui.label(look_for(&format!("{}.", r.text), &r.tags));
     }
     for j in &o.joins {
         let who = if j.count == 1 { j.name.clone() } else { format!("{} {}s", j.count, j.name) };
-        ui.label(format!(
-            "Then {who} join ({}), fought once the ones before fall. The data says the power \
-             summons but not how many, so its amount is read as the count.",
-            spire_core::analysis::pattern::power_words(&j.power)
-        ));
+        ui.label(format!("Then {who} join ({}).", spire_core::analysis::pattern::power_words(&j.power)));
     }
     if o.status_cards > 0 && o.lead.junk >= 0.5 {
-        ui.label(format!(
-            "Its moves add about {:.0} unplayable cards to your deck by then, thinning your draws. \
-             Status moves count as {} each: the game data marks the move but not how many cards.",
-            o.lead.junk, o.status_cards
-        ));
+        ui.label(format!("~{:.0} unplayable cards added by then.", o.lead.junk));
     }
     if let Some(b) = o.lead.blast_turn {
-        ui.label(format!(
-            "It explodes at the end of your turn after it dies, so the fight costs one more enemy turn \
-             than the kill: what matters is killing it a turn sooner. The blast is counted as at least \
-             its starting size and that turn's usual hit (turn {b}); it grows over the fight."
-        ));
+        ui.label(format!("Explodes after dying (turn {b}): kill it a turn sooner."));
     }
     if let Some((median, p90)) = stats.and_then(|s| s.win_damage) {
-        ui.label(format!("Players who won lost {median} HP (median); 1 in 10 lost {p90} or more."));
+        ui.label(format!("Winners lost {median} HP (median); 1 in 10, {p90}+."));
     }
-    ui.label(caption(
-        "From the deck simulator's average damage and block per turn against the enemies' \
-             expected moves and rules. Leaves out debuffs on you, enemies dying early, overkill, and potions.",
-    ));
+    let how = if o.died.is_some() { "ranked against community decks here" } else { "no potions or debuffs" };
+    ui.label(caption(format!("Simulated on averages; {how}.")));
 }
 
 /// Every monster's turns in full, for the Enemies tab.

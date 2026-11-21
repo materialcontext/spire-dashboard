@@ -16,6 +16,16 @@
 //! The lead way is the one that loses least HP, unless the fight has a
 //! clock (ramp, summons, blast, statuses, revives) and it takes clearly
 //! longer than players usually do: then the fastest way that survives.
+//! Where community runs show what decides the fight (`fight_demands`), the
+//! way that plays to it leads when it costs little more HP: Block → Wall
+//! (Windows with spikes), Fast Damage → Race, Scaling Damage → Scale.
+//!
+//! **The verdict is relative.** Played on averages, the check is far more
+//! pessimistic than real fights (it calls most community decks that won
+//! at risk), but it ranks decks well. So where the data has it, the
+//! verdict places the deck's [`score`] among community decks at the same
+//! fight: the worst quarter is At risk, the best On track, when their death
+//! rates differ clearly from the middle half's; otherwise Typical.
 //!
 //! **Fight rules** change the damage that lands, from what the simulator
 //! counts per turn (hits, damage per hit, cards and Skills played):
@@ -44,7 +54,7 @@ use crate::analysis::shape;
 use crate::analysis::sim::{DeckSim, PlayStats, TurnOutput};
 use crate::analysis::tags::Tag;
 use crate::analysis::threats::{Scaling, Wave, lineup_incoming, lineup_statuses, lineup_waves};
-use crate::catalog::{Catalog, Encounter};
+use crate::catalog::{Catalog, Encounter, FightDemands, Measure};
 use crate::playbook::{Playbook, Role};
 use crate::run::RunState;
 
@@ -57,11 +67,12 @@ const SAFE_SHARE: f32 = 0.6;
 /// Best first: a smaller verdict is a better one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Verdict {
-    /// Expected to win with HP to spare.
+    /// Among the decks that die here least (else: wins with HP to spare).
     OnTrack,
-    /// Expected to win, but with little left.
-    Tight,
-    /// Expected to lose more HP than the player has, or not to win at all.
+    /// As community decks usually fare here (else: wins with little left).
+    Typical,
+    /// Among the decks that die here most (else: loses more HP than it has,
+    /// or doesn't win).
     AtRisk,
 }
 
@@ -69,10 +80,16 @@ impl Verdict {
     pub fn label(self) -> &'static str {
         match self {
             Verdict::OnTrack => "On track",
-            Verdict::Tight => "Tight",
+            Verdict::Typical => "Typical",
             Verdict::AtRisk => "At risk",
         }
     }
+}
+
+/// How a played-out fight ranks: HP lost over HP held, one more for no win
+/// within `MAX_TURNS`. Lower is better.
+pub fn score(least: &Line, hp: i32) -> f32 {
+    least.hp_loss as f32 / hp.max(1) as f32 + if least.kill_turn.is_none() { 1.0 } else { 0.0 }
 }
 
 /// A way to play a fight out.
@@ -274,8 +291,16 @@ pub struct RuleNote {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Outlook {
     pub verdict: Verdict,
+    /// Community decks with this verdict here: the share that died, when
+    /// the data has the fight.
+    pub died: Option<f32>,
+    /// The deck's [`score`] (from the way losing least HP).
+    pub score: f32,
     /// The way to lead with.
     pub lead: Line,
+    /// The role community runs say decides the fight, when the lead plays
+    /// to it.
+    pub because: Option<Role>,
     /// Every way played: Race, Wall, Windows (with spikes), Scale.
     pub ways: Vec<Line>,
     pub hp: i32,
@@ -447,12 +472,15 @@ pub fn outlook(sim: &DeckSim, foe: Foe, hp: i32) -> Option<Outlook> {
     let verdict = match lead.kill_turn {
         None => Verdict::AtRisk,
         Some(_) if lead.hp_loss as f32 >= hp as f32 => Verdict::AtRisk,
-        Some(_) if lead.hp_loss as f32 >= hp as f32 * SAFE_SHARE => Verdict::Tight,
+        Some(_) if lead.hp_loss as f32 >= hp as f32 * SAFE_SHARE => Verdict::Typical,
         Some(_) => Verdict::OnTrack,
     };
     Some(Outlook {
         verdict,
+        died: None,
+        score: score(&least, hp),
         lead,
+        because: None,
         ways,
         hp,
         status_cards: 0,
@@ -642,9 +670,18 @@ pub fn for_encounter(
     let all_rules: Vec<rules::Rule> = wave_rules.into_iter().flatten().collect();
     let mods = Mods::of(&all_rules, fades);
     let jobs = jobs::measure(sim);
+    let fight = catalog.fight(&enc.id);
     outlook(sim, foe, state.hp).map(|o| {
+        let o = calibrated(played_to(o, fight, state.hp), fight);
         let spikes = spike_odds(&shape, sim);
-        let limits = limits(&shape, &spikes, &jobs, &o.lead, &foe, &mods, &sim.play, playbook);
+        let mut limits = limits(&shape, &spikes, &jobs, &o.lead, &foe, &mods, &sim.play, playbook);
+        // Where the data says what decides the fight, only those roles help
+        // (junk stays: it isn't a role).
+        if let Some(f) = fight {
+            let decides =
+                |r: Role| f.demands.iter().any(|d| matches!(d.measure, Measure::Job(x) | Measure::Share(x) if x == r));
+            limits.retain(|l| l.role.is_none_or(decides));
+        }
         Outlook {
             status_cards: if any { playbook.simulation.status_cards } else { 0 },
             joins,
@@ -654,6 +691,61 @@ pub fn for_encounter(
             ..o
         }
     })
+}
+
+/// More HP (a share of the deck's) a way may cost over the least to lead
+/// because it plays to what decides the fight.
+const PLAYS_TO_SLACK: f32 = 0.1;
+
+/// The way that plays to the fight's top demand leads, when it wins and
+/// costs little more HP than the lead.
+fn played_to(o: Outlook, fight: Option<&FightDemands>, hp: i32) -> Outlook {
+    let Some(role) = fight.and_then(|f| f.demands.first()).and_then(|d| match d.measure {
+        Measure::Job(r) | Measure::Share(r) => Some(r),
+        _ => None,
+    }) else {
+        return o;
+    };
+    let fits = |w: Way| match role {
+        Role::Survival => matches!(w, Way::Windows(_)) || (w == Way::Wall && o.way("Windows").is_none()),
+        Role::Mitigation => w == Way::Wall,
+        Role::FastDamage => w == Way::Race,
+        Role::ScalingDamage => matches!(w, Way::Scale(_)),
+        Role::Aoe | Role::Chip => false,
+    };
+    let slack = (hp.max(1) as f32 * PLAYS_TO_SLACK) as u32;
+    let lead = o.lead;
+    // A clock already chose speed over HP: leave it.
+    let least = o.ways.iter().min_by_key(|l| (l.kill_turn.is_none(), l.hp_loss, l.kill_turn));
+    if least.is_some_and(|l| *l != lead) {
+        return o;
+    }
+    match o.ways.iter().find(|l| fits(l.way) && l.kill_turn.is_some()) {
+        Some(_) if fits(lead.way) => Outlook { because: Some(role), ..o },
+        Some(l) if lead.kill_turn.is_some() && l.hp_loss <= lead.hp_loss + slack && (l.hp_loss as i32) < hp => {
+            let l = *l;
+            Outlook { lead: l, because: Some(role), ..o }
+        }
+        _ => o,
+    }
+}
+
+/// The verdict among community decks at this fight, when the data has it.
+fn calibrated(o: Outlook, fight: Option<&FightDemands>) -> Outlook {
+    let Some(b) = fight.and_then(|f| f.outlook.as_ref()) else { return o };
+    let band = if o.score < b.p25 {
+        0
+    } else if o.score > b.p75 {
+        2
+    } else {
+        1
+    };
+    let verdict = match band {
+        0 if b.better => Verdict::OnTrack,
+        2 if b.worse => Verdict::AtRisk,
+        _ => Verdict::Typical,
+    };
+    Outlook { verdict, died: Some(b.rates[band]), ..o }
 }
 
 #[cfg(test)]
@@ -677,6 +769,57 @@ mod tests {
 
     fn race(o: &Outlook) -> Line {
         *o.way("Race").unwrap()
+    }
+
+    fn fight(role: Role, bands: Option<crate::catalog::OutlookBands>) -> FightDemands {
+        FightDemands {
+            encounter: crate::ids::EncounterId::new("X"),
+            decks: 500.0,
+            death_rate: 0.2,
+            demands: vec![crate::catalog::FightDemand {
+                measure: Measure::Job(role),
+                rate: 0.3,
+                typical: 0.15,
+                decks: 100.0,
+                lines: Default::default(),
+                line: 10.0,
+            }],
+            outlook: bands,
+        }
+    }
+
+    #[test]
+    fn the_verdict_ranks_the_deck_among_community_decks() {
+        // Loses 50 of 60 HP racing: the absolute rule calls it Typical.
+        let o = outlook(&sim(20.0, 0.0), foe(&stage(&[10.0; 20], 120), None), 60).unwrap();
+        assert_eq!(o.verdict, Verdict::Typical);
+        let bands =
+            |p25, p75| crate::catalog::OutlookBands { p25, p75, rates: [0.05, 0.12, 0.3], better: true, worse: true };
+        // Among community decks scoring 1.0–2.0 here it's the best quarter.
+        let best = calibrated(o.clone(), Some(&fight(Role::Chip, Some(bands(1.0, 2.0)))));
+        assert_eq!((best.verdict, best.died), (Verdict::OnTrack, Some(0.05)));
+        // Among decks scoring 0.2–0.5 it's the worst.
+        let worst = calibrated(o.clone(), Some(&fight(Role::Chip, Some(bands(0.2, 0.5)))));
+        assert_eq!((worst.verdict, worst.died), (Verdict::AtRisk, Some(0.3)));
+        // A worst quarter that doesn't die clearly more is only Typical.
+        let unclear = crate::catalog::OutlookBands { worse: false, ..bands(0.2, 0.5) };
+        assert_eq!(calibrated(o, Some(&fight(Role::Chip, Some(unclear)))).verdict, Verdict::Typical);
+    }
+
+    #[test]
+    fn the_lead_plays_to_what_decides_the_fight_when_it_costs_little() {
+        let line = |way, kill, hp_loss| Line { way, blast_turn: None, junk: 0.0, kill_turn: Some(kill), hp_loss };
+        let (race, wall) = (line(Way::Race, 4, 20), line(Way::Wall, 6, 24));
+        let mut o = outlook(&sim(20.0, 0.0), foe(&stage(&[10.0; 20], 120), None), 60).unwrap();
+        (o.ways, o.lead) = (vec![race, wall], race);
+        // Walling costs 4 more of 60 HP: within a tenth, so it leads.
+        let block = played_to(o.clone(), Some(&fight(Role::Mitigation, None)), 60);
+        assert_eq!((block.lead, block.because), (wall, Some(Role::Mitigation)));
+        // With 30 HP, 4 more is too much: Race stays.
+        let low = played_to(o.clone(), Some(&fight(Role::Mitigation, None)), 30);
+        assert_eq!((low.lead, low.because), (race, None));
+        // Fast Damage: Race already plays to it.
+        assert_eq!(played_to(o, Some(&fight(Role::FastDamage, None)), 60).because, Some(Role::FastDamage));
     }
 
     #[test]

@@ -210,6 +210,21 @@ pub fn add_community_data(pack: &mut DataPack, pages: &[String], notes: &mut Vec
             r.decks
         ));
     }
+    let with: Vec<String> = pack
+        .fights
+        .iter()
+        .filter(|f| !f.demands.is_empty())
+        .map(|f| {
+            let roles: Vec<String> = f.demands.iter().map(|d| d.measure.label()).collect();
+            format!("{}: {}", f.encounter, roles.join(", "))
+        })
+        .collect();
+    notes.push(format!(
+        "Community runs: {} elite and boss fights measured; demands for {}.",
+        pack.fights.len(),
+        with.len()
+    ));
+    notes.extend(with.into_iter().map(|w| format!("  {w}")));
     let lines = crate::card_lines::add(pack, &bosses, pages);
     notes.push(format!("Community runs: {} boss fights, {lines} card lines.", bosses.len()));
 }
@@ -222,7 +237,9 @@ fn kept_bundled(pack: &DataPack) -> Vec<String> {
     let mut notes = Vec::new();
     let (new, old) = (benchmark_decks(&pack.benchmarks), benchmark_decks(&bundled.benchmarks));
     if new < old {
-        notes.push(format!("Composition ranges and risks: the bundled ones stay ({old} decks against {new})."));
+        notes.push(format!(
+            "Composition ranges, risks and fight demands: the bundled ones stay ({old} decks against {new})."
+        ));
     }
     let (new, old) = (line_fights(&pack.card_lines), line_fights(&bundled.card_lines));
     if new < old {

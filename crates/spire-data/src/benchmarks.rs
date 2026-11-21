@@ -20,7 +20,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use spire_core::analysis::benchmark::{self, Measured, Sample};
 use spire_core::analysis::composition::{self, BossSample};
+use spire_core::analysis::fight_demands::{self, FightSample};
 use spire_core::analysis::lines::BossFight;
+use spire_core::analysis::sim::simulate;
+use spire_core::analysis::survival;
 use spire_core::catalog::Rarity;
 use spire_core::playbook::CompositionLines;
 use spire_core::run::{NodeKind, Outcome, RunEvent, RunState, apply};
@@ -155,14 +158,15 @@ fn player_id(meta: &RunMeta) -> u64 {
     key.bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x100000001b3))
 }
 
+/// Whether a run counts for benchmarks, risks and fight demands: the
+/// ascension and builds the playbook names.
+fn counts(meta: &RunMeta, lines: &CompositionLines) -> bool {
+    meta.ascension == lines.ascension && meta.build.as_deref().is_some_and(|b| version(b) >= version(&lines.min_build))
+}
+
 /// The runs that count for benchmarks and risks, each with its weight.
 pub fn weighted_runs<'a>(runs: &'a [RunDecks], lines: &CompositionLines) -> Vec<(&'a RunDecks, f32)> {
-    let min = version(&lines.min_build);
-    let kept: Vec<&RunDecks> = runs
-        .iter()
-        .filter(|r| r.meta.ascension == lines.ascension)
-        .filter(|r| r.meta.build.as_deref().is_some_and(|b| version(b) >= min))
-        .collect();
+    let kept: Vec<&RunDecks> = runs.iter().filter(|r| counts(&r.meta, lines)).collect();
     let mut per_player: BTreeMap<&str, u32> = BTreeMap::new();
     for r in &kept {
         if let Some(p) = &r.meta.player {
@@ -177,47 +181,94 @@ pub fn weighted_runs<'a>(runs: &'a [RunDecks], lines: &CompositionLines) -> Vec<
         .collect()
 }
 
-/// Rebuilds the community decks in `pages`, once each, and stores the
-/// benchmarks (decks that beat each boss, going in) and the composition
-/// risks in the pack (tagged with `playbook`, simulated against the pack's
-/// own data). Returns how many decks were measured, and every boss fight's
-/// deck for the card lines (one replay serves both).
+/// A community deck going into a fight, weighted and measured.
+struct Measuring<'a> {
+    sample: Sample,
+    deck: &'a BossDeck,
+    player: u64,
+    measured: Measured,
+    /// The survival check's score for the fight (`survival::score`).
+    score: Option<f32>,
+}
+
+/// Rebuilds the community decks in `pages`, once each, and stores in the
+/// pack the benchmarks (decks that beat each boss, going in), the
+/// composition risks and what decides each elite and boss fight (tagged
+/// with `playbook`, simulated against the pack's own data). Returns how many
+/// boss decks were measured, and every boss fight's deck for the card lines
+/// (one replay serves all).
 pub fn add(pack: &mut DataPack, pages: &[String], playbook: &Playbook) -> (usize, Vec<BossFight>) {
-    let catalog = Catalog::from_layers([pack.clone()]);
+    // With the curated fixes the app layers over it, so a fight plays out
+    // here as it will there.
+    let mut layers = vec![pack.clone()];
+    layers.extend(crate::curated::pack(&layers));
+    let catalog = Catalog::from_layers(layers);
+    let lines = &playbook.composition;
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut runs: Vec<RunDecks> = Vec::new();
     for line in pages.iter().flat_map(|p| p.lines()) {
-        let r = run_decks(line, &catalog);
+        let mut r = fight_decks(line, &catalog, &[NodeKind::Elite, NodeKind::Boss]);
         if r.meta.hash.as_ref().is_some_and(|h| !seen.insert(h.clone())) {
             continue;
+        }
+        // Card lines keep every ascension; the decks only the ones counted.
+        if !counts(&r.meta, lines) {
+            r.boss_decks.clear();
         }
         runs.push(r);
     }
     let bosses: Vec<BossFight> = runs.iter().flat_map(|r| r.bosses.iter().cloned()).collect();
-    let lines = &playbook.composition;
-    // Every deck going into a boss, weighted and measured once.
-    let mut decks: Vec<(Sample, bool, u64, Measured)> = Vec::new();
+    // Every deck going into an elite or boss, weighted, simulated and
+    // measured once, with the survival check's score for the fight.
+    let mut decks: Vec<Measuring> = Vec::new();
     for (r, w) in weighted_runs(&runs, lines) {
         let player = player_id(&r.meta);
-        for b in &r.boss_decks {
-            let sample = Sample { weight: w, ..b.sample.clone() };
-            let m = benchmark::measured(&sample.state, &catalog, playbook);
-            decks.push((sample, b.won, player, m));
+        for deck in &r.boss_decks {
+            let sample = Sample { weight: w, ..deck.sample.clone() };
+            let sim = simulate(&sample.state, &catalog, &playbook.simulation);
+            let measured = benchmark::measured_with(&sample.state, &sim, &catalog, playbook);
+            let score = deck
+                .encounter
+                .as_ref()
+                .and_then(|e| catalog.encounters.get(e))
+                .and_then(|e| survival::for_encounter(&sim, e, &catalog, &sample.state, playbook))
+                .map(|o| o.score);
+            decks.push(Measuring { sample, deck, player, measured, score });
         }
     }
+    // What decides each elite and boss fight.
+    let fights: Vec<FightSample> = decks
+        .iter()
+        .filter_map(|d| {
+            Some(FightSample {
+                encounter: d.deck.encounter.clone()?,
+                character: d.sample.character.clone(),
+                act: d.sample.act,
+                boss: d.deck.kind == NodeKind::Boss,
+                values: d.measured.values.clone(),
+                won: d.deck.won,
+                weight: d.sample.weight,
+                player: d.player,
+                score: d.score,
+            })
+        })
+        .collect();
+    pack.fights = fight_demands::measure(&fights, lines);
+    decks.retain(|d| d.deck.kind == NodeKind::Boss);
     // Benchmarks: the decks that beat each boss.
-    let winners: Vec<(&Sample, &Measured)> = decks.iter().filter(|d| d.1).map(|d| (&d.0, &d.3)).collect();
+    let winners: Vec<(&Sample, &Measured)> =
+        decks.iter().filter(|d| d.deck.won).map(|d| (&d.sample, &d.measured)).collect();
     pack.benchmarks = benchmark::measure(&winners, lines.min_decks);
     // Risks: every deck, won or lost.
     let samples: Vec<BossSample> = decks
         .iter()
-        .map(|(s, won, player, m)| BossSample {
-            character: s.character.clone(),
-            act: s.act,
-            values: m.values.clone(),
-            won: *won,
-            weight: s.weight,
-            player: *player,
+        .map(|d| BossSample {
+            character: d.sample.character.clone(),
+            act: d.sample.act,
+            values: d.measured.values.clone(),
+            won: d.deck.won,
+            weight: d.sample.weight,
+            player: d.player,
         })
         .collect();
     pack.risks = composition::risks(&samples, &pack.benchmarks, lines);

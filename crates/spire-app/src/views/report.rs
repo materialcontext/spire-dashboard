@@ -183,7 +183,7 @@ fn act_row(ui: &mut Ui, v: &ViewCtx, a: &ActCard) {
 fn verdict_word(v: Verdict) -> &'static str {
     match v {
         Verdict::OnTrack => "on track",
-        Verdict::Tight => "tight",
+        Verdict::Typical => "typical",
         Verdict::AtRisk => "at risk",
     }
 }

@@ -40,31 +40,35 @@ pub fn boss_previews(
         .collect()
 }
 
-/// Short lines: what each boss wants that the deck has no card for (one
-/// line per boss), and removable curses. Composition warnings come from
-/// [`composition`], once the deck has been simulated.
-pub fn advise(state: &RunState, catalog: &Catalog, playbook: &Playbook, deck: &DeckProfile) -> Vec<Advice> {
-    let mut out = Vec::new();
-    for boss in boss_previews(state, catalog, playbook, deck) {
-        let gaps: Vec<_> = boss.checks.iter().filter(|c| c.coverage == Coverage::Missing).collect();
-        if gaps.is_empty() {
-            continue;
-        }
-        out.push(Advice {
-            severity: Severity::Urgent,
-            text: format!(
-                "{} wants {}",
-                boss.name,
-                gaps.iter().map(|c| c.demand.role.label()).collect::<Vec<_>>().join(", ")
-            ),
-            detail: gaps
-                .iter()
-                .map(|c| format!("{} ({}): you have {}", c.demand.role.label(), c.demand.reason, c.have))
-                .collect::<Vec<_>>()
-                .join("\n"),
-        });
-    }
+/// What each boss wants that the deck lacks, one line per boss, from its
+/// demands checked against the simulated deck.
+pub fn boss_gaps(bosses: &[ThreatPreview]) -> Vec<Advice> {
+    bosses
+        .iter()
+        .filter_map(|boss| {
+            let gaps: Vec<_> = boss.checks.iter().filter(|c| c.coverage == Coverage::Missing).collect();
+            (!gaps.is_empty()).then(|| Advice {
+                severity: Severity::Urgent,
+                text: format!(
+                    "{} wants {}",
+                    boss.name,
+                    gaps.iter().map(|c| c.demand.role.label()).collect::<Vec<_>>().join(", ")
+                ),
+                detail: gaps
+                    .iter()
+                    .map(|c| format!("{}: {}", c.demand.role.label(), c.detail()))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            })
+        })
+        .collect()
+}
 
+/// Short lines the deck alone tells: removable curses. Boss gaps
+/// ([`boss_gaps`]) and composition warnings ([`composition`]) come once the
+/// deck has been simulated.
+pub fn advise(deck: &DeckProfile) -> Vec<Advice> {
+    let mut out = Vec::new();
     if deck.removable_curses > 0 {
         let n = deck.removable_curses;
         out.push(Advice {

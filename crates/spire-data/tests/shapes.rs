@@ -100,7 +100,7 @@ fn axebots_replace_each_other_so_they_need_no_area_damage() {
     let wants_aoe = |id: &str| {
         let enc = cat.encounters.get(&EncounterId::new(id)).unwrap_or_else(|| panic!("{id} in the bundle"));
         let t = threat_profile(enc, &cat, &pb, Scaling::default());
-        demands(&t, RoomType::Monster, None).iter().any(|d| d.role == Role::Aoe)
+        demands(&t, RoomType::Monster, None, None).iter().any(|d| d.role == Role::Aoe)
     };
     // Stock: "When killed, a new Axebot is summoned in its place". Runs
     // record the replacement in the fight's monsters, but it comes alone.
