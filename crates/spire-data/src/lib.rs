@@ -159,13 +159,29 @@ mod tests {
     }
 
     #[test]
+    fn orbs_tag_their_cards() {
+        use spire_core::analysis::tags::{Tag, tags};
+        let (cat, pb) = (bundled_catalog(), bundled_playbook());
+        let has = |id: &str| -> Vec<Tag> {
+            let card = &cat.cards[&spire_core::CardId::new(id)];
+            tags(card, false, &pb).iter().map(|t| t.tag).collect()
+        };
+        // Lightning: Damage and Chip. Glass: Chip and Area.
+        let zap = has("ZAP");
+        assert!(zap.contains(&Tag::Damage) && zap.contains(&Tag::ChipDamage), "{zap:?}");
+        let glass = has("GLASSWORK");
+        assert!(glass.contains(&Tag::ChipDamage) && glass.contains(&Tag::Area), "{glass:?}");
+        assert!(!glass.contains(&Tag::Damage));
+    }
+
+    #[test]
     fn role_criteria_say_how_a_card_gets_each_role() {
         use spire_core::playbook::Role;
         let pb = bundled_playbook();
         let m = pb.role_criteria(Role::Mitigation);
-        assert!(m.contains("Block") && m.contains("costs more than 1 energy"), "{m}");
+        assert!(m.contains("Block") && m.contains("over 1 energy"), "{m}");
         assert!(pb.role_criteria(Role::Survival).contains("Block 9+"));
-        assert!(pb.role_criteria(Role::FastDamage).contains("is a starter Strike"));
+        assert!(pb.role_criteria(Role::FastDamage).contains("Not: starter Strike"));
     }
 
     #[test]

@@ -1164,7 +1164,18 @@ fn tags_come_from_numbers_and_text() {
     assert_eq!(t.iter().find(|t| t.tag == Tag::MultiHit).unwrap().label(), "Multi-Hit 2×5");
     let mut shiv = card("SHIV_ISH", CardType::Attack, Rarity::Common, "Deal 4 damage.");
     (shiv.damage, shiv.cost) = (Some(4), Some(0));
-    assert_eq!(names(&shiv), vec![Tag::Damage, Tag::ChipDamage]);
+    assert_eq!(names(&shiv), vec![Tag::ChipDamage], "under 5 damage is chip, not Damage");
+    // Expensive or not: 4 damage on a 2-cost card is still chip.
+    shiv.cost = Some(2);
+    assert_eq!(names(&shiv), vec![Tag::ChipDamage]);
+    // Counted over all hits: 2 × 3 is 6, so Damage (and Multi-Hit).
+    let mut pair = card("PAIR_ISH", CardType::Attack, Rarity::Common, "Deal 3 damage twice.");
+    (pair.damage, pair.hits) = (Some(3), Some(2));
+    assert_eq!(names(&pair), vec![Tag::Damage, Tag::MultiHit]);
+    // A status that hurts the player isn't damage.
+    let mut burn = card("BURN_ISH", CardType::Status, Rarity::Status, "At the end of your turn, take 2 damage.");
+    burn.damage = Some(2);
+    assert!(names(&burn).is_empty());
     let mut cleave = card("CLEAVE_ISH", CardType::Attack, Rarity::Common, "Deal 8 damage to ALL enemies.");
     (cleave.damage, cleave.target) = (Some(8), spire_core::catalog::Target::AllEnemies);
     assert_eq!(names(&cleave), vec![Tag::Area]);

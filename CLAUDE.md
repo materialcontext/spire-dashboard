@@ -19,6 +19,7 @@ Slay the Spire 2 macro dashboard: Rust workspace, egui UI. Read `docs/ARCHITECTU
   - `--lines`: mined card lines per character and act
   - `--lookout <pages>`: how many community decks each `relic_fits` and `event_fits` rule flags
   - `--roles <pages>`: boss win rate against each composition measure (A10, per character and pooled; `BUILD=`, `ASC=`)
+  - `--fights <pages>`: per elite and boss, death rate against each composition measure, next to the playbook's demands (A10; `ASC=`)
 - `dotnet build mod/SpireDashboardLink/SpireDashboardLink.csproj -c Release`: build the companion mod (.NET 8 SDK; builds without the game)
 
 fmt, clippy and test must pass before pushing (CI runs them, and builds the mod).

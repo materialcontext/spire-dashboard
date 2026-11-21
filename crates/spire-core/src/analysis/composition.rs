@@ -66,23 +66,40 @@ impl Measure {
         }
     }
 
+    /// How a value prints: prefix, suffix, decimals and scale.
+    fn units(self) -> (&'static str, &'static str, usize, f32) {
+        match self {
+            Measure::Job(Role::Mitigation | Role::Survival) => ("", " Block", 0, 1.0),
+            Measure::Job(Role::FastDamage) => ("", " damage", 0, 1.0),
+            Measure::Job(Role::ScalingDamage) => ("×", "", 1, 1.0),
+            Measure::Job(Role::Aoe) | Measure::Share(_) | Measure::Dead => ("", "%", 0, 100.0),
+            Measure::Job(Role::Chip) => ("", " hits", 1, 1.0),
+            Measure::Balance => ("", "", 1, 1.0),
+            Measure::Size => ("", " cards", 0, 1.0),
+        }
+    }
+
+    fn number(self, v: f32) -> String {
+        let (_, _, places, scale) = self.units();
+        format!("{:.*}", places, v * scale)
+    }
+
     /// The value in its own units: "12 Block", "24%", "×1.6".
     pub fn format(self, v: f32) -> String {
-        match self {
-            Measure::Job(Role::Mitigation | Role::Survival) => format!("{v:.0} Block"),
-            Measure::Job(Role::FastDamage) => format!("{v:.0} damage"),
-            Measure::Job(Role::ScalingDamage) => format!("×{v:.1}"),
-            Measure::Job(Role::Aoe) | Measure::Share(_) | Measure::Dead => format!("{:.0}%", v * 100.0),
-            Measure::Job(Role::Chip) => format!("{v:.1} hits"),
-            Measure::Balance => format!("{v:.1}"),
-            Measure::Size => format!("{v:.0} cards"),
-        }
+        let (pre, post, ..) = self.units();
+        format!("{pre}{}{post}", self.number(v))
+    }
+
+    /// A middle half and its median, units once: "5–9 Block (7 median)".
+    pub fn range(self, q: Quartiles) -> String {
+        let (pre, post, ..) = self.units();
+        format!("{pre}{}–{}{post} ({} median)", self.number(q.p25), self.number(q.p75), self.number(q.p50))
     }
 
     /// What it measures, for hovers.
     pub fn describe(self) -> String {
         match self {
-            Measure::Job(r) => format!("{}, simulated: {}", r.label(), jobs::describe_job(r)),
+            Measure::Job(r) => format!("{}: {}", r.label(), jobs::describe_job(r)),
             Measure::Share(r) => format!("Share of the deck's cards that are {}", r.label()),
             Measure::Balance => "Damage over the first 3 turns against 3 turns of ordinary Block".into(),
             Measure::Size => "Cards in the deck".into(),
@@ -119,21 +136,16 @@ pub fn phrase(measure: Measure, side: Side) -> String {
 }
 
 impl Row {
-    /// "Too little Mitigation: 9 Block, decks that beat the boss 12–18".
+    /// "Too little Mitigation: 9 Block; winners 12–18 Block (15 median)".
     pub fn summary(&self) -> String {
         let side = self.flag.map_or(Side::Low, |f| f.side);
         format!("{}: {}", phrase(self.measure, side), self.numbers())
     }
 
-    /// "9 Block; decks that beat the boss 12–18".
+    /// "9 Block; winners 12–18 Block (15 median)": the deck's value against
+    /// the decks that beat the boss.
     pub fn numbers(&self) -> String {
-        let m = self.measure;
-        format!(
-            "{}; decks that beat the boss {}–{}",
-            m.format(self.value),
-            m.format(self.range.p25),
-            m.format(self.range.p75)
-        )
+        format!("{}; winners {}", self.measure.format(self.value), self.measure.range(self.range))
     }
 
     /// "Decks like this beat the Act 3 boss 70% of the time; the middle
@@ -141,7 +153,7 @@ impl Row {
     pub fn evidence(&self) -> Option<String> {
         let f = self.flag?;
         Some(format!(
-            "Decks like this beat the Act {} boss {:.0}% of the time; the middle half {:.0}% (A10 community runs).",
+            "Decks like this beat the Act {} boss {:.0}% of the time; the middle half {:.0}%.",
             f.act + 1,
             f.rate * 100.0,
             f.typical * 100.0
@@ -399,6 +411,14 @@ mod tests {
 
     fn q(p25: f32, p50: f32, p75: f32) -> Quartiles {
         Quartiles { p25, p50, p75 }
+    }
+
+    #[test]
+    fn ranges_print_their_units_once() {
+        assert_eq!(Measure::Job(Role::Mitigation).range(q(5.0, 7.0, 9.0)), "5–9 Block (7 median)");
+        assert_eq!(Measure::Share(Role::Aoe).range(q(0.1, 0.15, 0.2)), "10–20% (15 median)");
+        assert_eq!(Measure::Job(Role::ScalingDamage).range(q(1.2, 1.5, 1.8)), "×1.2–1.8 (1.5 median)");
+        assert_eq!(Measure::Job(Role::Mitigation).format(7.0), "7 Block");
     }
 
     fn bench(character: Option<&str>, act: u8, block: Quartiles) -> Benchmark {

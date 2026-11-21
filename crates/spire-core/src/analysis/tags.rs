@@ -19,7 +19,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::catalog::{Card, Target};
+use crate::catalog::{Card, Rarity, Target};
 use crate::mechanics::{self, Effect};
 use crate::playbook::Playbook;
 
@@ -189,25 +189,35 @@ pub fn read(card: &Card, upgraded: bool, playbook: &Playbook) -> Vec<Tagged> {
     let effects: Vec<&Effect> = effects.triggers.iter().flat_map(|(_, es)| es).collect();
     let power = |name: &str| card.powers.iter().find(|p| p.power.eq_ignore_ascii_case(name)).map(|p| p.amount);
 
-    // Damage, by target, and its hits.
-    let damage = card.value("damage", upgraded);
+    // Damage, by target, and its hits. A curse's or status's damage is to
+    // the player.
+    let harms_player = matches!(card.rarity, Rarity::Curse | Rarity::Status);
+    let damage = if harms_player { 0 } else { card.value("damage", upgraded) };
     let hits = card.value("hitcount", upgraded).max(1) as u32;
     let area = card.target == Target::AllEnemies;
-    let said_area = effects.iter().filter_map(|e| if let Effect::DamageAll(n) = e { Some(*n) } else { None }).max();
-    let said_one = effects.iter().filter_map(|e| if let Effect::Damage(n) = e { Some(*n) } else { None }).max();
+    let said = |all: bool| {
+        let n = effects.iter().filter_map(|e| match e {
+            Effect::DamageAll(n) if all => Some(*n),
+            Effect::Damage(n) if !all => Some(*n),
+            _ => None,
+        });
+        n.max().filter(|_| !harms_player)
+    };
+    let (said_area, said_one) = (said(true), said(false));
+    let per_hit = damage.max(said_one.unwrap_or(0)).max(said_area.unwrap_or(0));
+    // Small damage (all hits together, X cards per X) is Chip Damage, not
+    // Damage: it wears an enemy down, it doesn't end a fight.
+    let chip = per_hit > 0 && per_hit as u32 * hits <= playbook.tag_lines.chip_damage;
+    if chip {
+        add(Tag::ChipDamage, per_hit * hits as i32, 1);
+    }
     if damage > 0 && area || said_area.is_some_and(|n| n > 0) {
         add(Tag::Area, damage.max(said_area.unwrap_or(0)), 1);
-    } else if damage > 0 || said_one.is_some_and(|n| n > 0) {
+    } else if !chip && (damage > 0 || said_one.is_some_and(|n| n > 0)) {
         add(Tag::Damage, damage.max(said_one.unwrap_or(0)), 1);
     }
-    let per_hit = damage.max(said_one.unwrap_or(0)).max(said_area.unwrap_or(0));
     if hits > 1 && per_hit > 0 {
         add(Tag::MultiHit, per_hit, hits);
-    }
-    let lines = &playbook.tag_lines;
-    let cheap = !card.x_cost && card.cost_at(upgraded).is_some_and(|c| c <= lines.chip_cost);
-    if per_hit > 0 && per_hit as u32 <= lines.chip_damage && cheap {
-        add(Tag::ChipDamage, per_hit, 1);
     }
 
     let block = card.value("block", upgraded);
@@ -258,7 +268,8 @@ pub fn read(card: &Card, upgraded: bool, playbook: &Playbook) -> Vec<Tagged> {
     }
 
     for rule in &playbook.tag_rules {
-        if rule.when.matches(card) {
+        // A text rule's Damage doesn't undo the small-damage reading.
+        if rule.when.matches(card) && !(chip && rule.tag == Tag::Damage) {
             add(rule.tag, 0, 1);
         }
     }

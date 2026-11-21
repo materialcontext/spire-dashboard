@@ -236,7 +236,8 @@ pub fn root(
                         threats::current(&mut cols[1], v, t, out);
                         cols[1].add_space(GAP);
                     }
-                    culled(&mut cols[1], ("threats", g, st.threat_tab), |ui| threats::show(ui, v, st, out));
+                    let playing = v.current_fight.map(|t| &t.encounter);
+                    culled(&mut cols[1], ("threats", g, st.threat_tab, playing), |ui| threats::show(ui, v, st, out));
                     cols[1].add_space(GAP);
                     if lookout::show(&mut cols[1], v, out) {
                         cols[1].add_space(GAP);
