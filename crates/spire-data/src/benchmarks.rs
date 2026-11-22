@@ -23,6 +23,7 @@ use spire_core::analysis::composition::{self, BossSample};
 use spire_core::analysis::fight_demands::{self, FightSample};
 use spire_core::analysis::lines::BossFight;
 use spire_core::analysis::sim::simulate;
+use spire_core::analysis::styles;
 use spire_core::analysis::survival;
 use spire_core::catalog::Rarity;
 use spire_core::playbook::CompositionLines;
@@ -52,6 +53,9 @@ pub struct BossDeck {
     pub won: bool,
     pub encounter: Option<spire_core::EncounterId>,
     pub kind: NodeKind,
+    /// How the fight went: turns taken and HP lost.
+    pub turns: Option<u32>,
+    pub hp_lost: Option<u32>,
 }
 
 /// One run's decks going into each boss fight: as samples for the
@@ -104,7 +108,19 @@ pub fn fight_decks(line: &str, catalog: &Catalog, kinds: &[NodeKind]) -> RunDeck
         read.events.iter().find_map(|e| if let RunEvent::End { outcome, .. } = e { Some(outcome) } else { None });
     let last_node = read.events.iter().rposition(|e| matches!(e, RunEvent::Node(_)));
     let mut state = RunState::default();
+    // The map point each node replays: (act, floor in the act).
+    let mut at = (0usize, 0usize);
     for (i, e) in read.events.iter().enumerate() {
+        if let RunEvent::EnterAct { index, .. } = e {
+            at = (usize::from(*index), 0);
+        }
+        let point = if matches!(e, RunEvent::Node(_)) {
+            let p = run.map_point_history.get(at.0).and_then(|a| a.get(at.1));
+            at.1 += 1;
+            p
+        } else {
+            None
+        };
         // Going into a boss fight: lost only when the run died there, on
         // its last floor; a run abandoned there says nothing.
         if let RunEvent::Node(n) = e
@@ -122,7 +138,16 @@ pub fn fight_decks(line: &str, catalog: &Catalog, kinds: &[NodeKind]) -> RunDeck
             if let Some(won_fight) = outcome {
                 let sample =
                     Sample { character: character.clone(), act: state.act_index, state: state.clone(), weight: 1.0 };
-                out.boss_decks.push(BossDeck { sample, won: won_fight, encounter: n.encounter.clone(), kind: n.kind });
+                let turns = point.and_then(|p| p.rooms.first()).and_then(|r| r.turns_taken).filter(|t| *t > 0);
+                let hp_lost = point.and_then(|p| p.player_stats.first()).and_then(|s| s.damage_taken);
+                out.boss_decks.push(BossDeck {
+                    sample,
+                    won: won_fight,
+                    encounter: n.encounter.clone(),
+                    kind: n.kind,
+                    turns,
+                    hp_lost,
+                });
             }
             if n.kind == NodeKind::Boss
                 && let Some(won_fight) = outcome
@@ -250,10 +275,14 @@ pub fn add(pack: &mut DataPack, pages: &[String], playbook: &Playbook) -> (usize
                 weight: d.sample.weight,
                 player: d.player,
                 score: d.score,
+                turns: d.deck.turns,
+                hp_lost: d.deck.hp_lost,
             })
         })
         .collect();
-    pack.fights = fight_demands::measure(&fights, lines);
+    // Each character's decks at each act, to read a deck's style.
+    pack.styles = styles::norms(fights.iter().map(|f| (&f.character, f.act, &f.values, f.weight)), lines.min_decks);
+    pack.fights = fight_demands::measure(&fights, &pack.styles, lines);
     decks.retain(|d| d.deck.kind == NodeKind::Boss);
     // Benchmarks: the decks that beat each boss.
     let winners: Vec<(&Sample, &Measured)> =

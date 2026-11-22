@@ -4,7 +4,7 @@ use eframe::egui::{self, RichText, Ui};
 use spire_core::EncounterId;
 use spire_core::analysis::survival::Outlook;
 use spire_core::analysis::{Coverage, ThreatPreview};
-use spire_core::catalog::RoomType;
+use spire_core::catalog::{FightDemands, RoomType, Style};
 use spire_core::run::NodeKind;
 
 use crate::actions::{Action, Link};
@@ -23,6 +23,7 @@ pub fn preview_body(
     key: impl std::hash::Hash + std::fmt::Debug + Copy,
     t: &ThreatPreview,
     outlook: Option<&Outlook>,
+    styles: Option<(&FightDemands, Option<Style>)>,
 ) {
     match t.lineups.as_slice() {
         [] => {}
@@ -78,6 +79,9 @@ pub fn preview_body(
     if let Some(o) = outlook {
         crate::views::turns::outlook(ui, o, t.stats.as_ref());
     }
+    if let Some((f, yours)) = styles.filter(|_| boss_or_elite) {
+        style_lines(ui, f, yours);
+    }
     if let Some(s) = &t.stats {
         ui.label(caption(format!(
             "Players lose {:.1} HP over {:.1} turns on average",
@@ -93,6 +97,45 @@ pub fn preview_body(
                 .on_hover_text(format!("{}.", c.detail()));
         }
     });
+}
+
+/// "Best here: Guarded · 92% win, ~9 turns, ~22 HP", then "Yours: Burst ·
+/// 67%" when it isn't the best; every style and what to add on hover.
+fn style_lines(ui: &mut Ui, f: &FightDemands, yours: Option<Style>) {
+    let record = |s: Style| f.styles.iter().find(|r| r.style == s);
+    let all: Vec<String> = f.styles.iter().map(|r| format!("{} {:.0}%", r.style.label(), r.won * 100.0)).collect();
+    if all.is_empty() {
+        return;
+    }
+    let hover = |ui: &mut Ui| {
+        ui.label(format!("Wins here by deck style: {}.", all.join(" · ")));
+        if let (Some(best), Some(y)) = (f.best, yours)
+            && best != y
+        {
+            let roles: Vec<&str> = best.roles().iter().map(|r| r.label()).collect();
+            ui.label(format!("To lean {}: more {}.", best.label(), roles.join(", ")));
+        }
+        ui.label(caption("A deck's style is the roles it's strongest in against its character's decks at this act."));
+    };
+    if let Some(best) = f.best.and_then(record) {
+        let mine = yours == Some(best.style);
+        let line = format!(
+            "Best here: {}{} · {:.0}% win, ~{:.0} turns, ~{:.0} HP",
+            best.style.label(),
+            if mine { " (yours)" } else { "" },
+            best.won * 100.0,
+            best.turns,
+            best.hp_lost
+        );
+        ui.label(RichText::new(line).small().color(if mine { good() } else { text() })).on_hover_ui(hover);
+    }
+    if let Some(r) = yours.filter(|y| Some(*y) != f.best).and_then(record) {
+        let color = if f.best.is_some() { warn() } else { text_dim() };
+        ui.label(
+            RichText::new(format!("Yours: {} · {:.0}% win here", r.style.label(), r.won * 100.0)).small().color(color),
+        )
+        .on_hover_ui(hover);
+    }
 }
 
 fn status_word(c: Option<Coverage>) -> (&'static str, egui::Color32) {
@@ -159,6 +202,11 @@ pub fn current(ui: &mut Ui, v: &ViewCtx, t: &ThreatPreview, out: &mut Vec<Action
     panel(ui, "Current fight", Some(room), |ui| fight_card(ui, v, t, out));
 }
 
+/// A fight's measured styles and the deck's own, for `preview_body`.
+pub fn styles<'a>(v: &'a ViewCtx, t: &ThreatPreview) -> Option<(&'a FightDemands, Option<Style>)> {
+    Some((v.catalog.fight(&t.encounter)?, v.combat.and_then(|c| c.style)))
+}
+
 /// A fight's preview with its demands checked against the simulated deck,
 /// once it is.
 pub fn checked<'a>(v: &'a ViewCtx, t: &'a ThreatPreview) -> &'a ThreatPreview {
@@ -186,7 +234,7 @@ fn fight_card(ui: &mut Ui, v: &ViewCtx, t: &ThreatPreview, out: &mut Vec<Action>
             ui.label(RichText::new(word).small().strong().color(color));
         });
     });
-    preview_body(ui, v.generation, t, v.combat.and_then(|c| c.outlook(&t.encounter)));
+    preview_body(ui, v.generation, t, v.combat.and_then(|c| c.outlook(&t.encounter)), styles(v, t));
 }
 
 #[cfg(test)]

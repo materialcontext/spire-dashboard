@@ -19,7 +19,7 @@ spire-app ──► spire-data ──► spire-core
 
 ## Domain
 
-**Catalog** (`catalog.rs`): game facts in a source-agnostic shape. A `DataPack` is the serialized form; a `Catalog` layers packs **bundled → downloaded → curated → user**, later winning by id. The curated layer (`data/patterns.json`) fixes sourced gaps in monster data, only while the gap remains. Measured layers come whole from one pack: `benchmarks` with their `risks` and `fights`, and `card_lines`, from the pack measured on the most decks (later wins ties), so a small download never replaces a larger bundled sample; `card_lift` from the last pack that has it.
+**Catalog** (`catalog.rs`): game facts in a source-agnostic shape. A `DataPack` is the serialized form; a `Catalog` layers packs **bundled → downloaded → curated → user**, later winning by id. The curated layer (`data/patterns.json`) fixes sourced gaps in monster data, only while the gap remains. Measured layers come whole from one pack: `benchmarks` with their `risks`, `fights` and `styles`, and `card_lines`, from the pack measured on the most decks (later wins ties), so a small download never replaces a larger bundled sample; `card_lift` from the last pack that has it.
 
 **Playbook** (`playbook.rs`, `data/playbook.json`): strategy as data, editable without a rebuild.
 
@@ -53,11 +53,12 @@ Pure functions over (state, catalog, playbook).
 | `benchmark` | Weighted quartiles of those decks per character and act; all-character fallback under `min_decks` |
 | `balance` | Setup piling up (Aim, Vigor, Stretch) and Arrows or Stars running short |
 | `threats` | `ThreatProfile` per encounter; `demands`: an elite or boss in `catalog.fights` asks for its measured roles only (missing when the deck is under its character's line), other fights by the act's thresholds; `next_threats`, turn plans |
-| `fight_demands` | Data refresh: per elite and boss, the roles whose bottom quarter (per character, act and kind) dies there clearly more often (the `risks` test); and the survival score's quartiles with each band's death rate |
+| `fight_demands` | Data refresh: per elite and boss, the roles whose bottom quarter (per character, act and kind) dies there clearly more often (the `risks` test); the survival score's quartiles with each band's death rate; each deck style's win rate, turns and HP lost, and the style that clearly wins most |
+| `styles` | Deck styles from clustering A10 decks' jobs standardised within character and act: Guarded (Mitigation, Survival), Burst (Fast Damage, Chip), Wide (AoE), Build-up (Scaling). `norms` per character and act (a data layer), `style_of` a deck |
 | `pattern` | A monster's turns from its move state machine; reachable moves once the order is lost |
 | `shape` | A fight's shape: pressure, spikes, quiet turns, ramp, clocks, stages, data gaps (`fights` thresholds) |
 | `rules` | Fight rules from monster power text (Slippery, Intangible, Hardened Shell…) and what each asks |
-| `survival` | Plays a fight out four ways (Race, Wall, Windows, Scale) on the sim's output against expected damage. Lead: least HP lost, unless a clock asks for speed; the way playing to the fight's top measured demand leads when it costs ≤ 10% of HP more. Verdict: the deck's `score` among community decks at the fight (worst quarter At risk, best On track, when clearly different; else Typical), absolute HP rule where unmeasured. `limits` (roles that would help; a measured fight keeps only its measured roles) |
+| `survival` | Plays a fight out on the sim's output against expected damage, up to the turn by which 9 in 10 community wins there are over (`horizon`, from `EncounterStats::win_turns`). Four internal ways (all-out attack, block what comes, block the spikes, split); the one losing least HP gives the turns and HP shown, unless a clock asks for speed. Verdict: the deck's `score` among community decks at the fight (worst quarter At risk, best On track, when clearly different; else Typical), absolute HP rule where unmeasured. `limits` (roles that would help; a measured fight keeps only its measured roles) |
 | `floors` | Act length (double-boss extra floor) and which room the next floor must be |
 | `healing` | Rest heal (rules percent plus relics) |
 | `events` | `lookout`: relics (`relic_fits`) and event options (`event_fits`) a `?` room this act can still give, with odds, how often runs meet each, and costs. Rules share `When` and its test `holds` |

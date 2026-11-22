@@ -278,22 +278,25 @@ fn verdict_color(v: Verdict) -> egui::Color32 {
     }
 }
 
-/// "7 turns, ~40 of 54 HP" or "no kill in 20 turns".
-fn result(l: &spire_core::analysis::survival::Line, hp: i32) -> String {
+/// "7 turns, ~40 of 54 HP", or "no kill by turn 12; wins take ~9".
+fn result(l: &spire_core::analysis::survival::Line, hp: i32, stats: Option<&EncounterStats>) -> String {
+    let wins = stats.and_then(|s| s.win_turns);
     match (l.kill_turn, l.blast_turn) {
         (Some(t), Some(_)) => format!("{t} turns + blast, ~{} of {hp} HP", l.hp_loss),
         (Some(t), None) => format!("{t} turns, ~{} of {hp} HP", l.hp_loss),
-        (None, _) => format!("no kill in {} turns", spire_core::analysis::survival::MAX_TURNS),
+        (None, _) => match wins {
+            Some((p50, p90)) => format!("no kill by turn {p90}; wins take ~{p50}"),
+            None => format!("no kill in {} turns", spire_core::analysis::survival::MAX_TURNS),
+        },
     }
 }
 
-/// "At risk · Wall · 7 turns, ~40 of 54 HP"; the rest on hover.
+/// "At risk · 7 turns, ~40 of 54 HP"; the rest on hover.
 pub fn outlook(ui: &mut Ui, o: &Outlook, stats: Option<&EncounterStats>) {
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
         ui.label(RichText::new(o.verdict.label()).small().strong().color(verdict_color(o.verdict)));
-        ui.label(RichText::new(o.lead.way.label()).small().strong());
-        ui.label(secondary(result(&o.lead, o.hp)));
+        ui.label(secondary(result(&o.lead, o.hp, stats)));
     })
     .response
     .on_hover_ui(|ui| outlook_detail(ui, o, stats));
@@ -318,18 +321,17 @@ fn look_for(text: &str, tags: &[spire_core::analysis::tags::Tag]) -> String {
     format!("{text}\nLook for: {}", names.join(", "))
 }
 
-/// The outlook's hover: how decks like this fare here, the lead and every
-/// way, then what changes the play.
+/// The outlook's hover: how decks like this fare here and how long wins
+/// take, then what changes the play.
 fn outlook_detail(ui: &mut Ui, o: &Outlook, stats: Option<&EncounterStats>) {
     ui.set_max_width(380.0);
     if let Some(died) = o.died {
         let all = stats.map_or(String::new(), |s| format!("; all decks {:.0}%", s.death_rate() * 100.0));
         ui.label(format!("Decks like this died here {:.0}%{all}.", died * 100.0));
     }
-    let because = o.because.map_or(String::new(), |r| format!(" {} decides this fight.", r.label()));
-    ui.label(format!("Lead: {}, {}.{because}", o.lead.way.label(), o.lead.way.describe()));
-    let ways: Vec<String> = o.ways.iter().map(|l| format!("{} {}", l.way.label(), result(l, o.hp))).collect();
-    ui.label(secondary(ways.join(" · ")));
+    if let Some((p50, p90)) = stats.and_then(|s| s.win_turns) {
+        ui.label(format!("Wins here take ~{p50} turns; 9 in 10 by turn {p90}."));
+    }
     if !o.spikes.is_empty() {
         let shown: Vec<String> = o
             .spikes

@@ -806,6 +806,9 @@ pub struct EncounterStats {
     /// Median HP players entered with: survivors, then those who died.
     #[serde(default)]
     pub hp_in: Option<(u32, u32)>,
+    /// Turns a win takes: median and 90th percentile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub win_turns: Option<(u32, u32)>,
 }
 
 impl EncounterStats {
@@ -1213,6 +1216,9 @@ pub struct DataPack {
     /// What decides each elite and boss fight in community runs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fights: Vec<FightDemands>,
+    /// Where each character's decks sit, to read a deck's style.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub styles: Vec<StyleNorm>,
 }
 
 /// The middle half and median of a measure across community decks.
@@ -1304,6 +1310,73 @@ pub struct FightDemands {
     /// The survival check's score on community decks going in, banded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outlook: Option<OutlookBands>,
+    /// How each deck style fares here, and the style that clearly does
+    /// best, if one does.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub styles: Vec<StyleRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub best: Option<Style>,
+}
+
+/// What a deck leans on, against other decks of its character at the same
+/// point (`analysis::styles`): found in community runs as the four ways
+/// decks are built, each with its own win rate per fight.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Style {
+    /// Strong Mitigation and Survival.
+    Guarded,
+    /// Strong Fast Damage and Chip.
+    Burst,
+    /// Strong AoE.
+    Wide,
+    /// Strong Scaling Damage.
+    BuildUp,
+}
+
+impl Style {
+    pub const ALL: [Style; 4] = [Style::Guarded, Style::Burst, Style::Wide, Style::BuildUp];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Style::Guarded => "Guarded",
+            Style::Burst => "Burst",
+            Style::Wide => "Wide",
+            Style::BuildUp => "Build-up",
+        }
+    }
+
+    /// The roles a deck of this style is strong in.
+    pub fn roles(self) -> &'static [crate::playbook::Role] {
+        use crate::playbook::Role;
+        match self {
+            Style::Guarded => &[Role::Mitigation, Role::Survival],
+            Style::Burst => &[Role::FastDamage, Role::Chip],
+            Style::Wide => &[Role::Aoe],
+            Style::BuildUp => &[Role::ScalingDamage],
+        }
+    }
+}
+
+/// One style at one fight: effective decks, the share that won, and the
+/// median turns and HP lost in the wins.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct StyleRecord {
+    pub style: Style,
+    pub decks: f32,
+    pub won: f32,
+    pub turns: f32,
+    pub hp_lost: f32,
+}
+
+/// Where a character's decks sit at an act on each role's job (mean and
+/// spread), so a deck's style is read against its own character's.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct StyleNorm {
+    pub character: CharacterId,
+    pub act: u8,
+    pub mean: [f32; 6],
+    pub sd: [f32; 6],
 }
 
 /// The survival check against community decks at one fight: its score's
@@ -1495,6 +1568,7 @@ pub struct Catalog {
     pub risks: Vec<Risk>,
     /// From the same layer as `benchmarks`.
     pub fights: Vec<FightDemands>,
+    pub styles: Vec<StyleNorm>,
 }
 
 /// The decks a set of benchmarks was measured on: its sample size.
@@ -1543,6 +1617,7 @@ impl Catalog {
                 cat.benchmarks = pack.benchmarks;
                 cat.risks = pack.risks;
                 cat.fights = pack.fights;
+                cat.styles = pack.styles;
             }
             if !pack.card_lines.is_empty() && line_fights(&pack.card_lines) >= line_fights(&cat.card_lines) {
                 cat.card_lines = pack.card_lines;

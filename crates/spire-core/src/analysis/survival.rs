@@ -15,10 +15,12 @@
 //!
 //! The lead way is the one that loses least HP, unless the fight has a
 //! clock (ramp, summons, blast, statuses, revives) and it takes clearly
-//! longer than players usually do: then the fastest way that survives.
-//! Where community runs show what decides the fight (`fight_demands`), the
-//! way that plays to it leads when it costs little more HP: Block → Wall
-//! (Windows with spikes), Fast Damage → Race, Scaling Damage → Scale.
+//! longer than players usually do: then the fastest way that survives. The
+//! ways are internal: they give the turns and HP the check reports. How to
+//! build for a fight comes from deck styles (`styles`, `fight_demands`).
+//!
+//! A fight is played out only as long as 9 in 10 community wins there take
+//! ([`horizon`]): past that, a deck isn't winning the way players do.
 //!
 //! **The verdict is relative.** Played on averages, the check is far more
 //! pessimistic than real fights (it calls most community decks that won
@@ -234,6 +236,9 @@ pub struct Foe<'a> {
     pub pace: Option<f32>,
     /// Turns over the pace that count as clearly slower.
     pub slower_by: f32,
+    /// Player turns played out: how long wins here take (9 in 10 of them),
+    /// else `MAX_TURNS`.
+    pub horizon: usize,
 }
 
 impl Foe<'_> {
@@ -261,7 +266,7 @@ pub struct Line {
     pub junk: f32,
     /// Player turn the last enemy falls on.
     pub kill_turn: Option<u32>,
-    /// HP lost by then (or by `MAX_TURNS`).
+    /// HP lost by then (or by the fight's horizon).
     pub hp_loss: u32,
 }
 
@@ -298,9 +303,6 @@ pub struct Outlook {
     pub score: f32,
     /// The way to lead with.
     pub lead: Line,
-    /// The role community runs say decides the fight, when the lead plays
-    /// to it.
-    pub because: Option<Role>,
     /// Every way played: Race, Wall, Windows (with spikes), Scale.
     pub ways: Vec<Line>,
     pub hp: i32,
@@ -384,7 +386,7 @@ fn play(sim: &DeckSim, foe: Foe, way: Way) -> Line {
     // Status cards thin out the draws: output scales with the share of the
     // deck that's still playable (a hand-limited deck loses about that much).
     let thinned = |junk: f32| if foe.deck > 0.0 { foe.deck / (foe.deck + junk) } else { 1.0 };
-    for t in 0..MAX_TURNS {
+    for t in 0..foe.horizon.clamp(1, MAX_TURNS) {
         let out = output(t);
         let keep = thinned(junk + passing);
         let mods = foe.stages[stage].mods;
@@ -480,7 +482,6 @@ pub fn outlook(sim: &DeckSim, foe: Foe, hp: i32) -> Option<Outlook> {
         died: None,
         score: score(&least, hp),
         lead,
-        because: None,
         ways,
         hp,
         status_cards: 0,
@@ -658,6 +659,7 @@ pub fn for_encounter(
         clocked: !shape.clocks.is_empty(),
         pace: enc.stats.as_ref().map(|s| s.avg_turns).filter(|p| *p > 0.0),
         slower_by: playbook.fights.slower_by,
+        horizon: horizon(enc),
     };
     let any = series.iter().any(|(_, s)| s.iter().any(|n| *n > 0.0));
     let joins = waves
@@ -672,7 +674,7 @@ pub fn for_encounter(
     let jobs = jobs::measure(sim);
     let fight = catalog.fight(&enc.id);
     outlook(sim, foe, state.hp).map(|o| {
-        let o = calibrated(played_to(o, fight, state.hp), fight);
+        let o = calibrated(o, fight);
         let spikes = spike_odds(&shape, sim);
         let mut limits = limits(&shape, &spikes, &jobs, &o.lead, &foe, &mods, &sim.play, playbook);
         // Where the data says what decides the fight, only those roles help
@@ -693,41 +695,11 @@ pub fn for_encounter(
     })
 }
 
-/// More HP (a share of the deck's) a way may cost over the least to lead
-/// because it plays to what decides the fight.
-const PLAYS_TO_SLACK: f32 = 0.1;
-
-/// The way that plays to the fight's top demand leads, when it wins and
-/// costs little more HP than the lead.
-fn played_to(o: Outlook, fight: Option<&FightDemands>, hp: i32) -> Outlook {
-    let Some(role) = fight.and_then(|f| f.demands.first()).and_then(|d| match d.measure {
-        Measure::Job(r) | Measure::Share(r) => Some(r),
-        _ => None,
-    }) else {
-        return o;
-    };
-    let fits = |w: Way| match role {
-        Role::Survival => matches!(w, Way::Windows(_)) || (w == Way::Wall && o.way("Windows").is_none()),
-        Role::Mitigation => w == Way::Wall,
-        Role::FastDamage => w == Way::Race,
-        Role::ScalingDamage => matches!(w, Way::Scale(_)),
-        Role::Aoe | Role::Chip => false,
-    };
-    let slack = (hp.max(1) as f32 * PLAYS_TO_SLACK) as u32;
-    let lead = o.lead;
-    // A clock already chose speed over HP: leave it.
-    let least = o.ways.iter().min_by_key(|l| (l.kill_turn.is_none(), l.hp_loss, l.kill_turn));
-    if least.is_some_and(|l| *l != lead) {
-        return o;
-    }
-    match o.ways.iter().find(|l| fits(l.way) && l.kill_turn.is_some()) {
-        Some(_) if fits(lead.way) => Outlook { because: Some(role), ..o },
-        Some(l) if lead.kill_turn.is_some() && l.hp_loss <= lead.hp_loss + slack && (l.hp_loss as i32) < hp => {
-            let l = *l;
-            Outlook { lead: l, because: Some(role), ..o }
-        }
-        _ => o,
-    }
+/// How many player turns to play a fight out: as long as 9 in 10 community
+/// wins there take, else `MAX_TURNS`. A deck that hasn't won by then isn't
+/// on a path players take.
+pub fn horizon(enc: &Encounter) -> usize {
+    enc.stats.as_ref().and_then(|s| s.win_turns).map_or(MAX_TURNS, |(_, p90)| (p90 as usize).clamp(3, MAX_TURNS))
 }
 
 /// The verdict among community decks at this fight, when the data has it.
@@ -764,7 +736,17 @@ mod tests {
     }
 
     fn foe<'a>(stages: &'a [Stage<'a>], blast: Option<f32>) -> Foe<'a> {
-        Foe { stages, blast, deck: 10.0, hand: 5.0, spike_line: None, clocked: false, pace: None, slower_by: 1.5 }
+        Foe {
+            stages,
+            blast,
+            deck: 10.0,
+            hand: 5.0,
+            spike_line: None,
+            clocked: false,
+            pace: None,
+            slower_by: 1.5,
+            horizon: MAX_TURNS,
+        }
     }
 
     fn race(o: &Outlook) -> Line {
@@ -785,6 +767,8 @@ mod tests {
                 line: 10.0,
             }],
             outlook: bands,
+            styles: vec![],
+            best: None,
         }
     }
 
@@ -804,22 +788,6 @@ mod tests {
         // A worst quarter that doesn't die clearly more is only Typical.
         let unclear = crate::catalog::OutlookBands { worse: false, ..bands(0.2, 0.5) };
         assert_eq!(calibrated(o, Some(&fight(Role::Chip, Some(unclear)))).verdict, Verdict::Typical);
-    }
-
-    #[test]
-    fn the_lead_plays_to_what_decides_the_fight_when_it_costs_little() {
-        let line = |way, kill, hp_loss| Line { way, blast_turn: None, junk: 0.0, kill_turn: Some(kill), hp_loss };
-        let (race, wall) = (line(Way::Race, 4, 20), line(Way::Wall, 6, 24));
-        let mut o = outlook(&sim(20.0, 0.0), foe(&stage(&[10.0; 20], 120), None), 60).unwrap();
-        (o.ways, o.lead) = (vec![race, wall], race);
-        // Walling costs 4 more of 60 HP: within a tenth, so it leads.
-        let block = played_to(o.clone(), Some(&fight(Role::Mitigation, None)), 60);
-        assert_eq!((block.lead, block.because), (wall, Some(Role::Mitigation)));
-        // With 30 HP, 4 more is too much: Race stays.
-        let low = played_to(o.clone(), Some(&fight(Role::Mitigation, None)), 30);
-        assert_eq!((low.lead, low.because), (race, None));
-        // Fast Damage: Race already plays to it.
-        assert_eq!(played_to(o, Some(&fight(Role::FastDamage, None)), 60).because, Some(Role::FastDamage));
     }
 
     #[test]

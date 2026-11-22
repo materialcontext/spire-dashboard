@@ -16,7 +16,8 @@
 use std::collections::BTreeMap;
 
 use crate::analysis::composition::{band, holds};
-use crate::catalog::{FightDemand, FightDemands, Measure, OutlookBands, Quartiles};
+use crate::analysis::styles::{self, median, norm_for};
+use crate::catalog::{FightDemand, FightDemands, Measure, OutlookBands, Quartiles, Style, StyleNorm, StyleRecord};
 use crate::ids::{CharacterId, EncounterId};
 use crate::playbook::{CompositionLines, Role};
 
@@ -33,6 +34,9 @@ pub struct FightSample {
     pub player: u64,
     /// The survival check's score for the deck here (`survival::score`).
     pub score: Option<f32>,
+    /// How the fight went: turns taken and HP lost.
+    pub turns: Option<u32>,
+    pub hp_lost: Option<u32>,
 }
 
 /// The measures a fight demand can be: each role's job and share.
@@ -42,6 +46,44 @@ fn measures() -> impl Iterator<Item = Measure> {
 
 fn salt_of(enc: &EncounterId) -> u64 {
     enc.as_str().bytes().fold(0u64, |h, b| h.wrapping_mul(31) ^ u64::from(b))
+}
+
+/// Each style's record at one fight (styles with at least a quarter of
+/// `min_decks`), and the style that wins clearly more than the rest, by
+/// the composition risks' test.
+fn style_records(
+    fs: &[&FightSample],
+    norms: &[StyleNorm],
+    lines: &CompositionLines,
+    salt: u64,
+) -> (Vec<StyleRecord>, Option<Style>) {
+    let styled: Vec<(&FightSample, Style)> = fs
+        .iter()
+        .filter_map(|s| Some((*s, styles::style_of(&s.values, norm_for(norms, &s.character, s.act)?))))
+        .collect();
+    let records: Vec<StyleRecord> = Style::ALL
+        .into_iter()
+        .filter_map(|style| {
+            let of: Vec<&FightSample> = styled.iter().filter(|(_, x)| *x == style).map(|(s, _)| *s).collect();
+            let decks: f32 = of.iter().map(|s| s.weight).sum();
+            if decks < lines.min_decks / 4.0 {
+                return None;
+            }
+            let wins: Vec<&&FightSample> = of.iter().filter(|s| s.won).collect();
+            let won = wins.iter().map(|s| s.weight).sum::<f32>() / decks;
+            let turns = median(wins.iter().filter_map(|s| Some((s.turns? as f32, s.weight))).collect());
+            let hp_lost = median(wins.iter().filter_map(|s| Some((s.hp_lost? as f32, s.weight))).collect());
+            Some(StyleRecord { style, decks, won, turns, hp_lost })
+        })
+        .collect();
+    // The best style, if its deaths are clearly fewer than the others'.
+    let best = records.iter().max_by(|a, b| a.won.total_cmp(&b.won)).and_then(|top| {
+        let rows: Vec<(usize, bool, f32)> =
+            styled.iter().map(|(s, x)| (usize::from(*x != top.style), !s.won, s.weight)).collect();
+        let players: Vec<u64> = styled.iter().map(|(s, _)| s.player).collect();
+        holds(0, &rows, &players, lines, salt ^ 3).map(|_| top.style)
+    });
+    (records, best)
 }
 
 /// The survival check's score banded on one fight's decks, with each band's
@@ -90,7 +132,7 @@ fn low_line(values: Vec<(f32, f32)>) -> Quartiles {
 
 /// Every elite and boss with enough decks (`min_decks`), with the roles that
 /// decide it.
-pub fn measure(samples: &[FightSample], lines: &CompositionLines) -> Vec<FightDemands> {
+pub fn measure(samples: &[FightSample], norms: &[StyleNorm], lines: &CompositionLines) -> Vec<FightDemands> {
     // Quartiles per (act, kind, measure): per character, and across all.
     let mut values: BTreeMap<Group, Vec<(f32, f32)>> = BTreeMap::new();
     for s in samples {
@@ -156,7 +198,16 @@ pub fn measure(samples: &[FightSample], lines: &CompositionLines) -> Vec<FightDe
         let mut demands: Vec<FightDemand> = best.into_values().collect();
         demands.sort_by(|a, b| (b.rate - b.typical).total_cmp(&(a.rate - a.typical)));
         let outlook = bands(&fs, lines, salt_of(enc));
-        out.push(FightDemands { encounter: enc.clone(), decks, death_rate: died / decks, demands, outlook });
+        let (styles, best) = style_records(&fs, norms, lines, salt_of(enc));
+        out.push(FightDemands {
+            encounter: enc.clone(),
+            decks,
+            death_rate: died / decks,
+            demands,
+            outlook,
+            styles,
+            best,
+        });
     }
     out
 }
@@ -185,6 +236,8 @@ mod tests {
                     weight: 1.0,
                     player: p,
                     score: Some(30.0 - block),
+                    turns: Some(8),
+                    hp_lost: Some(20),
                 })
             })
             .collect()
@@ -196,7 +249,8 @@ mod tests {
         let mut s = decks(0..50, 8.0, 0.4, 10);
         s.extend(decks(50..240, 20.0, 0.1, 10));
         let lines = CompositionLines::default();
-        let fights = measure(&s, &lines);
+        let norms = styles::norms(s.iter().map(|f| (&f.character, f.act, &f.values, f.weight)), 100.0);
+        let fights = measure(&s, &norms, &lines);
         assert_eq!(fights.len(), 1);
         let f = &fights[0];
         assert!((f.death_rate - (0.4 * 50.0 + 0.1 * 190.0) / 240.0).abs() < 0.01, "{}", f.death_rate);
@@ -209,6 +263,10 @@ mod tests {
         // The survival score (worse with less Block) bands the deaths too.
         let o = f.outlook.as_ref().unwrap();
         assert!(o.worse && o.rates[2] > o.rates[1], "{o:?}");
+        // Decks strong in Block (Guarded) clearly die least.
+        assert_eq!(f.best, Some(Style::Guarded), "{:?}", f.styles);
+        let guarded = f.styles.iter().find(|r| r.style == Style::Guarded).unwrap();
+        assert_eq!((guarded.turns, guarded.hp_lost), (8.0, 20.0));
     }
 
     #[test]
@@ -223,6 +281,6 @@ mod tests {
     #[test]
     fn too_few_decks_measure_nothing() {
         let s = decks(0..10, 8.0, 0.4, 5);
-        assert!(measure(&s, &CompositionLines::default()).is_empty());
+        assert!(measure(&s, &[], &CompositionLines::default()).is_empty());
     }
 }

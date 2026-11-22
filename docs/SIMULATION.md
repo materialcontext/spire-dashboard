@@ -70,11 +70,16 @@ Card Block + Dexterity + Defend bonus (Fasten) + Stretch (spent by the card, add
 - Cards whose need nothing supplies (`simulation.requirements`: Sadness, Shivs, Souls, Sovereign Blade, orbs, Lightning, Arrows, Stars) are dead draws. *[Player]*
 - Setup is worth what the deck can spend: Aim at the deck's Shoot cards' mean multiplier, Vigor with any attack, Stretch with any Block card. Stores per turn feed `analysis::balance`.
 - A shot Arrow returns after 3 attack hits (`simulation.arrow_return_hits`). *[Player]*
-- Forge: the first Forge in a fight adds the Forge card (`GameRules::forge_card`, Sovereign Blade) to the hand, or the discard pile when the hand is full; every Forge adds its amount to that card's damage, wherever it is. It then cycles like any card. Its modifiers (Seeking Edge, Conqueror, Sword Sage, Parry) aren't read yet. *[Codex glossary]*
+- Forge: the first Forge in a fight adds the Forge card (`GameRules::forge_card`, Sovereign Blade) to the hand, or the discard pile when the hand is full; every Forge adds its amount to that card's damage, wherever it is. It then cycles like any card. Sword Sage's Replay plays it again; Seeking Edge, Conqueror and Parry aren't read yet. *[Codex glossary]*
+- Made cards (`mechanics::card_text`): "Add N <card> into your Hand / Draw Pile / Discard Pile" (Shivs, Souls, Sadness, Joy, Wounds, Burns, Sweeping Gaze…) makes that card there; a full hand sends it to the discard pile, the draw pile takes it at a random place. Powers do it on their timing (Infinite Blades each turn). "Add a copy of this card" copies it. Random cards aren't made.
+- The Exhaust Pile is kept: exhaust triggers (Feel No Pain, Dark Embrace), "N additional damage for each card (or Soul) in your Exhaust Pile", "if you have 3 or more cards in your Exhaust Pile", "if you Exhausted a card this turn", "when this card is Exhausted", "costs 1 less for each card Exhausted this combat", and "if this is in your Exhaust Pile, play it" (Bombardment, Howl from Beyond).
+- "Exhaust your Hand / all non-Attacks / all Status cards / all Sadness … for each card Exhausted": the card's own numbers (or the sentence's effect) once per card taken. "Discard your Hand … for each card discarded" likewise.
+- "This turn, your next Skill (Attack) is played an extra time" plays the next one twice.
+- A card draws only when its text says "draw": the data's card count also marks "Add 3 Shivs" and "3 or more cards". A base damage given only as the calculation's base (Ashen Strike, Soul Storm) counts as its damage.
 - Each turn's Block keeps its spread (`TurnOutput::block_steps`, every 5%) for the survival check.
 
 **Open:** rounding per hit (Codex) versus once at the end (Wiki); they differ only when fractions add up across hits.
 
 ## Not read yet
 
-`audit -- --mechanics`: 77 of 133 powers and 84 of 315 relics are read; most unread relics act outside combat. Unread combat effects: conditions ("end your turn without Block", "the first time"), random cards or orbs, enemy deaths, HP loss, Block retention (Barricade, Sturdy Clamp), "this turn" buffs, "for each" scaling. The Relics tab and power pages say what is simulated.
+`audit -- --mechanics`: 77 of 133 powers and 84 of 315 relics are read; most unread relics act outside combat. Unread combat effects: conditions ("end your turn without Block", "the first time"), random cards or orbs, choices ("put a card from your Discard Pile into your Hand", Headbutt, Hologram, Dredge), enemy deaths, HP loss, Block retention (Barricade, Sturdy Clamp), "this turn" buffs, most "for each" scaling. The Relics tab and power pages say what is simulated.

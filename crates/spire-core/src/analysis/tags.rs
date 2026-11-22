@@ -192,7 +192,13 @@ pub fn read(card: &Card, upgraded: bool, playbook: &Playbook) -> Vec<Tagged> {
     // Damage, by target, and its hits. A curse's or status's damage is to
     // the player.
     let harms_player = matches!(card.rarity, Rarity::Curse | Rarity::Status);
-    let damage = if harms_player { 0 } else { card.value("damage", upgraded) };
+    // Some cards give their base damage only as the calculation's base
+    // (Ashen Strike: 6 plus 3 per exhausted card).
+    let printed = match card.value("damage", upgraded) {
+        0 => card.value("calculationbase", upgraded).max(card.value("calculateddamage", upgraded)),
+        n => n,
+    };
+    let damage = if harms_player { 0 } else { printed };
     let hits = card.value("hitcount", upgraded).max(1) as u32;
     let area = card.target == Target::AllEnemies;
     let said = |all: bool| {
@@ -234,7 +240,10 @@ pub fn read(card: &Card, upgraded: bool, playbook: &Playbook) -> Vec<Tagged> {
     }
     let draw = card.value("cards", upgraded);
     let said_draw = effects.iter().filter_map(|e| if let Effect::Draw(n) = e { Some(*n) } else { None }).max();
-    if (card.draw.is_some() && draw > 0) || said_draw.is_some_and(|n| n > 0) {
+    // The data's card count also marks "Add 3 Shivs" and "3 or more cards":
+    // only a card that says "draw" draws.
+    let draws = mechanics::card_text(card.text_at(upgraded), &[]).draws;
+    if (card.draw.is_some() && draw > 0 && draws) || said_draw.is_some_and(|n| n > 0) {
         add(Tag::Draw, draw.max(said_draw.unwrap_or(0)), 1);
     }
     let energy = card.value("energy", upgraded);

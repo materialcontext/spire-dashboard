@@ -555,8 +555,15 @@ fn a_measured_boss_asks_only_for_what_decided_it() {
         lines: [(s.character.clone().unwrap(), 14.0)].into_iter().collect(),
         line: 12.0,
     };
-    cat.fights =
-        vec![FightDemands { encounter: boss, decks: 800.0, death_rate: 0.2, demands: vec![survival], outlook: None }];
+    cat.fights = vec![FightDemands {
+        encounter: boss,
+        decks: 800.0,
+        death_rate: 0.2,
+        demands: vec![survival],
+        outlook: None,
+        styles: vec![],
+        best: None,
+    }];
     let d = Dashboard::compute(&s, &cat, &pb);
     let checks = &d.bosses[0].checks;
     assert_eq!(checks.len(), 1, "only the measured role");
@@ -919,6 +926,40 @@ fn forging_makes_the_forge_card_and_grows_its_damage() {
     let d: Vec<f32> = forged.turns.iter().map(|t| t.damage.mean).collect();
     assert!(d[0] >= 18.0, "{d:?}");
     assert!(d[4] > d[0], "the Blade grows: {d:?}");
+}
+
+#[test]
+fn made_cards_are_played_and_exhaust_counts() {
+    let mut cat = catalog();
+    let mut dance = card("DANCE", CardType::Skill, Rarity::Common, "Add 3 Shivs into your Hand.");
+    // The data marks a card count, as it does for real.
+    (dance.draw, dance.target) = (Some(3), Target::Own);
+    dance.vars = [("cards".to_string(), 3)].into_iter().collect();
+    dance.keywords = vec!["Exhaust".into()];
+    let mut shiv = card("SHIV", CardType::Attack, Rarity::Token, "Deal 4 damage.");
+    (shiv.damage, shiv.cost) = (Some(4), Some(0));
+    shiv.vars = [("damage".to_string(), 4)].into_iter().collect();
+    shiv.keywords = vec!["Exhaust".into()];
+    let mut ashen = card(
+        "ASHEN",
+        CardType::Attack,
+        Rarity::Common,
+        "Deal 6 damage. Deals 3 additional damage for each card in your Exhaust Pile.",
+    );
+    ashen.vars = [("calculationbase".to_string(), 6), ("extradamage".to_string(), 3)].into_iter().collect();
+    for c in [dance, shiv, ashen] {
+        cat.cards.insert(c.id.clone(), c);
+    }
+    // Ten Dances: each makes three Shivs (12 damage for 1 energy) and doesn't draw.
+    let sim = sim::simulate(&sim_state(&cat, &[("DANCE", false); 10]), &cat, &quick());
+    assert!(sim.turns[0].damage.mean >= 24.0, "{:?}", sim.turns[0].damage);
+    assert!((sim.turnover - 2.0).abs() < 0.01, "Dances don't draw: {}", sim.turnover);
+    // Ashen Strike's base is the calculation's; exhausted Shivs add to it.
+    let mixed = [("DANCE", false); 5].into_iter().chain([("ASHEN", false); 5]).collect::<Vec<_>>();
+    let plain = sim::simulate(&sim_state(&cat, &[("ASHEN", false); 10]), &cat, &quick());
+    assert!(plain.turns[0].damage.mean >= 18.0, "6 a card: {:?}", plain.turns[0].damage);
+    let grown = sim::simulate(&sim_state(&cat, &mixed), &cat, &quick());
+    assert!(grown.turns[3].damage.mean > plain.turns[3].damage.mean, "the Exhaust Pile grows Ashen Strike");
 }
 
 #[test]

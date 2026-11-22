@@ -229,6 +229,10 @@ pub fn add_community_data(pack: &mut DataPack, pages: &[String], notes: &mut Vec
         with.len()
     ));
     notes.extend(with.into_iter().map(|w| format!("  {w}")));
+    let best: Vec<String> =
+        pack.fights.iter().filter_map(|f| Some(format!("{}: {}", f.encounter, f.best?.label()))).collect();
+    notes.push(format!("Community runs: a clearly best deck style for {} fights.", best.len()));
+    notes.extend(best.into_iter().map(|b| format!("  {b}")));
     let lines = crate::card_lines::add(pack, &bosses, pages);
     notes.push(format!("Community runs: {} boss fights, {lines} card lines.", bosses.len()));
 }
