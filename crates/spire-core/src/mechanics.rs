@@ -944,16 +944,22 @@ fn effects(ws: &[String], orbs: &[Orb]) -> Vec<Effect> {
                 // "Choose 1 of 3 random Colorless cards to add into your Hand".
                 let end = s.iter().skip(i).position(|w| *w == "add").map_or(s.len(), |k| k + i);
                 let phrase = &s[i..end];
+                // "Choose a card in your Hand to Transform…", "Choose an
+                // Attack or Power card." pick from the hand: not a fetch.
                 if phrase.contains(&"random") {
                     let at = phrase.iter().position(|w| *w == "random").unwrap_or(0) + 1;
                     out.push(Effect::MakeRandom { pool: pool(&phrase[at..]), n: 1, pile: Pile::Hand, free: false });
-                } else {
+                } else if !phrase.windows(3).any(|w| w == ["in", "your", "hand"])
+                    && (phrase.contains(&"draw") || phrase.contains(&"from") || end < s.len())
+                {
                     out.push(Effect::Fetch { from: Pile::Draw, to: Pile::Hand, n: 1, filter: CardFilter::Any });
                 }
                 i = end + 1;
                 continue;
             }
-            "play" if !theirs => {
+            // "If you play 5 or more cards", "the first time you play an
+            // Attack": a condition, not an autoplay.
+            "play" if !theirs && (i == 0 || s[i - 1] != "you") => {
                 let rest = &s[i + 1..];
                 let has = |p: &[&str]| rest.windows(p.len()).any(|w| w == p);
                 let exhaust = has(&["exhaust", "it"]);
@@ -2073,7 +2079,9 @@ pub fn read(text: &str, orbs: &[Orb], played: bool) -> Mechanics {
             || (lower.contains("for each") && !per_star)
             || lower.contains("equal to")
             || lower.contains("this turn")
-            || (lower.contains("for every") && !counted);
+            || (lower.contains("for every") && !counted)
+            // Rainbow Ring: one of each type in a turn, not the first Attack.
+            || lower.contains("attack, skill, and power");
         if !conditional && let Some(p) = passive(sentence) {
             // Corruption's second sentence ("Whenever you play a Skill, Exhaust it") is part of FreeSkills.
             m.passives.push(p);

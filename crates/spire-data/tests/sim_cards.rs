@@ -507,3 +507,21 @@ fn survival_reads_weak_and_self_damage() {
     let blood = fight("IRONCLAD", &[("BLOODLETTING", 5), ("STRIKE_IRONCLAD", 5)], &[]);
     assert!(blood.turns[0].self_damage > 2.0, "{}", blood.turns[0].self_damage);
 }
+
+#[test]
+fn conditions_and_hand_choices_are_not_actions() {
+    // "If you play 5 or more cards", "the first time you play…": conditions.
+    assert!(power("PALE_BLUE_DOT").is_empty());
+    assert!(power("FERAL").is_empty());
+    // "Choose a card in your Hand…" (copy, transform, replay) isn't a fetch.
+    for id in ["DUAL_WIELD", "NIGHTMARE", "BEGONE", "DECISIONS_DECISIONS", "HEIRLOOM_HAMMER"] {
+        assert!(of(id).text.actions.is_empty(), "{id}: {:?}", of(id).text.actions);
+    }
+    // Choosing from a pile still is.
+    let fetch = |id: &str| matches!(power(id).first().map(|r| &r.1[..]), Some([Effect::Fetch { .. }]));
+    assert!(fetch("STRATAGEM"));
+    assert!(matches!(of("KI_CHANT").text.actions[..], [Effect::Fetch { .. }]));
+    // Rainbow Ring needs one of each type in a turn: left unread.
+    let ring = read(&cat().relics[&spire_core::ids::RelicId::new("RAINBOW_RING")].text, &[], false);
+    assert!(ring.triggers.is_empty() && ring.unread.len() == 1);
+}
