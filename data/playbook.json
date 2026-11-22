@@ -260,7 +260,17 @@
       "when": {
         "all": [
           {
-            "text_contains": "lose"
+            "any": [
+              {
+                "text_contains": "enemy loses"
+              },
+              {
+                "text_contains": "enemies lose"
+              },
+              {
+                "text_contains": "it loses"
+              }
+            ]
           },
           {
             "text_contains": "strength"

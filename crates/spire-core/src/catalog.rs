@@ -142,6 +142,9 @@ pub struct Card {
     /// Stars the card costs on top of energy (Regent).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub star_cost: Option<u8>,
+    /// X is paid in Stars rather than energy (Stardust).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub x_star_cost: bool,
     /// Orbs the card channels (Defect).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub channels: Vec<OrbChannel>,

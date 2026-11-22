@@ -32,6 +32,7 @@ fn card(id: &str, t: CardType, rarity: Rarity, text: &str) -> Card {
         vars: Default::default(),
         upgrade: Default::default(),
         star_cost: None,
+        x_star_cost: false,
         channels: vec![],
     }
 }
@@ -89,7 +90,8 @@ fn catalog() -> Catalog {
     cleave.target = Target::AllEnemies;
     let mut inflame = card("INFLAME", CardType::Power, Rarity::Uncommon, "Gain 2 Strength.");
     inflame.powers = vec![PowerAmount { power: "Strength".into(), amount: 2 }];
-    let curse = card("REGRET", CardType::Curse, Rarity::Curse, "Unplayable.");
+    // As in the data: an unplayable curse has no cost.
+    let curse = Card { cost: None, ..card("REGRET", CardType::Curse, Rarity::Curse, "Unplayable.") };
 
     let pack = DataPack {
         format: 1,

@@ -24,7 +24,10 @@
 //! decks and spotting gaps, not for predicting a fight.
 
 use crate::catalog::{Card, CardType, Catalog, Orb, OrbEffect, Target};
-use crate::mechanics::{self, CardFilter, CardText, Effect, ExhaustWhich, Mechanics, Passive, Pile, When};
+use crate::ids::OrbId;
+use crate::mechanics::{
+    self, CardFilter, CardText, Counted, Debuff, Effect, ExhaustWhich, Mechanics, OrbPick, Passive, Pile, When,
+};
 use crate::playbook::{SimAssumptions, contains_ci};
 use crate::run::{DeckCard, RunState};
 
@@ -229,30 +232,35 @@ pub struct DeckSim {
 
 // ---------------------------------------------------------------- plays
 
-#[derive(Clone, Debug, Default)]
-struct Effects {
-    damage: i32,
-    hits: i32,
-    osty: i32,
-    block: i32,
-    draw: i32,
-    energy: i32,
+/// A card's own numbers, as the simulator reads them.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Effects {
+    pub damage: i32,
+    pub hits: i32,
+    pub osty: i32,
+    pub block: i32,
+    pub draw: i32,
+    pub energy: i32,
     /// Energy that arrives next turn ("Next turn, … gain 2 Energy").
-    energy_next: i32,
-    stars: i32,
-    summon: i32,
-    forge: i32,
-    doom: i32,
-    poison: i32,
-    vulnerable: i32,
+    pub energy_next: i32,
+    pub stars: i32,
+    pub summon: i32,
+    pub forge: i32,
+    pub doom: i32,
+    pub poison: i32,
+    pub vulnerable: i32,
     /// Weak it puts on an enemy.
-    weak: i32,
-    aim: i32,
-    stretch: i32,
-    vigor: i32,
-    strength: i32,
-    dexterity: i32,
-    focus: i32,
+    pub weak: i32,
+    pub aim: i32,
+    pub stretch: i32,
+    pub vigor: i32,
+    pub strength: i32,
+    pub dexterity: i32,
+    pub focus: i32,
+    /// Strength, Dexterity and Focus that last only this turn.
+    pub temp: [i32; 3],
+    /// Times the card's Block is gained ("Gain 5 Block twice").
+    pub block_times: i32,
 }
 
 /// One deck card, reduced to what the simulator needs.
@@ -262,6 +270,8 @@ struct Play {
     /// Energy cost; `None` means the card can't be played.
     cost: Option<i32>,
     x: bool,
+    /// X is paid in Stars (Stardust): every Star goes.
+    x_stars: bool,
     star_cost: i32,
     /// A non-power card's own effect, from its numbers.
     now: Effects,
@@ -298,91 +308,117 @@ fn play_of(card: &Card, upgraded: bool, group: usize, orbs: &[&Orb], all_orbs: &
     let v = |k: &str| card.value(k, upgraded);
     let either = |a: &str, b: &str| v(a).max(v(b));
     let power = card.card_type == CardType::Power;
-    let on_self = matches!(card.target, Target::Own | Target::None | Target::AllAllies);
-    let base_stars = card.value("stars", false);
-    // Invoke: "Next turn, Summon 2 and gain 2 Energy."
-    let next_turn_energy =
-        card.text_at(upgraded).split('.').any(|s| contains_ci(s, "next turn") && contains_ci(s, "energy"));
+    let body = card.text_at(upgraded);
     let mut e = Effects::default();
     let mut mech = Mechanics::default();
-    let mut text = mechanics::card_text(card.text_at(upgraded), all_orbs);
+    let mut text = mechanics::card_text(body, all_orbs);
     if power {
         // A power makes cards through its triggers ("At the start of your
         // turn, add 1 Shiv"), read below.
         text.makes.clear();
-    }
-    if power {
         // Powers say what they do in prose; the reader turns it into triggers.
-        mech = mechanics::read(card.text_at(upgraded), all_orbs, true);
-    } else {
+        mech = mechanics::read(body, all_orbs, true);
+    } else if card.target != Target::Ally {
+        // Cards aimed at another player do nothing for you.
+        // Osty's attacks are his, not yours: no Strength, and not also your damage.
+        let osty_card = v("ostydamage") > 0 || contains_ci(body, "osty deals");
+        // Some cards give their base damage only as the calculation's base
+        // (Ashen Strike: 6 plus 3 per exhausted card).
+        let damage = if v("damage") > 0 { v("damage") } else { v("calculationbase").max(v("calculateddamage")) };
+        let later = |pick: fn(&Effect) -> bool| text.later.iter().any(|(_, es)| es.iter().any(pick));
+        // Weak and Vulnerable can share a generic `power` number ("Apply 1
+        // Weak. Apply 1 Vulnerable.").
+        let shared = v("power");
+        let debuff = |key: &str, word: &str| {
+            let own = either(key, &format!("{key}power"));
+            if own > 0 {
+                own
+            } else if contains_ci(body, word) {
+                shared
+            } else {
+                0
+            }
+        };
+        // "Apply 3 Poison to a random enemy 3 times."
+        let repeat = if v("repeat") > 0 && contains_ci(body, "times") { v("repeat") } else { 1 };
+        let stat = |want: fn(&Effect) -> Option<i32>, temp: bool| {
+            text.stats.iter().filter(|(_, t)| *t == temp).filter_map(|(e, _)| want(e)).sum::<i32>()
+        };
+        let strength = |e: &Effect| if let Effect::Strength(n) = e { Some(*n) } else { None };
+        let dexterity = |e: &Effect| if let Effect::Dexterity(n) = e { Some(*n) } else { None };
+        let focus = |e: &Effect| if let Effect::Focus(n) = e { Some(*n) } else { None };
         e = Effects {
-            // Some cards give their base damage only as the calculation's
-            // base (Ashen Strike: 6 plus 3 per exhausted card).
-            damage: if v("damage") > 0 { v("damage") } else { v("calculationbase").max(v("calculateddamage")) },
+            damage: if osty_card { 0 } else { damage },
             hits: v("hitcount").max(1),
-            osty: v("ostydamage"),
+            osty: if osty_card { v("ostydamage").max(damage) } else { 0 },
             block: v("block"),
+            block_times: if contains_ci(body, "block twice") { 2 } else { 1 },
             // The data's card count also marks "Add 3 Shivs" and "3 or more
-            // cards": only a card that says "draw" draws.
-            draw: if card.draw.is_some() && text.draws { v("cards") } else { 0 },
-            // "When this card is Exhausted, gain 2 Energy" isn't on play.
-            energy: if card.energy.is_some() && !next_turn_energy && text.when_exhausted.is_empty() {
-                v("energy")
-            } else {
-                0
-            },
-            energy_next: if card.energy.is_some() && next_turn_energy { v("energy") } else { 0 },
-            stars: if base_stars > 0 && contains_ci(&card.text, &format!("gain {base_stars} star")) {
-                v("stars")
-            } else {
-                0
-            },
-            summon: v("summon"),
+            // cards": only a card that says "draw" (now, not next turn) draws.
+            draw: if text.draws { v("cards") } else { 0 },
+            // Only "Gain N Energy" gives energy: not "costs 2 Energy or
+            // more", not "If this kills". "Next turn, gain…" waits.
+            energy: if text.gains_energy { v("energy") } else { 0 },
+            energy_next: if later(|e| matches!(e, Effect::Energy(_))) { v("energy") } else { 0 },
+            stars: if text.gains_stars { v("stars") } else { 0 },
+            summon: if later(|e| matches!(e, Effect::Summon(_))) { 0 } else { v("summon") },
             forge: v("forge"),
             doom: either("doom", "doompower"),
-            poison: either("poison", "poisonpower"),
-            vulnerable: if on_self { 0 } else { either("vulnerable", "vulnerablepower") },
-            weak: if on_self { 0 } else { either("weak", "weakpower") },
-            ..Effects::default()
+            poison: either("poison", "poisonpower") * repeat,
+            vulnerable: debuff("vulnerable", "vulnerable"),
+            weak: debuff("weak", "weak"),
+            aim: either("aim", "aimpower"),
+            stretch: either("stretch", "stretchpower"),
+            vigor: either("vigor", "vigorpower"),
+            strength: stat(strength, false),
+            dexterity: stat(dexterity, false),
+            focus: stat(focus, false),
+            temp: [stat(strength, true), stat(dexterity, true), stat(focus, true)],
         };
-        if card.target != Target::Ally {
-            e.aim = either("aim", "aimpower");
-            e.stretch = either("stretch", "stretchpower");
-            e.vigor = either("vigor", "vigorpower");
-        }
-        // Strength-like numbers on a card aimed at an enemy are debuffs, and
-        // "lose it at end of turn" gains are temporary.
-        if on_self && v("strengthloss") == 0 {
-            e.strength = either("strength", "strengthpower");
-        }
-        if on_self {
-            e.dexterity = either("dexterity", "dexteritypower");
-            e.focus = either("focus", "focuspower");
-        }
     }
+    // Energy next turn is `energy_next`; the rest of "later" runs as written.
+    for (_, es) in &mut text.later {
+        es.retain(|e| !matches!(e, Effect::Energy(_)));
+    }
+    text.later.retain(|(_, es)| !es.is_empty());
     let x = card.x_cost;
-    // Curses and statuses count as dead even when they can technically be played.
-    let cost = if card.is_dead_draw() {
+    // Curses and statuses count as dead, unless they cost something to
+    // play them away (Slimed, Debris).
+    let cost = if card.is_unplayable() || (card.is_dead_draw() && card.cost.is_none()) {
         None
-    } else if x {
+    } else if x || card.x_star_cost {
         Some(0)
     } else {
         card.cost_at(upgraded).map(i32::from)
+    };
+    // Orbs channeled later ("At the start of the next 2 turns, Channel 1
+    // Lightning"), or by a power's own trigger, aren't channeled on play.
+    let delayed: Vec<&OrbId> = text
+        .later
+        .iter()
+        .flat_map(|(_, es)| es)
+        .filter_map(|e| if let Effect::Channel(o, _) = e { Some(o) } else { None })
+        .collect();
+    let channels = if power {
+        Vec::new()
+    } else {
+        card.channels
+            .iter()
+            .filter(|c| !delayed.contains(&&c.orb))
+            .filter_map(|c| Some((orbs.iter().position(|o| o.id == c.orb)?, i32::from(c.count), c.x)))
+            .collect()
     };
     Play {
         group,
         cost,
         x,
+        x_stars: card.x_star_cost,
         star_cost: if card.star_cost.is_some() { v("starcost").max(0) } else { 0 },
         now: e,
         mech,
-        channels: card
-            .channels
-            .iter()
-            .filter_map(|c| Some((orbs.iter().position(|o| o.id == c.orb)?, i32::from(c.count), c.x)))
-            .collect(),
+        channels,
         all: card.target == Target::AllEnemies,
-        shoots: contains_ci(&card.text, "shoot an arrow"),
+        shoots: contains_ci(body, "shoot an arrow to"),
         aim_multiplier: v("aimmultiplier").max(1),
         dislodges: card.card_type == CardType::Attack
             && contains_ci(&card.text, "dislodge")
@@ -401,6 +437,42 @@ fn play_of(card: &Card, upgraded: bool, group: usize, orbs: &[&Orb], all_orbs: &
     }
 }
 
+/// What the simulator reads from one card: its numbers, cost, orbs, what
+/// its text adds, and (for a power) its triggers. For audits and tests.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Reading {
+    pub now: Effects,
+    /// Energy cost; `None` means it can't be played.
+    pub cost: Option<i32>,
+    pub x: bool,
+    pub x_stars: bool,
+    pub star_cost: i32,
+    /// Orbs channelled on play: (orb, count, once per X).
+    pub channels: Vec<(OrbId, i32, bool)>,
+    pub all_enemies: bool,
+    pub shoots: bool,
+    pub text: CardText,
+    pub mech: Mechanics,
+}
+
+pub fn reading(card: &Card, upgraded: bool, catalog: &Catalog) -> Reading {
+    let orbs: Vec<&Orb> = catalog.orbs.values().collect();
+    let all_orbs: Vec<Orb> = catalog.orbs.values().cloned().collect();
+    let p = play_of(card, upgraded, 0, &orbs, &all_orbs);
+    Reading {
+        cost: p.cost,
+        x: p.x,
+        x_stars: p.x_stars,
+        star_cost: p.star_cost,
+        channels: p.channels.iter().map(|&(o, n, x)| (orbs[o].id.clone(), n, x)).collect(),
+        all_enemies: p.all,
+        shoots: p.shoots,
+        now: p.now,
+        text: p.text,
+        mech: p.mech,
+    }
+}
+
 fn matches(f: &CardFilter, p: &Play) -> bool {
     match f {
         CardFilter::Any => true,
@@ -408,6 +480,7 @@ fn matches(f: &CardFilter, p: &Play) -> bool {
         CardFilter::CostAtLeast(n) => p.cost.is_some_and(|c| c >= i32::from(*n)),
         CardFilter::Named(n) => p.name.contains(n.as_str()),
         CardFilter::Upgraded(t) => p.upgraded && p.card_type == *t,
+        CardFilter::Keyword(k) => k == "ethereal" && p.ethereal || k == "retain" && p.retain,
     }
 }
 
@@ -420,6 +493,7 @@ struct Mods {
     vulnerable_bonus: i32,
     vulnerable_is: Option<i32>,
     poison_extra: i32,
+    poison_bonus: i32,
     retain_hand: bool,
     conserve_energy: bool,
     free_skills: bool,
@@ -438,6 +512,7 @@ impl Mods {
             Passive::VulnerableBonus(n) => self.vulnerable_bonus += n,
             Passive::VulnerableIs(n) => self.vulnerable_is = Some(*n),
             Passive::PoisonExtraTicks(n) => self.poison_extra += n,
+            Passive::PoisonBonus(n) => self.poison_bonus += n,
             Passive::RetainHand => self.retain_hand = true,
             Passive::ConserveEnergy => self.conserve_energy = true,
             Passive::FreeSkills => self.free_skills = true,
@@ -504,11 +579,39 @@ struct TurnLog {
     stranded: f32,
     drawn: u32,
     dead: u32,
+    /// HP you lost on purpose (self-damage cards, held Burns).
+    hp_lost: f32,
     resources: [f32; 6],
     stores: [Flow; 5],
 }
 
 type Rule = (When, Vec<Effect>);
+
+/// Something that happened in the fight, for "whenever…" triggers.
+#[derive(Clone, Copy, Debug)]
+enum Event {
+    Shuffle,
+    GainBlock,
+    Exhaust,
+    /// A card drawn, made or played (an index into the plays).
+    Draw(usize),
+    Make(usize),
+    Played(usize),
+    Apply(Debuff),
+    Stars {
+        gain: bool,
+        n: i32,
+    },
+    /// An orb evoked (an index into the orb kinds).
+    Evoke(usize),
+    HpLoss,
+    Dislodge,
+    Shoot,
+    OstyAttack,
+    Discard,
+    AttackHit,
+    Count(Counted, i32),
+}
 
 struct Setup<'a> {
     plays: &'a [Play],
@@ -559,7 +662,16 @@ struct Fight<'a> {
     first_drawn: Vec<Option<usize>>,
     /// Active triggers (relics, then powers as they're played) and their counters.
     rules: Vec<&'a Rule>,
-    counters: Vec<u32>,
+    /// Per rule: its count toward "every N", whether its "first time" has
+    /// fired, and whether it lasts only this turn.
+    counters: Vec<i32>,
+    fired: Vec<bool>,
+    this_turn: Vec<bool>,
+    /// The enemy's Doom.
+    doom: i32,
+    /// Times you lost HP this combat, and whether you did this turn.
+    hp_losses: i32,
+    lost_hp_this_turn: bool,
     mods: Mods,
     orbs: Vec<OrbState>,
     orb_slots: i32,
@@ -572,6 +684,12 @@ struct Fight<'a> {
     plating: i32,
     poison: i32,
     vulnerable: i32,
+    /// Turns of Weak on the enemy.
+    weak: i32,
+    /// Strength, Dexterity and Focus that end with the turn.
+    temp: [i32; 3],
+    /// Later effects waiting: (play, entry in its `text.later`, turns left).
+    later: Vec<(usize, usize, u32)>,
     stars: i32,
     /// Arrows ready to shoot, and shot Arrows stuck in the enemy.
     arrows: i32,
@@ -626,6 +744,11 @@ impl<'a> Fight<'a> {
             first_drawn: vec![None; s.groups],
             rules: s.relic_rules.clone(),
             counters: vec![0; s.relic_rules.len()],
+            fired: vec![false; s.relic_rules.len()],
+            this_turn: vec![false; s.relic_rules.len()],
+            doom: 0,
+            hp_losses: 0,
+            lost_hp_this_turn: false,
             mods: s.relic_mods.clone(),
             orbs: Vec::new(),
             orb_slots: s.orb_slots,
@@ -638,6 +761,9 @@ impl<'a> Fight<'a> {
             plating: 0,
             poison: 0,
             vulnerable: 0,
+            weak: 0,
+            temp: [0; 3],
+            later: Vec::new(),
             stars: 0,
             arrows: s.arrows,
             stuck: 0,
@@ -671,7 +797,7 @@ impl<'a> Fight<'a> {
                 }
                 self.draw.append(&mut self.discard);
                 self.rng.shuffle(&mut self.draw);
-                self.fire(|w| *w == When::OnShuffle);
+                self.on(Event::Shuffle);
             }
             let Some(i) = self.draw.pop() else { return };
             let p = &self.s.plays[i];
@@ -687,7 +813,8 @@ impl<'a> Fight<'a> {
                 self.log.dead += 1;
             }
             self.hand.push(i);
-            self.fire(|w| *w == When::OnDraw);
+            self.on(Event::Draw(i));
+            self.on(Event::Count(Counted::CardsDrawn, 1));
         }
     }
 
@@ -708,33 +835,92 @@ impl<'a> Fight<'a> {
         self.depth -= 1;
     }
 
-    /// After a card resolves: "whenever you play…" and every-N counters.
-    fn after_play(&mut self, p: &Play) {
+    /// Fires every rule an event triggers, as often as it triggers it.
+    fn on(&mut self, ev: Event) {
         if self.depth >= MAX_DEPTH {
             return;
         }
         self.depth += 1;
         for k in 0..self.rules.len() {
             let rule: &'a Rule = self.rules[k];
-            let fires = match &rule.0 {
-                When::OnPlay(f) => matches(f, p),
-                When::EveryPlays { filter, n, .. } if matches(filter, p) => {
-                    self.counters[k] += 1;
-                    let hit = self.counters[k] >= *n;
-                    if hit {
-                        self.counters[k] = 0;
-                    }
-                    hit
-                }
-                _ => false,
-            };
-            if fires {
+            let times = self.fires(k, &rule.0, ev).clamp(0, 50);
+            let temp = self.this_turn[k];
+            for _ in 0..times {
                 for e in &rule.1 {
-                    self.effect(e);
+                    self.effect_for(e, temp);
                 }
             }
         }
         self.depth -= 1;
+    }
+
+    /// How many times rule `k` (with timing `when`) fires for an event.
+    fn fires(&mut self, k: usize, when: &When, ev: Event) -> i32 {
+        let plays = self.s.plays;
+        match (when, ev) {
+            (When::OnShuffle, Event::Shuffle)
+            | (When::OnGainBlock, Event::GainBlock)
+            | (When::OnExhaust, Event::Exhaust)
+            | (When::OnDraw, Event::Draw(_))
+            | (When::OnHpLoss, Event::HpLoss)
+            | (When::OnDislodge, Event::Dislodge)
+            | (When::OnShoot, Event::Shoot)
+            | (When::OnOstyAttack, Event::OstyAttack)
+            | (When::OnDiscard, Event::Discard)
+            | (When::OnAttackHit, Event::AttackHit) => 1,
+            (When::OnDrawOf(f), Event::Draw(i))
+            | (When::OnMake(f), Event::Make(i))
+            | (When::OnPlay(f), Event::Played(i)) => i32::from(matches(f, &plays[i])),
+            (When::OnApply(d), Event::Apply(x)) => i32::from(*d == Debuff::Any || *d == x),
+            (When::OnStars { gain, spend, each }, Event::Stars { gain: g, n }) if (g && *gain) || (!g && *spend) => {
+                if *each {
+                    n
+                } else {
+                    1
+                }
+            }
+            (When::OnEvoke(o), Event::Evoke(orb)) => i32::from(o.as_ref().is_none_or(|o| *o == self.s.orbs[orb].id)),
+            (When::EveryPlays { filter, n, .. }, Event::Played(i)) if matches(filter, &plays[i]) => {
+                self.counters[k] += 1;
+                let hit = self.counters[k] >= *n as i32;
+                if hit {
+                    self.counters[k] = 0;
+                }
+                i32::from(hit)
+            }
+            (When::Every { what, n }, Event::Count(w, amount)) if *what == w => {
+                let n = (*n).max(1) as i32;
+                self.counters[k] += amount;
+                let times = self.counters[k] / n;
+                self.counters[k] %= n;
+                times
+            }
+            (When::First { when, .. }, ev) if !self.fired[k] => {
+                let hit = self.fires(k, when, ev) > 0;
+                self.fired[k] = hit;
+                i32::from(hit)
+            }
+            _ => 0,
+        }
+    }
+
+    /// An effect from a rule; a this-turn rule's Strength, Dexterity and
+    /// Focus last the turn ("gain 1 Strength this turn").
+    fn effect_for(&mut self, e: &Effect, this_turn: bool) {
+        match (e, this_turn) {
+            (Effect::Strength(n), true) => self.temp[0] += n,
+            (Effect::Dexterity(n), true) => self.temp[1] += n,
+            (Effect::Focus(n), true) => self.temp[2] += n,
+            _ => self.effect(e),
+        }
+    }
+
+    /// Adds a rule to the active ones.
+    fn add_rule(&mut self, rule: &'a Rule, this_turn: bool) {
+        self.rules.push(rule);
+        self.counters.push(0);
+        self.fired.push(false);
+        self.this_turn.push(this_turn);
     }
 }
 
@@ -763,7 +949,7 @@ impl<'a> Fight<'a> {
             Effect::Block(n) => {
                 self.log.block += *n as f32;
                 if *n > 0 {
-                    self.fire(|w| *w == When::OnGainBlock);
+                    self.on(Event::GainBlock);
                 }
             }
             Effect::Damage(n) => self.log.damage += *n as f32,
@@ -782,11 +968,27 @@ impl<'a> Fight<'a> {
             Effect::Stretch(n) => self.gain(Store::Stretch, *n),
             Effect::Plating(n) => self.plating += n,
             Effect::Poison(n) => {
-                self.poison += n;
+                self.poison += n + self.mods.poison_bonus;
                 r(self, Resource::Poison, *n);
+                self.on(Event::Apply(Debuff::Poison));
             }
-            Effect::Doom(n) => r(self, Resource::Doom, *n),
-            Effect::Vulnerable(n) => self.vulnerable += n,
+            Effect::Doom(n) => {
+                self.doom += n;
+                r(self, Resource::Doom, *n);
+                self.on(Event::Apply(Debuff::Doom));
+            }
+            Effect::Vulnerable(n) => {
+                self.vulnerable += n;
+                self.on(Event::Apply(Debuff::Vulnerable));
+            }
+            Effect::Weak(n) => {
+                self.weak += n;
+                self.log.debuffs += 1.0;
+                self.on(Event::Apply(Debuff::Weak));
+            }
+            Effect::LoseHp(n) => self.lose_hp(*n),
+            Effect::Evoke(pick, n) => self.evoke(pick, *n),
+            Effect::OrbPassive(pick, n) => self.orb_passive(pick, *n),
             Effect::Forge(n) => self.forge(*n),
             Effect::Stars(n) => {
                 self.gain(Store::Stars, *n);
@@ -856,6 +1058,73 @@ impl<'a> Fight<'a> {
                     self.draw.insert(at, card);
                 }
             }
+            self.on(Event::Make(card));
+        }
+    }
+
+    /// You lose HP: counted for "if you lost HP" cards and triggers.
+    fn lose_hp(&mut self, n: i32) {
+        if n <= 0 {
+            return;
+        }
+        self.log.hp_lost += n as f32;
+        self.hp_losses += 1;
+        self.lost_hp_this_turn = true;
+        self.on(Event::HpLoss);
+    }
+
+    /// The orbs a pick takes, as indexes into the row (rightmost last).
+    fn picked(&self, pick: &OrbPick) -> Vec<usize> {
+        let n = self.orbs.len();
+        match pick {
+            OrbPick::Rightmost => n.checked_sub(1).into_iter().collect(),
+            OrbPick::Leftmost => {
+                if n > 0 {
+                    vec![0]
+                } else {
+                    Vec::new()
+                }
+            }
+            OrbPick::All => (0..n).collect(),
+            OrbPick::Kind(id) => (0..n).filter(|&k| self.s.orbs[self.orbs[k].orb].id == *id).collect(),
+        }
+    }
+
+    /// Evokes orbs: each evoke effect `times` times, then the orbs go.
+    fn evoke(&mut self, pick: &OrbPick, times: i32) {
+        let taken = self.picked(pick);
+        for &k in taken.iter().rev() {
+            let o = self.orbs.remove(k);
+            for _ in 0..times.max(1) {
+                self.evoke_one(o);
+            }
+        }
+    }
+
+    fn evoke_one(&mut self, o: OrbState) {
+        let def = self.s.orbs[o.orb];
+        self.orb_effect(def.evoke_effect, self.orb_value(o, o.evoke), true);
+        self.on(Event::Evoke(o.orb));
+    }
+
+    /// Triggers orbs' passives `times` times, as at the end of the turn.
+    fn orb_passive(&mut self, pick: &OrbPick, times: i32) {
+        for k in self.picked(pick) {
+            for _ in 0..times.max(1) {
+                self.passive_of(k, true);
+            }
+        }
+    }
+
+    /// One orb's passive. Decay (Glass) happens only at the end of the turn.
+    fn passive_of(&mut self, k: usize, now: bool) {
+        let o = self.orbs[k];
+        let def = self.s.orbs[o.orb];
+        let amount = self.orb_value(o, o.passive);
+        if def.passive_effect == OrbEffect::Grow {
+            self.orbs[k].evoke += amount;
+        } else {
+            self.orb_effect(def.passive_effect, amount, now);
         }
     }
 
@@ -863,7 +1132,8 @@ impl<'a> Fight<'a> {
     fn exhaust(&mut self, i: usize) {
         self.exhausted.push(i);
         self.exhausted_this_turn = true;
-        self.fire(|w| *w == When::OnExhaust);
+        self.on(Event::Exhaust);
+        self.on(Event::Count(Counted::Exhausts, 1));
         let setup: &'a Setup<'a> = self.s;
         for e in &setup.plays[i].text.when_exhausted {
             self.effect(e);
@@ -912,17 +1182,24 @@ impl<'a> Fight<'a> {
         *slot += n;
         if n > 0 {
             self.log.stores[store as usize].gained += n as f32;
+            if store == Store::Stars {
+                self.on(Event::Stars { gain: true, n });
+            }
         }
     }
 
     fn spend(&mut self, store: Store, n: i32) {
         if n > 0 {
             self.log.stores[store as usize].spent += n as f32;
+            if store == Store::Stars {
+                self.on(Event::Stars { gain: false, n });
+                self.on(Event::Count(Counted::StarsSpent, n));
+            }
         }
     }
 
     fn orb_value(&self, o: OrbState, base: i32) -> i32 {
-        if self.s.orbs[o.orb].focus { (base + self.focus).max(0) } else { base }
+        if self.s.orbs[o.orb].focus { (base + self.focus + self.temp[2]).max(0) } else { base }
     }
 
     fn orb_effect(&mut self, effect: OrbEffect, amount: i32, now: bool) {
@@ -932,7 +1209,12 @@ impl<'a> Fight<'a> {
                 self.log.damage += amount as f32;
                 self.log.area += amount as f32;
             }
-            OrbEffect::Block => self.log.block += amount as f32,
+            OrbEffect::Block => {
+                self.log.block += amount as f32;
+                if amount > 0 {
+                    self.on(Event::GainBlock);
+                }
+            }
             OrbEffect::Energy if now => self.energy += amount,
             OrbEffect::Energy => self.next_energy += amount,
             OrbEffect::Grow | OrbEffect::Other => {}
@@ -945,8 +1227,7 @@ impl<'a> Fight<'a> {
         }
         while self.orbs.len() >= self.orb_slots as usize {
             let o = self.orbs.remove(0);
-            let def = self.s.orbs[o.orb];
-            self.orb_effect(def.evoke_effect, self.orb_value(o, o.evoke), true);
+            self.evoke_one(o);
         }
         let def = self.s.orbs[orb];
         self.orbs.push(OrbState { orb, passive: def.passive, evoke: def.evoke });
@@ -987,7 +1268,8 @@ impl<'a> Fight<'a> {
                 }
                 self.attacked_this_turn = true;
             }
-            let hit = |bonus: i32| ((damage + self.strength + extra + bonus).max(0) as f32 * mult).floor();
+            let strength = self.strength + self.temp[0];
+            let hit = |bonus: i32| ((damage + strength + extra + bonus).max(0) as f32 * mult).floor();
             let dealt = hit(bonus) * hits as f32;
             self.log.damage += dealt;
             self.log.hits += hits as f32;
@@ -995,17 +1277,32 @@ impl<'a> Fight<'a> {
             if p.all {
                 self.log.area += dealt;
             }
+            if p.card_type == CardType::Attack {
+                for _ in 0..hits.min(50) {
+                    self.on(Event::AttackHit);
+                }
+            }
         }
         if e.osty > 0 {
-            self.log.damage += ((e.osty + self.mods.extra_osty) * times) as f32;
+            let dealt = ((e.osty + self.mods.extra_osty) * e.hits * times) as f32;
+            self.log.damage += dealt;
+            if p.all {
+                self.log.area += dealt;
+            }
+            for _ in 0..times {
+                self.on(Event::OstyAttack);
+            }
         }
         if e.block > 0 {
             let extra: i32 = self.mods.extra_block.iter().filter(|(f, _)| matches(f, p)).map(|(_, n)| n).sum();
             // Stretch is spent by the card but adds to each of its Block gains.
             let stretch = std::mem::take(&mut self.stretch);
             self.spend(Store::Stretch, stretch);
-            self.log.block += ((e.block + self.dexterity + extra + stretch).max(0) * times) as f32;
-            self.fire(|w| *w == When::OnGainBlock);
+            let dexterity = self.dexterity + self.temp[1];
+            // Stretch goes into the first gain only.
+            let each = (e.block + dexterity + extra).max(0);
+            self.log.block += (each * e.block_times.max(1) * times + stretch) as f32;
+            self.on(Event::GainBlock);
         }
         self.vulnerable += e.vulnerable * times;
         let debuffs = [e.vulnerable, e.weak, e.poison, e.doom].iter().filter(|n| **n > 0).count();
@@ -1016,10 +1313,28 @@ impl<'a> Fight<'a> {
         self.strength += e.strength;
         self.dexterity += e.dexterity;
         self.focus += e.focus;
+        for (k, n) in e.temp.iter().enumerate() {
+            self.temp[k] += n;
+        }
+        self.weak += e.weak * times;
         self.gain(Store::Aim, e.aim * times);
         self.gain(Store::Stretch, e.stretch * times);
         self.gain(Store::Vigor, e.vigor * times);
-        self.poison += e.poison * times;
+        if e.poison > 0 {
+            self.poison += (e.poison + self.mods.poison_bonus) * times;
+        }
+        self.doom += e.doom * times;
+        for (n, d) in [
+            (e.vulnerable, Debuff::Vulnerable),
+            (e.weak, Debuff::Weak),
+            (e.poison, Debuff::Poison),
+            (e.doom, Debuff::Doom),
+        ] {
+            if n > 0 {
+                self.on(Event::Apply(d));
+            }
+        }
+        self.lose_hp(p.text.lose_hp);
         let r = &mut self.log.resources;
         r[Resource::Stars as usize] += (e.stars * times) as f32;
         r[Resource::Summon as usize] += (e.summon * times) as f32;
@@ -1044,7 +1359,7 @@ impl<'a> Fight<'a> {
     /// How much a play is worth to the current lean, per energy. Setup and
     /// acceleration are given rough exchange rates so they get played.
     fn score(&self, p: &Play, lean: Lean) -> f32 {
-        let times = if p.x { self.energy } else { 1 };
+        let times = self.x_of(p);
         if times == 0 || !self.works(p) {
             return 0.0;
         }
@@ -1071,8 +1386,8 @@ impl<'a> Fight<'a> {
         let e = &p.now;
         let t = times as f32;
         let damage = self.damage_of(p);
-        let attack = if damage > 0 { ((damage + self.strength).max(0) * e.hits) as f32 * t } else { 0.0 }
-            + (e.osty as f32
+        let attack = if damage > 0 { ((damage + self.strength + self.temp[0]).max(0) * e.hits) as f32 * t } else { 0.0 }
+            + ((e.osty * e.hits) as f32
                 + e.poison as f32 * 1.5
                 + e.doom as f32 * 0.5
                 + e.forge as f32
@@ -1083,8 +1398,11 @@ impl<'a> Fight<'a> {
             // Setup waiting to be used counts for the card that uses it.
             + if p.shoots { (self.aim * p.aim_multiplier) as f32 } else { 0.0 }
             + if e.damage > 0 && p.card_type == CardType::Attack { (self.vigor * e.hits) as f32 } else { 0.0 };
-        let defend = if e.block > 0 { (e.block + self.dexterity + self.stretch).max(0) as f32 * t } else { 0.0 }
-            + (e.stretch as f32 * self.s.worth[2] + e.summon as f32) * t;
+        let defend = if e.block > 0 {
+            ((e.block + self.dexterity + self.temp[1]).max(0) * e.block_times.max(1) + self.stretch) as f32 * t
+        } else {
+            0.0
+        } + (e.stretch as f32 * self.s.worth[2] + e.summon as f32) * t;
         let (main, side) = match lean {
             Lean::Damage => (attack, defend * 0.1),
             Lean::Block => (defend, attack * 0.1),
@@ -1118,6 +1436,9 @@ impl<'a> Fight<'a> {
         let setup = replay
             + (e.strength + e.dexterity) as f32 * 4.0
             + e.focus as f32 * 3.0 * self.orb_slots as f32
+            // This turn only: worth what the rest of the hand can use.
+            + (e.temp[0] + e.temp[1]) as f32 * 1.5
+            + e.temp[2] as f32 * self.orbs.len() as f32
             + e.draw as f32 * 3.0 * t
             + (e.energy + e.energy_next) as f32 * 4.0
             + e.stars as f32 * 2.0 * t
@@ -1149,9 +1470,95 @@ impl<'a> Fight<'a> {
             })
             .sum::<f32>()
             + if p.text.next_extra.is_some() { 6.0 } else { 0.0 };
-        let value = main + side + setup + made;
+        // Evokes and orb triggers: what the orbs they take would give now.
+        let orbs: f32 = p
+            .text
+            .orb_actions
+            .iter()
+            .map(|e| {
+                let (pick, n, evoke) = match e {
+                    Effect::Evoke(pick, n) => (pick, *n, true),
+                    Effect::OrbPassive(pick, n) => (pick, *n, false),
+                    _ => return 0.0,
+                };
+                let n = if n < 0 { times } else { n };
+                self.picked(pick)
+                    .iter()
+                    .map(|&k| {
+                        let o = self.orbs[k];
+                        let def = self.s.orbs[o.orb];
+                        let (effect, base) =
+                            if evoke { (def.evoke_effect, o.evoke) } else { (def.passive_effect, o.passive) };
+                        self.orb_worth(effect, self.orb_value(o, base), lean)
+                    })
+                    .sum::<f32>()
+                    * n as f32
+            })
+            .sum();
+        // This-turn triggers: what they'd give for the rest of the hand.
+        let this_turn: f32 = p
+            .text
+            .this_turn
+            .iter()
+            .map(|(when, es)| {
+                let k = match when {
+                    When::OnPlay(f) => self.hand.iter().filter(|&&i| matches(f, &self.s.plays[i])).count() as f32,
+                    When::OnDraw | When::OnDrawOf(_) => 1.0,
+                    _ => 0.5,
+                };
+                k * es.iter().map(|e| self.effect_worth(e, lean)).sum::<f32>()
+            })
+            .sum();
+        // A Status or Curse that costs something is worth playing away.
+        let clear = if matches!(p.card_type, CardType::Status | CardType::Curse) { 1.0 } else { 0.0 };
+        let value = main + side + setup + made + clear + orbs + this_turn;
         let cost = self.cost_of(p).unwrap_or(0).max(if p.x { self.energy } else { 0 });
         value / (cost as f32).max(0.5)
+    }
+
+    /// X for an X card: the energy, or the Stars for an X-Star card; 1 otherwise.
+    fn x_of(&self, p: &Play) -> i32 {
+        if p.x {
+            self.energy
+        } else if p.x_stars {
+            self.stars
+        } else {
+            1
+        }
+    }
+
+    /// What an orb effect of this size is worth to the lean.
+    fn orb_worth(&self, effect: OrbEffect, amount: i32, lean: Lean) -> f32 {
+        let (hit, guard) = match lean {
+            Lean::Damage => (1.0, 0.1),
+            Lean::Block => (0.1, 1.0),
+        };
+        amount as f32
+            * match effect {
+                OrbEffect::Damage | OrbEffect::DamageAll | OrbEffect::Grow => hit,
+                OrbEffect::Block => guard,
+                OrbEffect::Energy => 4.0,
+                OrbEffect::Other => 0.0,
+            }
+    }
+
+    /// Rough worth of one effect to the lean, for triggers a card sets up.
+    fn effect_worth(&self, e: &Effect, lean: Lean) -> f32 {
+        let (hit, guard) = match lean {
+            Lean::Damage => (1.0, 0.1),
+            Lean::Block => (0.1, 1.0),
+        };
+        match e {
+            Effect::Damage(n) | Effect::DamageAll(n) => *n as f32 * hit,
+            Effect::Block(n) => *n as f32 * guard,
+            Effect::Draw(n) => *n as f32 * 3.0,
+            Effect::Energy(n) | Effect::Strength(n) | Effect::Dexterity(n) => *n as f32 * 4.0,
+            Effect::Poison(n) => *n as f32 * 1.5 * hit,
+            Effect::Doom(n) => *n as f32 * 0.5 * hit,
+            Effect::Vulnerable(n) | Effect::Weak(n) => *n as f32 * 2.0,
+            Effect::Stars(n) => *n as f32 * 2.0,
+            _ => 2.0,
+        }
     }
 
     fn affordable(&self, p: &Play) -> bool {
@@ -1168,6 +1575,7 @@ impl<'a> Fight<'a> {
             self.stuck += 1;
             self.spend(Store::Arrows, 1);
             self.log.stores[Store::Arrows as usize].plays += 1.0;
+            self.on(Event::Shoot);
             return;
         }
         if self.stuck == 0 {
@@ -1176,6 +1584,7 @@ impl<'a> Fight<'a> {
         if p.dislodges {
             self.stuck -= 1;
             self.gain(Store::Arrows, 1);
+            self.on(Event::Dislodge);
         } else if p.card_type == CardType::Attack && p.now.damage > 0 {
             let per = self.s.rules.arrow_return_hits.max(1) as i32;
             self.hits_toward_return += p.now.hits * times;
@@ -1183,6 +1592,7 @@ impl<'a> Fight<'a> {
                 self.hits_toward_return -= per;
                 self.stuck -= 1;
                 self.gain(Store::Arrows, 1);
+                self.on(Event::Dislodge);
             }
         }
     }
@@ -1193,11 +1603,16 @@ impl<'a> Fight<'a> {
         // The plays outlive this fight, so this borrow doesn't hold `self`.
         let setup: &'a Setup<'a> = self.s;
         let p: &'a Play = &setup.plays[i];
-        let times = if p.x { self.energy } else { 1 };
-        self.energy -= if p.x { self.energy } else { self.cost_of(p).unwrap_or(0) };
-        self.stars -= p.star_cost;
-        if p.star_cost > 0 {
-            self.spend(Store::Stars, p.star_cost);
+        let times = self.x_of(p);
+        let paid = if p.x { self.energy } else { self.cost_of(p).unwrap_or(0) };
+        self.energy -= paid;
+        if paid > 0 {
+            self.on(Event::Count(Counted::EnergySpent, paid));
+        }
+        let stars = if p.x_stars { self.stars } else { p.star_cost };
+        self.stars -= stars;
+        if stars > 0 {
+            self.spend(Store::Stars, stars);
             self.log.stores[Store::Stars as usize].plays += 1.0;
         }
         self.log.cards += 1.0;
@@ -1235,6 +1650,12 @@ impl<'a> Fight<'a> {
                 }
             } else if works {
                 self.resolve(p, times);
+                for (k, (turns, _)) in p.text.later.iter().enumerate() {
+                    self.later.push((i, k, *turns));
+                }
+                for rule in &p.text.this_turn {
+                    self.add_rule(rule, true);
+                }
             }
             if let Some(t) = p.text.next_extra {
                 self.next_extra.push(t);
@@ -1247,14 +1668,13 @@ impl<'a> Fight<'a> {
         }
         self.played_this_turn += 1;
         self.played_any = true;
-        self.after_play(p);
+        self.on(Event::Played(i));
         // A new power's triggers start with the next card: "whenever you
         // play a card" doesn't count the power itself.
         if p.power {
             for _ in 0..if echo { 2 } else { 1 } {
                 for rule in p.mech.triggers.iter().filter(|r| r.0 != When::Played) {
-                    self.rules.push(rule);
-                    self.counters.push(0);
+                    self.add_rule(rule, false);
                 }
             }
         }
@@ -1278,6 +1698,9 @@ impl<'a> Fight<'a> {
         if p.text.discards_hand {
             discarded = self.hand.len() as i32;
             self.discard.append(&mut self.hand);
+            for _ in 0..discarded {
+                self.on(Event::Discard);
+            }
         }
         let mut per = times;
         if let Some(which) = &p.text.exhausts {
@@ -1297,8 +1720,15 @@ impl<'a> Fight<'a> {
             }
         }
         self.apply(p, per);
+        for e in &p.text.orb_actions {
+            match e {
+                Effect::Evoke(pick, n) => self.evoke(pick, if *n < 0 { times } else { *n }),
+                Effect::OrbPassive(pick, n) => self.orb_passive(pick, if *n < 0 { times } else { *n }),
+                _ => {}
+            }
+        }
         if p.text.block_if_exhausted > 0 && self.exhausted_this_turn {
-            self.log.block += (p.text.block_if_exhausted + self.dexterity).max(0) as f32;
+            self.log.block += (p.text.block_if_exhausted + self.dexterity + self.temp[1]).max(0) as f32;
         }
         for &(card, n, pile) in &p.makes {
             let n = match n {
@@ -1364,9 +1794,13 @@ impl<'a> Fight<'a> {
         self.energy = self.s.energy + std::mem::take(&mut self.next_energy) + carried;
         self.played_this_turn = 0;
         self.attacked_this_turn = false;
+        self.lost_hp_this_turn = false;
         for (k, rule) in self.rules.iter().enumerate() {
             if let When::EveryPlays { per_turn: true, .. } = rule.0 {
                 self.counters[k] = 0;
+            }
+            if let When::First { per_turn: true, .. } = rule.0 {
+                self.fired[k] = false;
             }
         }
         // Start-of-turn rules before the draw: their draws join the hand.
@@ -1375,6 +1809,15 @@ impl<'a> Fight<'a> {
         let t = self.turn as u32 + 1;
         self.fire(move |w| starts_turn(w, t));
         self.play_from_exhaust(When::TurnStart);
+        let setup: &'a Setup<'a> = self.s;
+        for (i, k, left) in std::mem::take(&mut self.later) {
+            for e in &setup.plays[i].text.later[k].1 {
+                self.effect(e);
+            }
+            if left > 1 {
+                self.later.push((i, k, left - 1));
+            }
+        }
         self.hand.extend(hand_before);
         let extra = std::mem::take(&mut self.pending_draw);
         self.draw_cards(self.s.rules.hand_size as i32 + extra);
@@ -1383,16 +1826,21 @@ impl<'a> Fight<'a> {
     fn end_turn(&mut self) {
         self.fire(|w| *w == When::TurnEnd);
         self.play_from_exhaust(When::TurnEnd);
-        self.log.block += self.plating as f32;
+        // Cards still in hand that hurt you there (Burn, Decay).
+        let setup: &'a Setup<'a> = self.s;
+        for k in 0..self.hand.len() {
+            for e in &setup.plays[self.hand[k]].text.held_end {
+                self.effect(e);
+            }
+        }
+        if self.plating > 0 {
+            self.log.block += self.plating as f32;
+            self.on(Event::GainBlock);
+        }
         for k in 0..self.orbs.len() {
             let o = self.orbs[k];
             let def = self.s.orbs[o.orb];
-            let amount = self.orb_value(o, o.passive);
-            if def.passive_effect == OrbEffect::Grow {
-                self.orbs[k].evoke += amount;
-            } else {
-                self.orb_effect(def.passive_effect, amount, false);
-            }
+            self.passive_of(k, false);
             // Decaying orbs (Glass) lose value each turn; the evoke shrinks in step.
             if def.decay > 0 && def.passive > 0 {
                 let passive = (o.passive - def.decay).max(0);
@@ -1406,6 +1854,17 @@ impl<'a> Fight<'a> {
             self.poison = (self.poison - 1).max(0);
         }
         self.vulnerable = (self.vulnerable - 1).max(0);
+        self.weak = (self.weak - 1).max(0);
+        self.temp = [0; 3];
+        // This-turn triggers (Rage, Oblivion) end with the turn.
+        for k in (0..self.rules.len()).rev() {
+            if self.this_turn[k] {
+                self.rules.remove(k);
+                self.counters.remove(k);
+                self.fired.remove(k);
+                self.this_turn.remove(k);
+            }
+        }
         self.log.unspent = self.energy as f32;
         self.log.stranded = self
             .hand

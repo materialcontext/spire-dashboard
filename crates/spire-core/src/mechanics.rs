@@ -26,6 +26,8 @@ pub enum CardFilter {
     Named(String),
     /// Upgraded cards of a type.
     Upgraded(CardType),
+    /// Cards with a keyword (lowercase): "ethereal".
+    Keyword(String),
 }
 
 impl CardFilter {
@@ -38,6 +40,7 @@ impl CardFilter {
             CardFilter::CostAtLeast(n) => format!("a card costing {n}+"),
             CardFilter::Named(n) => format!("a card named \"{n}\""),
             CardFilter::Upgraded(t) => format!("an upgraded {}", t.label()),
+            CardFilter::Keyword(k) => format!("an {k} card"),
         }
     }
 }
@@ -70,6 +73,59 @@ pub enum When {
     OnShuffle,
     OnGainBlock,
     OnDraw,
+    /// Drawing a matching card ("Whenever you draw an Ethereal card").
+    OnDrawOf(CardFilter),
+    /// Applying a debuff to an enemy.
+    OnApply(Debuff),
+    /// Creating a matching card ("Whenever you create a Status").
+    OnMake(CardFilter),
+    /// Gaining or spending Stars; `each` repeats the effects per Star.
+    OnStars {
+        gain: bool,
+        spend: bool,
+        each: bool,
+    },
+    /// An orb (of this kind, or any) being evoked.
+    OnEvoke(Option<OrbId>),
+    /// Losing HP yourself.
+    OnHpLoss,
+    OnDislodge,
+    /// Shooting an Arrow (which Impales the enemy).
+    OnShoot,
+    OnOstyAttack,
+    OnDiscard,
+    /// Each hit of an attack ("Whenever an Attack deals unblocked damage").
+    OnAttackHit,
+    /// Every N of something counted over the combat.
+    Every {
+        what: Counted,
+        n: u32,
+    },
+    /// Only the first time the trigger fires each turn (or each combat).
+    First {
+        when: Box<When>,
+        per_turn: bool,
+    },
+}
+
+/// A debuff a trigger watches for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Debuff {
+    Vulnerable,
+    Weak,
+    Poison,
+    Doom,
+    /// Any debuff.
+    Any,
+}
+
+/// What an [`When::Every`] trigger counts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Counted {
+    Exhausts,
+    EnergySpent,
+    StarsSpent,
+    CardsDrawn,
 }
 
 impl When {
@@ -92,6 +148,31 @@ impl When {
             When::OnShuffle => "Whenever you shuffle".into(),
             When::OnGainBlock => "Whenever you gain Block".into(),
             When::OnDraw => "Whenever you draw a card".into(),
+            When::OnDrawOf(f) => format!("Whenever you draw {}", f.describe()),
+            When::OnApply(d) => format!("Whenever you apply {d:?}"),
+            When::OnMake(f) => format!("Whenever you create {}", f.describe()),
+            When::OnStars { gain, spend, each } => {
+                let what = match (gain, spend) {
+                    (true, true) => "gain or spend",
+                    (true, false) => "gain",
+                    _ => "spend",
+                };
+                format!("Whenever you {what} Stars{}", if *each { " (per Star)" } else { "" })
+            }
+            When::OnEvoke(orb) => match orb {
+                Some(o) => format!("Whenever you evoke {}", o.as_str().trim_end_matches("_ORB").to_lowercase()),
+                None => "Whenever you evoke an orb".into(),
+            },
+            When::OnHpLoss => "Whenever you lose HP".into(),
+            When::OnDislodge => "Whenever you dislodge an Arrow".into(),
+            When::OnShoot => "Whenever you shoot".into(),
+            When::OnOstyAttack => "Whenever Osty attacks".into(),
+            When::OnDiscard => "Whenever you discard a card".into(),
+            When::OnAttackHit => "Whenever an attack hits".into(),
+            When::Every { what, n } => format!("Every {n} {what:?}"),
+            When::First { when, per_turn } => {
+                format!("First time each {}: {}", if *per_turn { "turn" } else { "combat" }, when.describe())
+            }
         }
     }
 }
@@ -115,6 +196,8 @@ pub enum Effect {
     Doom(i32),
     /// Turns of Vulnerable on the enemy.
     Vulnerable(i32),
+    /// Turns of Weak on the enemy.
+    Weak(i32),
     Forge(i32),
     Stars(i32),
     Summon(i32),
@@ -122,6 +205,12 @@ pub enum Effect {
     OrbSlots(i32),
     /// Arrows for the Fool.
     Arrows(i32),
+    /// HP you lose yourself ("Lose 2 HP", "take 2 damage").
+    LoseHp(i32),
+    /// Evoke orbs `times` times (-1: X times).
+    Evoke(OrbPick, i32),
+    /// Trigger orbs' passives `times` times.
+    OrbPassive(OrbPick, i32),
     /// Cards made and put in a pile: "add 1 Shiv into your Hand". `name`
     /// is as written (plural or not); the simulator finds the card.
     Make {
@@ -129,6 +218,16 @@ pub enum Effect {
         n: i32,
         pile: Pile,
     },
+}
+
+/// Which orbs an evoke or passive trigger takes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OrbPick {
+    Rightmost,
+    Leftmost,
+    All,
+    /// Every orb of one kind.
+    Kind(OrbId),
 }
 
 /// Where a made or moved card goes.
@@ -159,12 +258,16 @@ impl Effect {
             Effect::Poison(n) => format!("apply {n} Poison"),
             Effect::Doom(n) => format!("apply {n} Doom"),
             Effect::Vulnerable(n) => format!("apply {n} Vulnerable"),
+            Effect::Weak(n) => format!("apply {n} Weak"),
             Effect::Forge(n) => format!("Forge {n}"),
             Effect::Stars(n) => signed(*n, "Stars"),
             Effect::Summon(n) => format!("Summon {n}"),
             Effect::Channel(orb, n) => format!("Channel {n} {}", orb.as_str().trim_end_matches("_ORB").to_lowercase()),
             Effect::OrbSlots(n) => signed(*n, "orb slots"),
             Effect::Arrows(n) => signed(*n, "Arrows"),
+            Effect::LoseHp(n) => format!("lose {n} HP"),
+            Effect::Evoke(pick, n) => format!("evoke {pick:?} ×{n}"),
+            Effect::OrbPassive(pick, n) => format!("trigger {pick:?} passive ×{n}"),
             Effect::Make { name, n, pile } => format!("add {n} {name} to your {pile:?}"),
         }
     }
@@ -185,6 +288,8 @@ pub enum Passive {
     VulnerableIs(i32),
     /// Poison ticks this many extra times.
     PoisonExtraTicks(i32),
+    /// Each Poison applied is this much more.
+    PoisonBonus(i32),
     /// The hand is not discarded at end of turn.
     RetainHand,
     /// Unspent energy carries over.
@@ -210,6 +315,7 @@ impl Passive {
             Passive::VulnerableBonus(n) => format!("Vulnerable +{n}%"),
             Passive::VulnerableIs(n) => format!("Vulnerable is {n}%"),
             Passive::PoisonExtraTicks(n) => format!("Poison ticks {n} more time(s)"),
+            Passive::PoisonBonus(n) => format!("Poison applied +{n}"),
             Passive::RetainHand => "Keep your hand".into(),
             Passive::ConserveEnergy => "Unspent Energy carries over".into(),
             Passive::FreeSkills => "Skills cost 0 and exhaust".into(),
@@ -249,12 +355,16 @@ impl Effect {
             Effect::Poison(_) => "poison",
             Effect::Doom(_) => "doom",
             Effect::Vulnerable(_) => "vulnerable",
+            Effect::Weak(_) => "weak",
             Effect::Forge(_) => "forge",
             Effect::Stars(_) => "stars",
             Effect::Summon(_) => "summon",
             Effect::Channel(..) => "channel",
             Effect::OrbSlots(_) => "orb_slots",
             Effect::Arrows(_) => "arrows",
+            Effect::LoseHp(_) => "hp_loss",
+            Effect::Evoke(..) => "evoke",
+            Effect::OrbPassive(..) => "orb_passive",
             Effect::Make { .. } => "make",
         }
     }
@@ -288,6 +398,7 @@ impl Passive {
             Passive::ExtraBlock(..) => "extra_block",
             Passive::VulnerableBonus(_) | Passive::VulnerableIs(_) => "vulnerable_bonus",
             Passive::PoisonExtraTicks(_) => "poison_ticks",
+            Passive::PoisonBonus(_) => "poison_bonus",
             Passive::RetainHand => "retain_hand",
             Passive::ConserveEnergy => "conserve_energy",
             Passive::FreeSkills => "free_skills",
@@ -370,6 +481,7 @@ fn card_type(w: &str) -> Option<CardType> {
         "attack" => Some(CardType::Attack),
         "skill" => Some(CardType::Skill),
         "power" => Some(CardType::Power),
+        "statu" | "statuse" => Some(CardType::Status),
         _ => None,
     }
 }
@@ -388,8 +500,18 @@ fn filter(ws: &[String]) -> Option<CardFilter> {
     if let Some(t) = card_type(w) {
         return Some(CardFilter::Type(t));
     }
-    matches!(w.trim_end_matches('s'), "shiv" | "strike" | "defend")
-        .then(|| CardFilter::Named(w.trim_end_matches('s').into()))
+    if w == "ethereal" {
+        return Some(CardFilter::Keyword("ethereal".into()));
+    }
+    if w == "sovereign" {
+        return Some(CardFilter::Named("sovereign blade".into()));
+    }
+    let name = match w {
+        "sadness" => "sadness",
+        w => w.trim_end_matches('s'),
+    };
+    matches!(name, "shiv" | "strike" | "defend" | "soul" | "sadness" | "joy" | "minion")
+        .then(|| CardFilter::Named(name.into()))
 }
 
 /// Splits a sentence into its timing and the rest. `None` timing means the
@@ -418,6 +540,10 @@ fn timing(ws: &[String]) -> (Option<When>, usize) {
     }
     if starts(&["at", "the", "start", "of", "your", "turn"]) || starts(&["at", "the", "start", "of", "each", "turn"]) {
         return (Some(When::TurnStart), 6);
+    }
+    // Bread: "At the start of your first turn, lose 2 Energy. At the start of all other turns, gain 1 Energy."
+    if starts(&["at", "the", "start", "of", "all", "other", "turns"]) {
+        return (Some(When::TurnsFrom(2)), 7);
     }
     if starts(&["at", "the", "end", "of", "your", "turn"]) || starts(&["at", "the", "end", "of", "each", "turn"]) {
         return (Some(When::TurnEnd), 6);
@@ -450,8 +576,13 @@ fn timing(ws: &[String]) -> (Option<When>, usize) {
         let verb = s
             .iter()
             .enumerate()
-            .skip(3)
-            .find(|(_, w)| matches!(**w, "gain" | "deal" | "draw" | "channel" | "apply" | "summon" | "forge"))
+            .skip(4)
+            .find(|(_, w)| {
+                matches!(
+                    **w,
+                    "gain" | "deal" | "draw" | "channel" | "apply" | "summon" | "forge" | "add" | "lose" | "the" | "a"
+                )
+            })
             .map_or(end, |(i, _)| i);
         if let Some(f) = filter(&ws[3..verb]) {
             return (Some(When::OnPlay(f)), verb);
@@ -472,6 +603,92 @@ fn timing(ws: &[String]) -> (Option<When>, usize) {
     if starts(&["whenever", "you", "draw", "a", "card"]) {
         let n = if s.get(5..7).is_some_and(|w| w == ["during", "your"]) { 8 } else { 5 };
         return (Some(When::OnDraw), n);
+    }
+    let upto = |end: &str| s.iter().position(|w| *w == end);
+    if starts(&["whenever", "you", "draw"])
+        && let Some(f) = filter(&ws[3..ws.len().min(6)])
+    {
+        return (Some(When::OnDrawOf(f)), upto("card").map_or(5, |i| i + 1));
+    }
+    if starts(&["whenever", "you", "apply"]) {
+        let d = match s.get(3).copied().unwrap_or("") {
+            "vulnerable" => Some(Debuff::Vulnerable),
+            "weak" => Some(Debuff::Weak),
+            "poison" => Some(Debuff::Poison),
+            "doom" => Some(Debuff::Doom),
+            "a" if s.get(4) == Some(&"debuff") => Some(Debuff::Any),
+            _ => None,
+        };
+        if let Some(d) = d {
+            let end = if d == Debuff::Any { upto("enemy").map_or(5, |i| i + 1) } else { 4 };
+            return (Some(When::OnApply(d)), end);
+        }
+    }
+    if starts(&["whenever", "you", "create"])
+        && let Some(f) = filter(&ws[3..ws.len().min(5)])
+    {
+        return (Some(When::OnMake(f)), 5);
+    }
+    if starts(&["whenever", "you", "spend", "or", "gain"]) {
+        return (Some(When::OnStars { gain: true, spend: true, each: false }), 7);
+    }
+    if starts(&["whenever", "you", "spend"]) && s.contains(&"star") {
+        let each = s.windows(2).any(|w| w == ["for", "each"]);
+        return (Some(When::OnStars { gain: false, spend: true, each }), upto("star").map_or(4, |i| i + 1));
+    }
+    if starts(&["whenever", "you", "evoke"]) {
+        let kind = s.get(3).map(|w| w.to_string());
+        return (Some(When::OnEvoke(kind.map(|k| OrbId::new(format!("{}_ORB", k.to_uppercase()))))), 4);
+    }
+    if starts(&["whenever", "you", "lose", "hp"]) {
+        let end = if s.get(4..6).is_some_and(|w| w == ["on", "your"] || w == ["in", "combat"]) {
+            if s[4] == "on" { 7 } else { 6 }
+        } else {
+            4
+        };
+        return (Some(When::OnHpLoss), end);
+    }
+    if starts(&["whenever", "you", "dislodge"]) {
+        return (Some(When::OnDislodge), 5);
+    }
+    if starts(&["whenever", "you", "impale"]) {
+        return (Some(When::OnShoot), 5);
+    }
+    if starts(&["whenever", "osty", "attacks"]) {
+        return (Some(When::OnOstyAttack), 3);
+    }
+    if starts(&["whenever", "you", "discard", "a", "card"]) {
+        let end = if s.get(5..8).is_some_and(|w| w == ["during", "your", "turn"]) { 8 } else { 5 };
+        return (Some(When::OnDiscard), end);
+    }
+    if starts(&["whenever", "an", "attack", "deals"]) || starts(&["whenever", "attacks", "deal"]) {
+        return (Some(When::OnAttackHit), upto("damage").map_or(5, |i| i + 1));
+    }
+    // "Every 5 times you Exhaust a card", "Every 4 Energy you spend",
+    // "Every 10 cards you draw", "For every 10 Stars spent".
+    let lead = if starts(&["for", "every"]) { 1 } else { 0 };
+    if s.get(lead) == Some(&"every")
+        && let Some(n) = s.get(lead + 1).and_then(|w| number(w))
+    {
+        let rest = &s[lead + 2..];
+        let what = if rest.starts_with(&["times", "you", "exhaust"]) {
+            Some((Counted::Exhausts, lead + 7))
+        } else if rest.starts_with(&["energy", "you", "spend"]) {
+            Some((Counted::EnergySpent, lead + 5))
+        } else if rest.starts_with(&["star", "spent"]) || rest.starts_with(&["stars", "spent"]) {
+            Some((Counted::StarsSpent, lead + 4))
+        } else if rest.starts_with(&["cards", "you", "draw"]) {
+            Some((Counted::CardsDrawn, lead + 5))
+        } else {
+            None
+        };
+        if let Some((what, end)) = what {
+            return (Some(When::Every { what, n: n.max(1) as u32 }), end);
+        }
+    }
+    // Parry: "Sovereign Blade now gains 10 Block".
+    if starts(&["sovereign", "blade", "now", "gains"]) {
+        return (Some(When::OnPlay(CardFilter::Named("sovereign blade".into()))), 3);
     }
     (None, 0)
 }
@@ -495,9 +712,11 @@ fn effects(ws: &[String], orbs: &[Orb]) -> Vec<Effect> {
     let mut i = 0;
     while i < s.len() {
         // Effects on someone else ("ALL enemies gain 1 Strength", "allies gain") aren't ours.
-        let theirs = i > 0 && matches!(s[i - 1], "enemies" | "enemy" | "allies" | "players" | "player");
+        let theirs = i > 0 && matches!(s[i - 1], "enemies" | "enemy" | "allies" | "players" | "player" | "they");
         match s[i] {
-            "gain" | "gains" | "with" | "lose" if !theirs => {
+            "gain" | "gains" | "with" | "lose"
+                if !theirs && !(s[i] == "lose" && matches!(s.get(i + 2), Some(&"hp") | Some(&"damage"))) =>
+            {
                 let sign = if s[i] == "lose" { -1 } else { 1 };
                 let mut j = i + 1;
                 if matches!(s.get(j), Some(&"an") | Some(&"additional")) {
@@ -547,6 +766,64 @@ fn effects(ws: &[String], orbs: &[Orb]) -> Vec<Effect> {
                     continue;
                 }
             }
+            "lose" | "take" if !theirs && s.get(i + 2).is_some_and(|w| matches!(*w, "hp" | "damage")) => {
+                if let Some(n) = s.get(i + 1).and_then(|w| number(w)) {
+                    out.push(Effect::LoseHp(n));
+                    i += 3;
+                    continue;
+                }
+            }
+            // "they take 9 damage": the enemy's.
+            "take" if theirs && s.get(i + 2) == Some(&"damage") => {
+                if let Some(n) = s.get(i + 1).and_then(|w| number(w)) {
+                    out.push(Effect::Damage(n));
+                    i += 3;
+                    continue;
+                }
+            }
+            // "a random enemy loses 7 HP": HP loss, through Block.
+            "loses" if theirs && s.get(i + 2) == Some(&"hp") => {
+                if let Some(n) = s.get(i + 1).and_then(|w| number(w)) {
+                    out.push(Effect::Damage(n));
+                    i += 3;
+                    continue;
+                }
+            }
+            "evoke" => {
+                let pick = match (s.get(i + 1), s.get(i + 2)) {
+                    (Some(&"your"), Some(&"rightmost")) => Some((OrbPick::Rightmost, i + 4)),
+                    (Some(&"your"), Some(&"leftmost")) => Some((OrbPick::Leftmost, i + 4)),
+                    (Some(&"all"), _) => Some((OrbPick::All, i + 5)),
+                    _ => None,
+                };
+                if let Some((pick, j)) = pick {
+                    let (times, used) = repeat_count(&s[j.min(s.len())..]);
+                    out.push(Effect::Evoke(pick, times));
+                    i = j + used;
+                    continue;
+                }
+            }
+            "trigger" => {
+                // "trigger the passive ability of your rightmost Orb (2 times)",
+                // "… of all Dark Orbs (twice)", "trigger all Lightning against the enemy".
+                let of = s.iter().skip(i).position(|w| *w == "of").map(|k| k + i);
+                let pick = match of.and_then(|k| s.get(k + 1..k + 3)) {
+                    Some([_, "rightmost"]) => Some((OrbPick::Rightmost, of.unwrap_or(i) + 4)),
+                    Some(["all", "orbs"]) => Some((OrbPick::All, of.unwrap_or(i) + 3)),
+                    Some(["all", kind]) => orb_named(orbs, kind).map(|o| (OrbPick::Kind(o), of.unwrap_or(i) + 4)),
+                    _ => match s.get(i + 1..i + 3) {
+                        Some(["all", kind]) => orb_named(orbs, kind)
+                            .map(|o| (OrbPick::Kind(o), i + 3 + if s.get(i + 3) == Some(&"against") { 3 } else { 0 })),
+                        _ => None,
+                    },
+                };
+                if let Some((pick, j)) = pick {
+                    let (times, used) = repeat_count(&s[j.min(s.len())..]);
+                    out.push(Effect::OrbPassive(pick, times));
+                    i = j + used;
+                    continue;
+                }
+            }
             "deal" if !theirs => {
                 if let Some(n) = s.get(i + 1).and_then(|w| number(w))
                     && s.get(i + 2) == Some(&"damage")
@@ -577,6 +854,7 @@ fn effects(ws: &[String], orbs: &[Orb]) -> Vec<Effect> {
                         "poison" => Some(Effect::Poison(n)),
                         "doom" => Some(Effect::Doom(n)),
                         "vulnerable" => Some(Effect::Vulnerable(n)),
+                        "weak" => Some(Effect::Weak(n)),
                         _ => None,
                     };
                     // "apply 3 Doom to yourself" is not an attack on the enemy.
@@ -588,7 +866,7 @@ fn effects(ws: &[String], orbs: &[Orb]) -> Vec<Effect> {
                     continue;
                 }
             }
-            "add" | "adds" if !theirs || s[i - 1] == "players" => {
+            "add" | "adds" | "shuffle" if !theirs || s[i - 1] == "players" => {
                 if let Some((made, used)) = make(&s[i + 1..]) {
                     out.extend(made);
                     i += 1 + used;
@@ -625,6 +903,20 @@ fn effects(ws: &[String], orbs: &[Orb]) -> Vec<Effect> {
     out
 }
 
+/// "twice" → 2, "4 times" → 4, "X times" → -1, else 1; and the words used.
+fn repeat_count(s: &[&str]) -> (i32, usize) {
+    match s {
+        ["twice", ..] => (2, 1),
+        ["x", "times", ..] | ["x+1", "times", ..] => (-1, 2),
+        [n, "times", ..] if number(n).is_some() => (number(n).unwrap_or(1), 2),
+        _ => (1, 0),
+    }
+}
+
+fn orb_named(orbs: &[Orb], name: &str) -> Option<OrbId> {
+    orbs.iter().find(|o| o.name.eq_ignore_ascii_case(name.trim_end_matches('s'))).map(|o| o.id.clone())
+}
+
 /// "3 Shivs into your Hand", "a Soul into your Draw Pile, Hand, and Discard
 /// Pile", "2 Shivs to ALL players' Hands": the cards made and where they go,
 /// and how many words that took. Random cards and copies aren't read here.
@@ -654,8 +946,18 @@ fn make(s: &[&str]) -> Option<(Vec<Effect>, usize)> {
     if piles.is_empty() {
         return None;
     }
-    let name = name.join(" ");
-    Some((piles.into_iter().map(|pile| Effect::Make { name: name.clone(), n, pile }).collect(), j))
+    // "a Joy and a Sadness": two cards, one each.
+    let names: Vec<(String, i32)> = match name.iter().position(|w| *w == "and") {
+        Some(k) if matches!(name.get(k + 1), Some(&"a") | Some(&"an")) && k + 2 < name.len() => {
+            vec![(name[..k].join(" "), n), (name[k + 2..].join(" "), 1)]
+        }
+        _ => vec![(name.join(" "), n)],
+    };
+    let made = piles
+        .into_iter()
+        .flat_map(|pile| names.iter().map(move |(name, n)| Effect::Make { name: name.clone(), n: *n, pile }))
+        .collect();
+    Some((made, j))
 }
 
 /// What a card's text does beyond its numbers, for the simulator.
@@ -695,6 +997,28 @@ pub struct CardText {
     pub cheaper_per_exhausted: bool,
     /// "<card> gains Replay N": the card's name and N.
     pub gives_replay: Option<(String, i32)>,
+    /// Effects that come later: "Next turn, draw 2 cards" is `(1, [Draw(2)])`,
+    /// "Gain 5 Block at the start of the next 2 turns" is `(2, [Block(5)])`:
+    /// at the start of each of the next N turns.
+    pub later: Vec<(u32, Vec<Effect>)>,
+    /// A sentence gains energy now ("Gain 2 Energy"), not a cost or a
+    /// threshold ("costs 2 Energy or more") or a kill reward.
+    pub gains_energy: bool,
+    /// A sentence gains Stars now (not next turn).
+    pub gains_stars: bool,
+    /// Your own Strength, Dexterity and Focus ("Gain 3 Strength", "Lose 3
+    /// Focus this turn"), each with whether it lasts only this turn.
+    pub stats: Vec<(Effect, bool)>,
+    /// Triggers that last this turn: "Whenever you play an Attack this
+    /// turn, gain 3 Block."
+    pub this_turn: Vec<(When, Vec<Effect>)>,
+    /// Evokes and orb passive triggers: "Evoke your rightmost Orb twice."
+    pub orb_actions: Vec<Effect>,
+    /// HP you lose by playing it ("Lose 3 HP").
+    pub lose_hp: i32,
+    /// What it does if it's still in your hand at the end of your turn
+    /// ("At the end of your turn, if this is in your Hand, take 2 damage").
+    pub held_end: Vec<Effect>,
 }
 
 /// Which cards an "Exhaust …" sentence takes.
@@ -718,9 +1042,69 @@ pub fn card_text(text: &str, orbs: &[Orb]) -> CardText {
         let s: Vec<&str> = ws.iter().map(String::as_str).collect();
         let has = |p: &[&str]| s.windows(p.len()).any(|w| w == p);
         let starts = |p: &[&str]| s.len() >= p.len() && s[..p.len()] == *p;
+        // "Next turn, draw 2 cards", "At the start of the next 2 turns,
+        // Channel 1 Lightning", "Gain 5 Block at the start of the next 2 turns".
+        let next_n = s.windows(4).find(|w| w[..3] == ["of", "the", "next"]).and_then(|w| number(w[3]));
+        if starts(&["next", "turn"]) || has(&["start", "of", "your", "next", "turn"]) || next_n.is_some() {
+            let found = effects(&ws, orbs);
+            if !found.is_empty() {
+                c.later.push((next_n.unwrap_or(1).max(1) as u32, found));
+            }
+            continue;
+        }
+        if starts(&["at", "the", "end", "of", "your", "turn", "if", "this", "is", "in", "your", "hand"]) {
+            c.held_end = effects(&ws[12..], orbs);
+            continue;
+        }
+        if starts(&["whenever"]) && has(&["this", "turn"]) {
+            // The same trigger as a power's, for this turn only.
+            let rest: Vec<String> = ws
+                .iter()
+                .enumerate()
+                .filter(|(k, w)| {
+                    !((*w == "this" && ws.get(k + 1).is_some_and(|n| n == "turn"))
+                        || (*w == "turn" && *k > 0 && ws[k - 1] == "this"))
+                })
+                .map(|(_, w)| w.clone())
+                .collect();
+            if let (Some(when), at) = timing(&rest) {
+                let found = effects(&rest[at.min(rest.len())..], orbs);
+                if !found.is_empty() {
+                    c.this_turn.push((when, found));
+                }
+            }
+            continue;
+        }
         // "Draw 2 cards", "draw a card"; not "into your Draw Pile".
         if s.windows(2).any(|w| w[0] == "draw" && (number(w[1]).is_some() || w[1] == "a")) {
             c.draws = true;
+        }
+        let trigger = matches!(s.first(), Some(&"whenever") | Some(&"when") | Some(&"every"));
+        if !trigger && !starts(&["if"]) {
+            for e in effects(&ws, orbs) {
+                match e {
+                    Effect::Evoke(..) | Effect::OrbPassive(..) => c.orb_actions.push(e),
+                    Effect::LoseHp(n) => c.lose_hp += n,
+                    _ => {}
+                }
+            }
+        }
+        let gain_of = |what: &str| {
+            s.windows(3).any(|w| w[0] == "gain" && number(w[1]).is_some() && w[2].trim_end_matches('s') == what)
+                || s.windows(4).any(|w| w[..2] == ["gain", "an"] && number(w[3]).is_some() && w[2] == "additional")
+                    && has(&[what])
+        };
+        if !trigger && !starts(&["if", "this", "kills"]) {
+            c.gains_energy |= gain_of("energy");
+            c.gains_stars |= gain_of("star");
+        }
+        if !trigger && !starts(&["if"]) && !has(&["for", "each"]) {
+            let temp = has(&["this", "turn"]);
+            for e in effects(&ws, orbs) {
+                if matches!(e, Effect::Strength(_) | Effect::Dexterity(_) | Effect::Focus(_)) {
+                    c.stats.push((e, temp));
+                }
+            }
         }
         if has(&["copy", "of", "this", "card"]) {
             c.copy_to = if has(&["discard", "pile"]) {
@@ -845,6 +1229,10 @@ fn passive(sentence: &str) -> Option<Passive> {
             .or_else(|| num_before("block"))
             .map(|n| Passive::ExtraBlock(CardFilter::Named("defend".into()), n));
     }
+    if has(&["whenever", "you", "apply", "poison"]) && has(&["additional"]) {
+        let after = s.iter().position(|w| *w == "additional").and_then(|i| s.get(i + 1)).and_then(|w| number(w));
+        return after.map(Passive::PoisonBonus);
+    }
     if has(&["poison", "is", "triggered"]) {
         return num_before("additional").map(Passive::PoisonExtraTicks);
     }
@@ -886,19 +1274,27 @@ pub fn read(text: &str, orbs: &[Orb], played: bool) -> Mechanics {
     let mut m = Mechanics::default();
     for sentence in sentences(text) {
         let sentence = sentence.as_str();
-        let ws = words(sentence);
+        let mut ws = words(sentence);
         let lower = sentence.to_lowercase();
+        // "The first time you X each turn, …" is "whenever you X", once a turn.
+        let first = ws.len() > 4 && ws[..4] == ["the", "first", "time", "you"];
+        let per_turn = !lower.contains("each combat");
+        if first {
+            ws = std::iter::once("whenever".to_string()).chain(ws[3..].iter().cloned()).collect();
+        }
+        let counted = matches!(timing(&ws).0, Some(When::Every { .. }));
+        let per_star = matches!(timing(&ws).0, Some(When::OnStars { each: true, .. }));
         // Conditions and one-offs aren't guessed at.
         let conditional = ws.first().is_some_and(|w| w == "if" || w == "while" || w == "when")
-            || lower.contains("the first time")
+            || (lower.contains("the first time") && !first)
             || lower.contains("upon pickup")
             || lower.contains("elite")
             || lower.contains("boss")
             // Scaled or temporary amounts aren't flat effects.
-            || lower.contains("for each")
+            || (lower.contains("for each") && !per_star)
             || lower.contains("equal to")
             || lower.contains("this turn")
-            || lower.contains("for every");
+            || (lower.contains("for every") && !counted);
         if !conditional && let Some(p) = passive(sentence) {
             // Corruption's second sentence ("Whenever you play a Skill, Exhaust it") is part of FreeSkills.
             m.passives.push(p);
@@ -912,12 +1308,16 @@ pub fn read(text: &str, orbs: &[Orb], played: bool) -> Mechanics {
             (None, _) => (trailing_timing(&lower), 0),
             found => found,
         };
+        let when = when.map(|w| if first { When::First { when: Box::new(w), per_turn } } else { w });
         let found = effects(&ws[at.min(ws.len())..], orbs);
+        // A trigger the reader doesn't know ("Whenever you apply Vulnerable,
+        // …", "Every 4 Energy you spend, …") isn't an effect on play.
+        let unknown_trigger = when.is_none() && ws.first().is_some_and(|w| matches!(w.as_str(), "whenever" | "every"));
         match (when, found.is_empty()) {
             (Some(When::OnPlay(CardFilter::Type(CardType::Skill))), _)
                 if m.passives.contains(&Passive::FreeSkills) && lower.contains("exhaust it") => {}
             (Some(w), false) => m.triggers.push((w, found)),
-            (None, false) if played => m.triggers.push((When::Played, found)),
+            (None, false) if played && !unknown_trigger => m.triggers.push((When::Played, found)),
             _ => m.unread.push(sentence.to_string()),
         }
     }
@@ -1090,6 +1490,89 @@ mod tests {
         let m = read("If you end your turn without Block, gain 6 Block.", &[], false);
         assert!(m.is_empty() && m.unread.len() == 1);
         let m = read("The first time you lose HP each combat, draw 3 cards.", &[], false);
-        assert!(m.is_empty());
+        assert_eq!(
+            m.triggers,
+            vec![(When::First { when: Box::new(When::OnHpLoss), per_turn: false }, vec![Effect::Draw(3)])]
+        );
+        let m = read("Whenever you apply Poison, apply an additional 1 Poison.", &[], false);
+        assert_eq!(m.passives, vec![Passive::PoisonBonus(1)]);
+    }
+
+    #[test]
+    fn reads_event_triggers() {
+        let t = |text: &str| triggers(text, true);
+        assert_eq!(
+            t("Whenever you lose HP on your turn, gain 1 Strength."),
+            vec![(When::OnHpLoss, vec![Effect::Strength(1)])]
+        );
+        assert_eq!(
+            t("Whenever you apply Vulnerable, draw 1 card."),
+            vec![(When::OnApply(Debuff::Vulnerable), vec![Effect::Draw(1)])]
+        );
+        assert_eq!(
+            t("Whenever you apply a debuff to an enemy, they take 9 damage."),
+            vec![(When::OnApply(Debuff::Any), vec![Effect::Damage(9)])]
+        );
+        assert_eq!(
+            t("Whenever you create a Status, deal 5 damage to ALL enemies."),
+            vec![(When::OnMake(CardFilter::Type(CardType::Status)), vec![Effect::DamageAll(5)])]
+        );
+        assert_eq!(
+            t("Whenever you create a card, gain 1 Strength."),
+            vec![(When::OnMake(CardFilter::Any), vec![Effect::Strength(1)])]
+        );
+        assert_eq!(
+            t("Whenever you spend or gain 1 Star, deal 3 damage to ALL enemies."),
+            vec![(When::OnStars { gain: true, spend: true, each: false }, vec![Effect::DamageAll(3)])]
+        );
+        assert_eq!(
+            t("Whenever you spend 1 Star, gain 2 Block for each 1 Star spent."),
+            vec![(When::OnStars { gain: false, spend: true, each: true }, vec![Effect::Block(2)])]
+        );
+        assert_eq!(
+            t("Whenever you Evoke Lightning, deal 8 damage to each enemy hit."),
+            vec![(When::OnEvoke(Some(OrbId::new("LIGHTNING_ORB"))), vec![Effect::Damage(8)])]
+        );
+        assert_eq!(
+            t("Whenever you play a Soul, a random enemy loses 7 HP."),
+            vec![(When::OnPlay(CardFilter::Named("soul".into())), vec![Effect::Damage(7)])]
+        );
+        assert_eq!(
+            t("Whenever you play an Ethereal card, gain 4 Block."),
+            vec![(When::OnPlay(CardFilter::Keyword("ethereal".into())), vec![Effect::Block(4)])]
+        );
+        assert_eq!(
+            t("Whenever you draw an Ethereal card, draw 1 card."),
+            vec![(When::OnDrawOf(CardFilter::Keyword("ethereal".into())), vec![Effect::Draw(1)])]
+        );
+        assert_eq!(
+            t("Every 5 times you Exhaust a card, draw 1 card."),
+            vec![(When::Every { what: Counted::Exhausts, n: 5 }, vec![Effect::Draw(1)])]
+        );
+        assert_eq!(
+            t("Every 4 Energy you spend, gain 1 Energy."),
+            vec![(When::Every { what: Counted::EnergySpent, n: 4 }, vec![Effect::Energy(1)])]
+        );
+        assert_eq!(
+            t("Sovereign Blade now gains 10 Block."),
+            vec![(When::OnPlay(CardFilter::Named("sovereign blade".into())), vec![Effect::Block(10)])]
+        );
+        assert_eq!(
+            t("At the end of your turn, Evoke your leftmost Orb."),
+            vec![(When::TurnEnd, vec![Effect::Evoke(OrbPick::Leftmost, 1)])]
+        );
+        assert_eq!(
+            t("At the start of your turn, trigger the passive ability of your rightmost Orb 2 times."),
+            vec![(When::TurnStart, vec![Effect::OrbPassive(OrbPick::Rightmost, 2)])]
+        );
+        let c = card_text("Evoke your rightmost Orb twice.", &lightning());
+        assert_eq!(c.orb_actions, vec![Effect::Evoke(OrbPick::Rightmost, 2)]);
+        let rage = card_text("Whenever you play an Attack this turn, gain 3 Block.", &[]);
+        assert_eq!(rage.this_turn, vec![(When::OnPlay(CardFilter::Type(CardType::Attack)), vec![Effect::Block(3)])]);
+        assert_eq!(card_text("Lose 3 HP. Gain 2 Energy.", &[]).lose_hp, 3);
+        assert_eq!(
+            card_text("At the end of your turn, if this is in your Hand, take 2 damage.", &[]).held_end,
+            vec![Effect::LoseHp(2)]
+        );
     }
 }
