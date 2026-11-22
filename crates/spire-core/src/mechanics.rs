@@ -290,6 +290,8 @@ pub enum Passive {
     PoisonExtraTicks(i32),
     /// Each Poison applied is this much more.
     PoisonBonus(i32),
+    /// The first N cards each turn are free.
+    FreeFirst(i32),
     /// The hand is not discarded at end of turn.
     RetainHand,
     /// Unspent energy carries over.
@@ -316,6 +318,7 @@ impl Passive {
             Passive::VulnerableIs(n) => format!("Vulnerable is {n}%"),
             Passive::PoisonExtraTicks(n) => format!("Poison ticks {n} more time(s)"),
             Passive::PoisonBonus(n) => format!("Poison applied +{n}"),
+            Passive::FreeFirst(n) => format!("First {n} cards each turn are free"),
             Passive::RetainHand => "Keep your hand".into(),
             Passive::ConserveEnergy => "Unspent Energy carries over".into(),
             Passive::FreeSkills => "Skills cost 0 and exhaust".into(),
@@ -399,6 +402,7 @@ impl Passive {
             Passive::VulnerableBonus(_) | Passive::VulnerableIs(_) => "vulnerable_bonus",
             Passive::PoisonExtraTicks(_) => "poison_ticks",
             Passive::PoisonBonus(_) => "poison_bonus",
+            Passive::FreeFirst(_) => "free_first",
             Passive::RetainHand => "retain_hand",
             Passive::ConserveEnergy => "conserve_energy",
             Passive::FreeSkills => "free_skills",
@@ -1036,6 +1040,7 @@ pub enum Cond {
     Dislodges,
     /// A kill: the simulator's target doesn't die, so never.
     Kill,
+    OstyAttackedThisTurn,
 }
 
 /// What a condition gates when it isn't the whole card.
@@ -1048,6 +1053,56 @@ pub enum Bonus {
     /// Block gained this many more times.
     BlockTimes(i32),
     DoubleDamage,
+}
+
+/// Rules a card sets on costs, growth and the turn.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CardMod {
+    /// Costs N less per count ("Costs 1 less Energy for each Attack played this turn").
+    CostPer(Count, i32),
+    /// The next matching card you play costs 0.
+    NextFree(CardFilter),
+    /// Matching cards in your hand cost N less until played.
+    HandCheaper(CardFilter, i32),
+    /// Every card in your hand is free this turn.
+    HandFree,
+    /// Every card in your hand costs at most N this turn.
+    HandCost(i32),
+    /// Every card costs N more this turn.
+    CostUp(i32),
+    /// Its own cost changes by N after each play ("Reduce this card's cost by 1").
+    SelfCost(i32),
+    /// Its own cost drops to 0 after it's played.
+    SelfCostZero,
+    /// Its own cost changes by N each time it's drawn.
+    CostOnDraw(i32),
+    /// Its damage grows by N each play, or each draw, this combat.
+    Grow(i32),
+    GrowOnDraw(i32),
+    /// Every card named so grows by N each play ("ALL Claw cards").
+    GrowNamed(String, i32),
+    /// Costs 0 while a condition holds.
+    FreeIf(Cond),
+    RetainHand,
+    /// No more draws this turn.
+    DrawLock,
+    /// Only N more cards this turn.
+    PlayLimit(i32),
+    DoubleEnergy,
+    /// Doubles the Block you have.
+    DoubleBlock,
+    /// Doubles Block gains this turn.
+    DoubleBlockGains,
+    /// No Block from cards for N turns.
+    BlockLock(i32),
+    /// Next turn, Attacks deal double damage.
+    AttacksDoubleNext,
+    /// Every card named so deals double damage from now on ("ALL Hang cards").
+    NamedDouble(String),
+    /// The named card deals double damage this turn.
+    NamedDoubleTurn(String),
+    /// Ends your turn.
+    EndTurn,
 }
 
 /// What a card's text does beyond its numbers, for the simulator.
@@ -1119,6 +1174,74 @@ pub struct CardText {
     pub bonus_if: Vec<(Cond, Bonus)>,
     /// It brings back a stuck Arrow ("Dislodge and draw 2 cards").
     pub dislodges: bool,
+    /// Rules it sets on costs, growth and the turn.
+    pub mods: Vec<CardMod>,
+}
+
+/// A sentence's rule on costs, growth or the turn, if it has one.
+fn card_mod(s: &[&str], ws: &[String]) -> Option<CardMod> {
+    let has = |p: &[&str]| s.windows(p.len()).any(|w| w == p);
+    let starts = |p: &[&str]| s.len() >= p.len() && s[..p.len()] == *p;
+    let after = |w: &str| s.iter().position(|x| *x == w).and_then(|i| s.get(i + 1)).and_then(|w| number(w));
+    Some(if starts(&["costs"]) && has(&["for", "each"]) && (has(&["less", "energy"]) || has(&["energy", "less"])) {
+        let n = s.get(1).and_then(|w| number(w))?;
+        let from = s.windows(2).position(|w| w == ["for", "each"])?;
+        CardMod::CostPer(count(&s[from..])?, n)
+    } else if starts(&["the", "next"]) && has(&["costs", "0"]) {
+        let you = s.iter().position(|w| *w == "you")?;
+        CardMod::NextFree(filter(&ws[2..you])?)
+    } else if has(&["in", "your", "hand", "cost"]) && has(&["less"]) && has(&["until", "played"]) {
+        CardMod::HandCheaper(filter(&ws[..1])?, after("cost")?)
+    } else if has(&["all", "cards", "in", "your", "hand", "are", "free"]) {
+        CardMod::HandFree
+    } else if starts(&["reduce", "the", "cost", "of", "all", "cards", "in", "your", "hand", "to"]) {
+        CardMod::HandCost(after("to")?)
+    } else if starts(&["cards", "cost", "an", "additional"]) {
+        CardMod::CostUp(after("additional")?)
+    } else if starts(&["reduce", "this", "card's", "cost", "to", "0"]) {
+        CardMod::SelfCostZero
+    } else if starts(&["reduce", "this", "card's", "cost", "by"]) && !has(&["whenever"]) {
+        CardMod::SelfCost(-after("by")?)
+    } else if starts(&["increase", "this", "card's", "cost", "by"])
+        || has(&["increase", "this", "card's", "cost", "by"])
+    {
+        CardMod::SelfCost(after("by")?)
+    } else if starts(&["whenever", "you", "draw", "this", "card"]) && has(&["reduce", "its", "cost", "by"]) {
+        CardMod::CostOnDraw(-after("by")?)
+    } else if starts(&["whenever", "you", "draw", "this", "card"]) && has(&["increase", "its", "damage", "by"]) {
+        CardMod::GrowOnDraw(after("by")?)
+    } else if starts(&["increase", "this", "card's", "damage", "by"]) {
+        CardMod::Grow(after("by")?)
+    } else if starts(&["increase", "the", "damage", "of", "all"]) {
+        CardMod::GrowNamed(s.get(5)?.to_string(), after("by")?)
+    } else if has(&["costs", "0", "energy", "if", "osty", "has", "attacked", "this", "turn"]) {
+        CardMod::FreeIf(Cond::OstyAttackedThisTurn)
+    } else if has(&["retain", "your", "hand", "this", "turn"]) {
+        CardMod::RetainHand
+    } else if has(&["cannot", "draw", "additional", "cards", "this", "turn"]) {
+        CardMod::DrawLock
+    } else if starts(&["you", "can", "only", "play"]) {
+        CardMod::PlayLimit(after("play")?)
+    } else if starts(&["double", "your", "energy"]) {
+        CardMod::DoubleEnergy
+    } else if starts(&["double", "your", "block", "gain", "this", "turn"]) {
+        CardMod::DoubleBlockGains
+    } else if starts(&["double", "your", "block"]) {
+        CardMod::DoubleBlock
+    } else if starts(&["you", "cannot", "gain", "block", "from", "cards", "for"]) {
+        CardMod::BlockLock(after("for")?)
+    } else if starts(&["next", "turn", "attacks", "deal", "double", "damage"]) {
+        CardMod::AttacksDoubleNext
+    } else if starts(&["double", "the", "damage", "all"]) {
+        CardMod::NamedDouble(s.get(4)?.to_string())
+    } else if has(&["deals", "double", "damage", "to", "the", "enemy", "this", "turn"]) {
+        let at = s.iter().position(|w| *w == "deals")?;
+        CardMod::NamedDoubleTurn(s[..at].join(" "))
+    } else if starts(&["end", "your", "turn"]) {
+        CardMod::EndTurn
+    } else {
+        return None;
+    })
 }
 
 /// The condition after "if" ("the enemy is Impaled", "you lost HP this turn").
@@ -1208,6 +1331,10 @@ fn count(s: &[&str]) -> Option<Count> {
         Count::HpLosses
     } else if has(&["he", "has", "attacked", "this", "turn"]) {
         Count::OstyAttacksThisTurn
+    } else if has(&["attack", "played", "this", "turn"]) {
+        Count::AttacksThisTurn
+    } else if has(&["skill", "played", "this", "turn"]) {
+        Count::SkillsThisTurn
     } else {
         return None;
     })
@@ -1261,6 +1388,10 @@ pub fn card_text(text: &str, orbs: &[Orb]) -> CardText {
         let s: Vec<&str> = ws.iter().map(String::as_str).collect();
         let has = |p: &[&str]| s.windows(p.len()).any(|w| w == p);
         let starts = |p: &[&str]| s.len() >= p.len() && s[..p.len()] == *p;
+        if let Some(m) = card_mod(&s, &ws) {
+            c.mods.push(m);
+            continue;
+        }
         // "Next turn, draw 2 cards", "At the start of the next 2 turns,
         // Channel 1 Lightning", "Gain 5 Block at the start of the next 2 turns".
         let next_n = s.windows(4).find(|w| w[..3] == ["of", "the", "next"]).and_then(|w| number(w[3]));
@@ -1432,6 +1563,9 @@ pub fn card_text(text: &str, orbs: &[Orb]) -> CardText {
         if has(&["is", "played", "an", "extra", "time"]) && starts(&["this", "turn", "your", "next"]) {
             c.next_extra = s.get(4).and_then(|w| card_type(w));
         }
+        if starts(&["the", "next"]) && has(&["is", "played", "an", "additional", "time"]) {
+            c.next_extra = s.get(2).and_then(|w| card_type(w));
+        }
         if has(&["for", "each", "card", "exhausted", "this", "combat"]) && s.contains(&"less") {
             c.cheaper_per_exhausted = true;
         }
@@ -1481,6 +1615,14 @@ fn passive(sentence: &str) -> Option<Passive> {
         return num_before("additional")
             .or_else(|| num_before("block"))
             .map(|n| Passive::ExtraBlock(CardFilter::Named("defend".into()), n));
+    }
+    if has(&["cards", "you", "play", "each", "turn", "are", "free"]) {
+        return s
+            .iter()
+            .position(|w| *w == "first")
+            .and_then(|i| s.get(i + 1))
+            .and_then(|w| number(w))
+            .map(Passive::FreeFirst);
     }
     if has(&["whenever", "you", "apply", "poison"]) && has(&["additional"]) {
         let after = s.iter().position(|w| *w == "additional").and_then(|i| s.get(i + 1)).and_then(|w| number(w));

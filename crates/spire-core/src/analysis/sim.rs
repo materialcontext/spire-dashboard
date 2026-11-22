@@ -26,8 +26,8 @@
 use crate::catalog::{Card, CardType, Catalog, Orb, OrbEffect, Target};
 use crate::ids::OrbId;
 use crate::mechanics::{
-    self, Bonus, CardFilter, CardText, Cond, Count, Counted, Debuff, Effect, ExhaustWhich, Mechanics, OrbPick, Passive,
-    Pile, Scaled, When,
+    self, Bonus, CardFilter, CardMod, CardText, Cond, Count, Counted, Debuff, Effect, ExhaustWhich, Mechanics, OrbPick,
+    Passive, Pile, Scaled, When,
 };
 use crate::playbook::{SimAssumptions, contains_ci};
 use crate::run::{DeckCard, RunState};
@@ -559,6 +559,7 @@ struct Mods {
     vulnerable_is: Option<i32>,
     poison_extra: i32,
     poison_bonus: i32,
+    free_first: i32,
     retain_hand: bool,
     conserve_energy: bool,
     free_skills: bool,
@@ -578,6 +579,7 @@ impl Mods {
             Passive::VulnerableIs(n) => self.vulnerable_is = Some(*n),
             Passive::PoisonExtraTicks(n) => self.poison_extra += n,
             Passive::PoisonBonus(n) => self.poison_bonus += n,
+            Passive::FreeFirst(n) => self.free_first += n,
             Passive::RetainHand => self.retain_hand = true,
             Passive::ConserveEnergy => self.conserve_energy = true,
             Passive::FreeSkills => self.free_skills = true,
@@ -748,6 +750,18 @@ struct Fight<'a> {
     ethereal_played: i32,
     made_total: i32,
     made_count: Vec<i32>,
+    /// Per play: cost changes for the combat, and until played.
+    cost_delta: Vec<i32>,
+    hand_delta: Vec<i32>,
+    /// "ALL Claw cards" growth, and "ALL Hang cards" doubling, by name.
+    named_grow: Vec<(String, i32)>,
+    named_double: Vec<(String, i32)>,
+    /// This turn's rules from cards.
+    now_rules: TurnRules,
+    /// Attacks deal double next turn (Shadow Step), and this turn.
+    double_next: bool,
+    /// Turns left with no Block from cards.
+    block_lock: i32,
     /// Per play: played yet this combat, and damage it has grown by.
     played_once: Vec<bool>,
     grown: Vec<i32>,
@@ -799,6 +813,24 @@ struct Fight<'a> {
     log: TurnLog,
 }
 
+/// Rules cards set for the rest of the turn.
+#[derive(Clone, Default)]
+struct TurnRules {
+    /// The next matching card costs 0 (one entry per card it applies to).
+    next_free: Vec<CardFilter>,
+    hand_free: bool,
+    hand_cost: Option<i32>,
+    cost_up: i32,
+    retain: bool,
+    draw_lock: bool,
+    /// Cards left to play, if limited.
+    plays_left: Option<i32>,
+    double_block: bool,
+    double_attacks: bool,
+    named_double: Vec<String>,
+    end: bool,
+}
+
 /// What one fight produced: per-turn logs, turnover and first-draw turns.
 struct FightResult {
     turns: Vec<TurnLog>,
@@ -839,6 +871,13 @@ impl<'a> Fight<'a> {
             ethereal_played: 0,
             made_total: 0,
             made_count: vec![0; s.plays.len()],
+            cost_delta: vec![0; s.plays.len()],
+            hand_delta: vec![0; s.plays.len()],
+            named_grow: Vec::new(),
+            named_double: Vec::new(),
+            now_rules: TurnRules::default(),
+            double_next: false,
+            block_lock: 0,
             played_once: vec![false; s.plays.len()],
             grown: vec![0; s.plays.len()],
             hp_losses: 0,
@@ -881,6 +920,9 @@ impl<'a> Fight<'a> {
     }
 
     fn draw_cards(&mut self, n: i32) {
+        if self.now_rules.draw_lock {
+            return;
+        }
         for _ in 0..n.max(0) {
             if self.hand.len() >= self.s.rules.max_hand as usize {
                 return;
@@ -908,6 +950,13 @@ impl<'a> Fight<'a> {
             }
             self.hand.push(i);
             self.drawn_combat += 1;
+            for m in &p.text.mods {
+                match m {
+                    CardMod::CostOnDraw(n) => self.cost_delta[i] += n,
+                    CardMod::GrowOnDraw(n) => self.grown[i] += n,
+                    _ => {}
+                }
+            }
             self.on(Event::Draw(i));
             self.on(Event::Count(Counted::CardsDrawn, 1));
         }
@@ -1147,9 +1196,20 @@ impl<'a> Fight<'a> {
             .filter(|sc| matches!(sc.into, Scaled::DamagePer | Scaled::DamageAdd))
             .map(|sc| sc.per * self.count(&sc.count, p))
             .sum();
-        let damage = (p.now.damage + forged + pile + self.grown[p.index] + first + scaled).max(0);
-        let double = p.text.bonus_if.iter().any(|&(c, b)| b == Bonus::DoubleDamage && self.cond(c, p));
-        if double { damage * 2 } else { damage }
+        let named: i32 = self.named_grow.iter().filter(|(n, _)| p.name.contains(n.as_str())).map(|(_, g)| g).sum();
+        let damage = (p.now.damage + forged + pile + self.grown[p.index] + first + scaled + named).max(0);
+        let mut mult =
+            self.named_double.iter().filter(|(n, _)| p.name.contains(n.as_str())).map(|(_, f)| *f).product::<i32>();
+        if p.text.bonus_if.iter().any(|&(c, b)| b == Bonus::DoubleDamage && self.cond(c, p)) {
+            mult *= 2;
+        }
+        if self.now_rules.named_double.contains(&p.name) {
+            mult *= 2;
+        }
+        if self.now_rules.double_attacks && p.card_type == CardType::Attack {
+            mult *= 2;
+        }
+        damage * mult
     }
 
     /// What a card counts, now.
@@ -1221,6 +1281,7 @@ impl<'a> Fight<'a> {
                 self.stuck > 0 && self.hits_toward_return + p.now.hits >= self.s.rules.arrow_return_hits.max(1) as i32
             }
             Cond::Kill => false,
+            Cond::OstyAttackedThisTurn => self.osty_turn > 0,
         }
     }
 
@@ -1509,7 +1570,11 @@ impl<'a> Fight<'a> {
             let dexterity = self.dexterity + self.temp[1];
             // Stretch goes into the first gain only.
             let each = (e.block + dexterity + extra).max(0);
-            self.log.block += (each * e.block_times.max(1) * times + stretch) as f32;
+            let gained = (each * e.block_times.max(1) * times + stretch) as f32;
+            // Panic Button: no Block from cards; Shadowmeld: double gains.
+            if self.block_lock == 0 {
+                self.log.block += if self.now_rules.double_block { gained * 2.0 } else { gained };
+            }
             self.on(Event::GainBlock);
         }
         self.vulnerable += e.vulnerable * times;
@@ -1557,12 +1622,73 @@ impl<'a> Fight<'a> {
     }
 
     fn cost_of(&self, p: &Play) -> Option<i32> {
-        if self.mods.free_skills && p.card_type == CardType::Skill {
-            return p.cost.map(|_| 0);
+        let base = p.cost?;
+        let free = (self.mods.free_skills && p.card_type == CardType::Skill)
+            || self.now_rules.hand_free
+            || self.played_this_turn < self.mods.free_first as u32
+            || self.now_rules.next_free.iter().any(|f| matches(f, p))
+            || p.text.mods.iter().any(|m| matches!(m, CardMod::FreeIf(c) if self.cond(*c, p)));
+        if free {
+            return Some(0);
         }
         // "Costs 1 less Energy for each card Exhausted this combat."
         let less = if p.text.cheaper_per_exhausted { self.exhausted.len() as i32 } else { 0 };
-        p.cost.map(|c| (c - less).max(0))
+        let per: i32 = p
+            .text
+            .mods
+            .iter()
+            .filter_map(|m| if let CardMod::CostPer(c, n) = m { Some(n * self.count(c, p)) } else { None })
+            .sum();
+        let mut cost = base - less - per + self.cost_delta[p.index] + self.hand_delta[p.index] + self.now_rules.cost_up;
+        if let Some(cap) = self.now_rules.hand_cost {
+            cost = cost.min(cap);
+        }
+        Some(cost.max(0))
+    }
+
+    /// A card's rules on the turn, costs and growth, as it's played.
+    fn card_mods(&mut self, p: &Play) {
+        for m in &p.text.mods {
+            match m {
+                CardMod::NextFree(f) => self.now_rules.next_free.push(f.clone()),
+                CardMod::HandCheaper(f, n) => {
+                    for k in 0..self.hand.len() {
+                        let i = self.hand[k];
+                        if matches(f, &self.s.plays[i]) {
+                            self.hand_delta[i] -= n;
+                        }
+                    }
+                }
+                CardMod::HandFree => self.now_rules.hand_free = true,
+                CardMod::HandCost(n) => self.now_rules.hand_cost = Some(*n),
+                CardMod::CostUp(n) => self.now_rules.cost_up += n,
+                CardMod::SelfCost(n) => self.cost_delta[p.index] += n,
+                CardMod::SelfCostZero => self.cost_delta[p.index] = -p.cost.unwrap_or(0),
+                CardMod::Grow(n) => self.grown[p.index] += n,
+                CardMod::GrowNamed(name, n) => match self.named_grow.iter_mut().find(|(m, _)| m == name) {
+                    Some(g) => g.1 += n,
+                    None => self.named_grow.push((name.clone(), *n)),
+                },
+                CardMod::RetainHand => self.now_rules.retain = true,
+                CardMod::DrawLock => self.now_rules.draw_lock = true,
+                CardMod::PlayLimit(n) => self.now_rules.plays_left = Some(*n),
+                CardMod::DoubleEnergy => self.energy *= 2,
+                CardMod::DoubleBlock => {
+                    self.log.block *= 2.0;
+                    self.on(Event::GainBlock);
+                }
+                CardMod::DoubleBlockGains => self.now_rules.double_block = true,
+                CardMod::BlockLock(n) => self.block_lock = self.block_lock.max(*n),
+                CardMod::AttacksDoubleNext => self.double_next = true,
+                CardMod::NamedDouble(name) => match self.named_double.iter_mut().find(|(m, _)| m == name) {
+                    Some(g) => g.1 *= 2,
+                    None => self.named_double.push((name.clone(), 2)),
+                },
+                CardMod::NamedDoubleTurn(name) => self.now_rules.named_double.push(name.clone()),
+                CardMod::EndTurn => self.now_rules.end = true,
+                CardMod::CostPer(..) | CardMod::CostOnDraw(_) | CardMod::GrowOnDraw(_) | CardMod::FreeIf(_) => {}
+            }
+        }
     }
 
     /// How much a play is worth to the current lean, per energy. Setup and
@@ -1820,6 +1946,14 @@ impl<'a> Fight<'a> {
         let times = self.x_of(p);
         let paid = if p.x { self.energy } else { self.cost_of(p).unwrap_or(0) };
         self.energy -= paid;
+        // "The next Attack you play costs 0" is spent by this card.
+        if let Some(k) = self.now_rules.next_free.iter().position(|f| matches(f, p)) {
+            self.now_rules.next_free.remove(k);
+        }
+        self.hand_delta[p.index] = 0;
+        if let Some(left) = &mut self.now_rules.plays_left {
+            *left -= 1;
+        }
         if paid > 0 {
             self.on(Event::Count(Counted::EnergySpent, paid));
         }
@@ -1893,6 +2027,7 @@ impl<'a> Fight<'a> {
         self.grown[p.index] += p.grows;
         self.played_combat += 1;
         self.energy_turn += paid;
+        self.card_mods(p);
         match p.card_type {
             CardType::Attack => self.attacks_turn += 1,
             CardType::Skill => self.skills_turn += 1,
@@ -2004,6 +2139,9 @@ impl<'a> Fight<'a> {
             let Some((h, _)) = best else { break };
             let i = self.hand.remove(h);
             self.play(i);
+            if self.now_rules.end || self.now_rules.plays_left.is_some_and(|n| n <= 0) {
+                break;
+            }
         }
         // Cards left waiting on an Arrow or on Stars.
         for &i in &self.hand {
@@ -2029,6 +2167,7 @@ impl<'a> Fight<'a> {
         self.played_this_turn = 0;
         self.attacked_this_turn = false;
         self.lost_hp_this_turn = false;
+        self.now_rules = TurnRules { double_attacks: std::mem::take(&mut self.double_next), ..TurnRules::default() };
         (self.attacks_turn, self.skills_turn, self.energy_turn, self.osty_turn) = (0, 0, 0, 0);
         self.doom_turn = false;
         for (k, rule) in self.rules.iter().enumerate() {
@@ -2127,9 +2266,11 @@ impl<'a> Fight<'a> {
             .sum::<i32>() as f32;
         let hand = std::mem::take(&mut self.hand);
         let setup: &'a Setup<'a> = self.s;
+        let keep_all = self.now_rules.retain;
+        self.block_lock = (self.block_lock - 1).max(0);
         for i in hand {
             let p = &setup.plays[i];
-            if p.retain || (self.mods.retain_hand && !p.ethereal) {
+            if p.retain || ((self.mods.retain_hand || keep_all) && !p.ethereal) {
                 self.hand.push(i);
             } else if p.ethereal {
                 self.exhaust(i);

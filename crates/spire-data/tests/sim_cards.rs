@@ -333,3 +333,49 @@ fn conditions_and_counts_play_out() {
     assert!(alone.turns[0].damage.mean <= 24.0 + 0.1, "one hit each: {}", alone.turns[0].damage.mean);
     assert!(with_bash.turns[2].damage.mean > alone.turns[2].damage.mean);
 }
+
+#[test]
+fn cost_growth_and_turn_rules_are_read() {
+    use spire_core::catalog::CardType;
+    use spire_core::mechanics::{CardFilter, CardMod, Cond, Count};
+    let mods = |id: &str| of(id).text.mods;
+    assert_eq!(mods("STOMP"), vec![CardMod::CostPer(Count::AttacksThisTurn, 1)]);
+    assert_eq!(mods("PINPOINT"), vec![CardMod::CostPer(Count::SkillsThisTurn, 1)]);
+    assert_eq!(mods("BANSHEES_CRY"), vec![CardMod::CostPer(Count::EtherealPlayed, 2)]);
+    assert_eq!(mods("UNRELENTING"), vec![CardMod::NextFree(CardFilter::Type(CardType::Attack))]);
+    assert_eq!(mods("VEILPIERCER"), vec![CardMod::NextFree(CardFilter::Keyword("ethereal".into()))]);
+    assert_eq!(mods("EXPECT_A_FIGHT"), vec![CardMod::HandCheaper(CardFilter::Type(CardType::Attack), 1)]);
+    assert_eq!(mods("BULLET_TIME"), vec![CardMod::DrawLock, CardMod::HandFree]);
+    assert_eq!(mods("ENLIGHTENMENT"), vec![CardMod::HandCost(1)]);
+    assert_eq!(mods("BORROWED_TIME"), vec![CardMod::CostUp(1)]);
+    assert_eq!(mods("MOMENTUM_STRIKE"), vec![CardMod::SelfCostZero]);
+    assert_eq!(mods("UP_MY_SLEEVE"), vec![CardMod::SelfCost(-1)]);
+    assert_eq!(mods("MODDED"), vec![CardMod::SelfCost(1)]);
+    assert_eq!(mods("KINGLY_KICK"), vec![CardMod::CostOnDraw(-1)]);
+    assert_eq!(mods("KINGLY_PUNCH"), vec![CardMod::GrowOnDraw(4)]);
+    assert_eq!(mods("RAMPAGE"), vec![CardMod::Grow(5)]);
+    assert_eq!(mods("CLAW"), vec![CardMod::GrowNamed("claw".into(), 2)]);
+    assert_eq!(mods("FLATTEN"), vec![CardMod::FreeIf(Cond::OstyAttackedThisTurn)]);
+    assert_eq!(mods("EXPERTISE"), vec![CardMod::RetainHand]);
+    assert_eq!(mods("BATTLE_TRANCE"), vec![CardMod::DrawLock]);
+    assert_eq!(mods("ENCORE"), vec![CardMod::PlayLimit(1)]);
+    assert_eq!(mods("DOUBLE_ENERGY"), vec![CardMod::DoubleEnergy]);
+    assert_eq!(mods("ENTRENCH"), vec![CardMod::DoubleBlock]);
+    assert_eq!(mods("SHADOWMELD"), vec![CardMod::DoubleBlockGains]);
+    assert_eq!(mods("PANIC_BUTTON"), vec![CardMod::BlockLock(2)]);
+    assert_eq!(mods("SHADOW_STEP"), vec![CardMod::AttacksDoubleNext]);
+    assert_eq!(mods("HANG"), vec![CardMod::NamedDouble("hang".into())]);
+    assert_eq!(mods("CONQUEROR"), vec![CardMod::NamedDoubleTurn("sovereign blade".into())]);
+    assert_eq!(of("SIGNAL_BOOST").text.next_extra, Some(CardType::Power));
+}
+
+#[test]
+fn growth_and_costs_play_out() {
+    // Claw grows every Claw; Rampage grows itself.
+    let claws = fight("DEFECT", &[("CLAW", 10)], &[]);
+    assert!(claws.turns[4].damage.mean > claws.turns[0].damage.mean + 10.0);
+    // Stomp gets cheaper with each Attack played first.
+    let stomp = fight("IRONCLAD", &[("STOMP", 3), ("ANGER", 7)], &[]);
+    let plain = fight("IRONCLAD", &[("STOMP", 3), ("WOUND", 7)], &[]);
+    assert!(total(&stomp, true) > total(&plain, true) + 20.0);
+}
