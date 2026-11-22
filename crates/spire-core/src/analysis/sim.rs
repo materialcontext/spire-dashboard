@@ -316,6 +316,9 @@ struct Play {
     first: FirstPlay,
     /// Damage it gains each time it's played this combat (Momentum).
     grows: i32,
+    /// Deck counts its numbers use: the deck's own cards, counted once per
+    /// fight, and the made cards that also count once they are made.
+    deck_counts: Vec<(Count, i32, Vec<usize>)>,
     /// Played for free at the start of combat (Imbued).
     imbued: bool,
     /// Played for free when discarded.
@@ -510,6 +513,7 @@ fn play_of(card: &Card, upgraded: bool, group: usize, orbs: &[&Orb], all_orbs: &
         replays: 0,
         first: FirstPlay::default(),
         grows: 0,
+        deck_counts: Vec::new(),
         imbued: false,
         sly: card.has_keyword("Sly", upgraded),
         melodies: Melody::of_card(&card.name),
@@ -550,6 +554,18 @@ pub fn reading(card: &Card, upgraded: bool, catalog: &Catalog) -> Reading {
         text: p.text,
         mech: p.mech,
     }
+}
+
+/// A count over the deck's cards, or `None` for a count of fight state.
+fn deck_count(c: &Count, p: &Play, deck: &[Play]) -> Option<usize> {
+    Some(match c {
+        Count::DeckNamed(names) => deck.iter().filter(|q| names.iter().any(|n| q.name.contains(n.as_str()))).count(),
+        Count::DeckStarCost => deck.iter().filter(|q| q.star_cost > 0 || q.x_stars).count(),
+        Count::DeckOtherOsty => {
+            deck.iter().filter(|q| q.now.osty > 0 && q.card_type == CardType::Attack && q.index != p.index).count()
+        }
+        _ => return None,
+    })
 }
 
 fn matches(f: &CardFilter, p: &Play) -> bool {
@@ -1352,15 +1368,24 @@ impl<'a> Fight<'a> {
 
     /// What a card counts, now.
     fn count(&self, c: &Count, p: &Play) -> i32 {
-        let deck = &self.s.plays[..self.s.deck_len];
+        if deck_count(c, p, &[]).is_some() {
+            // The deck's cards were counted at setup (`Play::deck_counts`);
+            // made cards count as many times as they were made.
+            return match p.deck_counts.iter().find(|(k, _, _)| k == c) {
+                Some((_, n, made)) => n + made.iter().map(|&i| self.made_count[i]).sum::<i32>(),
+                None => {
+                    let plays = &self.s.plays;
+                    let deck = deck_count(c, p, &plays[..self.s.deck_len]).unwrap_or(0) as i32;
+                    let made = (0..plays.len())
+                        .filter(|&i| deck_count(c, p, std::slice::from_ref(&plays[i])) == Some(1))
+                        .map(|i| self.made_count[i])
+                        .sum::<i32>();
+                    deck + made
+                }
+            };
+        }
         let n = match c {
-            Count::DeckNamed(names) => {
-                deck.iter().filter(|q| names.iter().any(|n| q.name.contains(n.as_str()))).count()
-            }
-            Count::DeckStarCost => deck.iter().filter(|q| q.star_cost > 0 || q.x_stars).count(),
-            Count::DeckOtherOsty => {
-                deck.iter().filter(|q| q.now.osty > 0 && q.card_type == CardType::Attack && q.index != p.index).count()
-            }
+            Count::DeckNamed(_) | Count::DeckStarCost | Count::DeckOtherOsty => 0,
             Count::EnemyVulnerable => self.vulnerable.max(0) as usize,
             Count::EnemyDoom => self.doom.max(0) as usize,
             Count::EnemyPoison => self.poison.max(0) as usize,
@@ -2265,7 +2290,17 @@ impl<'a> Fight<'a> {
     /// Draw Pile, the best first.
     fn fetch(&mut self, from: Pile, to: Pile, n: i32, filter: &CardFilter) {
         let plays = self.s.plays;
-        let mut left = if n < 0 { usize::MAX } else { n as usize };
+        let fits =
+            |pile: &[usize]| pile.iter().filter(|&&i| matches(filter, &plays[i]) && plays[i].cost.is_some()).count();
+        // "Every" card means those there now: with a full hand they go back
+        // to the discard pile, and must not be taken again.
+        let mut left = if n >= 0 {
+            n as usize
+        } else if from == Pile::Draw {
+            fits(&self.draw)
+        } else {
+            fits(&self.discard)
+        };
         while left > 0 {
             let pile = if from == Pile::Draw { &self.draw } else { &self.discard };
             let best = pile
@@ -2292,8 +2327,20 @@ impl<'a> Fight<'a> {
         }
         self.depth += 1;
         let plays = self.s.plays;
-        let all = n < 0;
-        let mut left = if all { usize::MAX } else { n as usize };
+        // "Every" card means those there now: a card played from a pile can
+        // land back in it.
+        let mut left = if n >= 0 {
+            n as usize
+        } else {
+            let pile: &[usize] = match from {
+                Source::Draw => &self.draw,
+                Source::Discard => &self.discard,
+                Source::Hand => &self.hand,
+                Source::Exhaust => &self.exhausted,
+                Source::DrawTop | Source::HandCheapest => &[],
+            };
+            pile.iter().filter(|&&i| matches(filter, &plays[i])).count()
+        };
         while left > 0 {
             let i = match from {
                 Source::DrawTop => {
@@ -2794,6 +2841,30 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
                 _ => None,
             })
             .collect();
+    }
+    // The deck's own cards are counted once per card that needs them; cards
+    // made in the fight join the count as they are made.
+    let counts: Vec<Vec<(Count, i32, Vec<usize>)>> = plays
+        .iter()
+        .map(|p| {
+            let costs = p.text.mods.iter().filter_map(|m| if let CardMod::CostPer(c, _) = m { Some(c) } else { None });
+            p.text
+                .scale
+                .iter()
+                .map(|sc| &sc.count)
+                .chain(costs)
+                .filter_map(|c| {
+                    let n = deck_count(c, p, &plays[..deck_len])?;
+                    let made = (0..plays.len())
+                        .filter(|&i| deck_count(c, p, std::slice::from_ref(&plays[i])) == Some(1))
+                        .collect();
+                    Some((c.clone(), n as i32, made))
+                })
+                .collect()
+        })
+        .collect();
+    for (p, c) in plays.iter_mut().zip(counts) {
+        p.deck_counts = c;
     }
     let mut relic_mods = Mods::default();
     for (_, m) in &relics {

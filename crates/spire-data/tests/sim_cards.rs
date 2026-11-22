@@ -525,3 +525,11 @@ fn conditions_and_hand_choices_are_not_actions() {
     let ring = read(&cat().relics[&spire_core::ids::RelicId::new("RAINBOW_RING")].text, &[], false);
     assert!(ring.triggers.is_empty() && ring.unread.len() == 1);
 }
+
+#[test]
+fn every_card_fetches_end_with_a_full_hand() {
+    // All for One returns every 0-cost card from the discard pile; with a
+    // full hand they go back there and must not be taken again.
+    let sim = fight("DEFECT", &[("ALL_FOR_ONE", 4), ("CLAW", 12), ("GO_FOR_THE_EYES", 6), ("BEAM_CELL", 6)], &[]);
+    assert!(sim.turns[3].damage.mean > 0.0);
+}
