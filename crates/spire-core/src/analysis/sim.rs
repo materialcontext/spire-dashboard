@@ -23,11 +23,11 @@
 //! your Hand") and random effects. The numbers are for comparing
 //! decks and spotting gaps, not for predicting a fight.
 
-use crate::catalog::{Card, CardType, Catalog, Orb, OrbEffect, Target};
+use crate::catalog::{Card, CardType, Catalog, Orb, OrbEffect, Rarity, Target};
 use crate::ids::OrbId;
 use crate::mechanics::{
-    self, Bonus, CardFilter, CardMod, CardText, Cond, Count, Counted, Debuff, Effect, ExhaustWhich, Mechanics, OrbPick,
-    Passive, Pile, Scaled, When,
+    self, Bonus, CardFilter, CardMod, CardText, Cond, Count, Counted, Debuff, Effect, ExhaustWhich, Mechanics, Melody,
+    OrbPick, Passive, Pile, Pool, Scaled, Source, When,
 };
 use crate::playbook::{SimAssumptions, contains_ci};
 use crate::run::{DeckCard, RunState};
@@ -313,6 +313,10 @@ struct Play {
     grows: i32,
     /// Played for free at the start of combat (Imbued).
     imbued: bool,
+    /// Played for free when discarded.
+    sly: bool,
+    /// Melodies it gives when played.
+    melodies: Vec<Melody>,
 }
 
 /// What a card does extra the first time it's played each combat.
@@ -438,6 +442,9 @@ fn play_of(card: &Card, upgraded: bool, group: usize, orbs: &[&Orb], all_orbs: &
     if text.scale.iter().any(|sc| sc.into == Scaled::DamagePer) {
         e.damage = 0;
     }
+    if text.scale.iter().any(|sc| sc.into == Scaled::Block && sc.per > 1) {
+        e.block = 0;
+    }
     // Energy next turn is `energy_next`; the rest of "later" runs as written.
     for (_, es) in &mut text.later {
         es.retain(|e| !matches!(e, Effect::Energy(_)));
@@ -499,6 +506,8 @@ fn play_of(card: &Card, upgraded: bool, group: usize, orbs: &[&Orb], all_orbs: &
         first: FirstPlay::default(),
         grows: 0,
         imbued: false,
+        sly: card.has_keyword("Sly", upgraded),
+        melodies: Melody::of_card(&card.name),
     }
 }
 
@@ -546,6 +555,9 @@ fn matches(f: &CardFilter, p: &Play) -> bool {
         CardFilter::Named(n) => p.name.contains(n.as_str()),
         CardFilter::Upgraded(t) => p.upgraded && p.card_type == *t,
         CardFilter::Keyword(k) => k == "ethereal" && p.ethereal || k == "retain" && p.retain,
+        CardFilter::ZeroCost => p.cost == Some(0),
+        CardFilter::Shooter => p.shoots,
+        CardFilter::AnyNamed(names) => names.iter().any(|n| p.name.contains(n.as_str())),
     }
 }
 
@@ -669,6 +681,8 @@ enum Event {
         gain: bool,
         n: i32,
     },
+    Melody(Melody),
+    AllMelodies,
     /// An orb evoked (an index into the orb kinds).
     Evoke(usize),
     HpLoss,
@@ -699,6 +713,8 @@ struct Setup<'a> {
     forged_card: Option<usize>,
     /// Made cards by the name the text uses ("shivs", "soul").
     made: Vec<(String, usize)>,
+    /// Random-card pools the deck draws on, as plays outside the deck.
+    pools: Vec<(Pool, Vec<usize>)>,
     /// What setup is worth per point: Aim by the deck's Shoot cards (their
     /// mean multiplier), Vigor by its attacks, Stretch by its Block cards;
     /// 0 when the deck has nothing to spend it on. It lasts until used, so
@@ -736,6 +752,12 @@ struct Fight<'a> {
     this_turn: Vec<bool>,
     /// The enemy's Doom.
     doom: i32,
+    /// Cards that come back to the hand at the start of next turn.
+    returning: Vec<usize>,
+    /// Osty's HP (the sum of Summons; nothing hits him here) and the
+    /// Melodies held (Wah, Cho, Ki).
+    osty_hp: i32,
+    melodies: [bool; 3],
     /// This turn: Attacks and Skills played, energy spent, Osty's attacks,
     /// and whether Doom was applied.
     attacks_turn: i32,
@@ -861,6 +883,9 @@ impl<'a> Fight<'a> {
             fired: vec![false; s.relic_rules.len()],
             this_turn: vec![false; s.relic_rules.len()],
             doom: 0,
+            returning: Vec::new(),
+            osty_hp: 0,
+            melodies: [false; 3],
             attacks_turn: 0,
             skills_turn: 0,
             energy_turn: 0,
@@ -1024,6 +1049,8 @@ impl<'a> Fight<'a> {
                 }
             }
             (When::OnEvoke(o), Event::Evoke(orb)) => i32::from(o.as_ref().is_none_or(|o| *o == self.s.orbs[orb].id)),
+            (When::OnMelody(want), Event::Melody(m)) => i32::from(want.is_none_or(|w| w == m)),
+            (When::OnAllMelodies, Event::AllMelodies) => 1,
             (When::EveryPlays { filter, n, .. }, Event::Played(i)) if matches(filter, &plays[i]) => {
                 self.counters[k] += 1;
                 let hit = self.counters[k] >= *n as i32;
@@ -1139,7 +1166,16 @@ impl<'a> Fight<'a> {
                 self.gain(Store::Stars, *n);
                 r(self, Resource::Stars, *n);
             }
-            Effect::Summon(n) => r(self, Resource::Summon, *n),
+            Effect::Summon(n) => {
+                self.osty_hp += n;
+                r(self, Resource::Summon, *n);
+            }
+            Effect::OstyDies => self.osty_hp = 0,
+            Effect::Fetch { from, to, n, filter } => self.fetch(*from, *to, *n, filter),
+            Effect::AutoPlay { from, n, filter, exhaust } => self.autoplay(*from, *n, filter, *exhaust),
+            Effect::MakeRandom { pool, n, pile, free } => self.make_random(pool, *n, *pile, *free),
+            Effect::Discard(n) => self.discard_chosen(*n),
+            Effect::Exhaust { n, random, from } => self.exhaust_chosen(*n, *random, *from),
             Effect::Channel(orb, n) => {
                 if let Some(o) = self.s.orbs.iter().position(|x| x.id == *orb) {
                     for _ in 0..*n {
@@ -1189,13 +1225,8 @@ impl<'a> Fight<'a> {
             n * counted as i32
         });
         let first = if self.played_once[p.index] { 0 } else { p.first.damage };
-        let scaled: i32 = p
-            .text
-            .scale
-            .iter()
-            .filter(|sc| matches!(sc.into, Scaled::DamagePer | Scaled::DamageAdd))
-            .map(|sc| sc.per * self.count(&sc.count, p))
-            .sum();
+        // An Osty card's scaling is his (see `osty_of`).
+        let scaled = if p.now.osty > 0 { 0 } else { self.scaled_damage(p) };
         let named: i32 = self.named_grow.iter().filter(|(n, _)| p.name.contains(n.as_str())).map(|(_, g)| g).sum();
         let damage = (p.now.damage + forged + pile + self.grown[p.index] + first + scaled + named).max(0);
         let mut mult =
@@ -1210,6 +1241,102 @@ impl<'a> Fight<'a> {
             mult *= 2;
         }
         damage * mult
+    }
+
+    /// "N additional damage for each…" and the like, now.
+    fn scaled_damage(&self, p: &Play) -> i32 {
+        p.text
+            .scale
+            .iter()
+            .filter(|sc| matches!(sc.into, Scaled::DamagePer | Scaled::DamageAdd))
+            .map(|sc| sc.per * self.count(&sc.count, p))
+            .sum()
+    }
+
+    /// Osty's damage for an Osty card, with its scaling (Unleash: plus his HP).
+    fn osty_of(&self, p: &Play) -> i32 {
+        p.now.osty + self.scaled_damage(p)
+    }
+
+    /// Discards from the hand; a Sly card is played for free.
+    fn discard_from_hand(&mut self, i: usize) {
+        self.on(Event::Discard);
+        if self.s.plays[i].sly {
+            self.play_free(i);
+        } else {
+            self.discard.push(i);
+        }
+    }
+
+    /// Plays a card without paying for it.
+    fn play_free(&mut self, i: usize) {
+        let p = &self.s.plays[i];
+        let refund = if p.x { 0 } else { self.cost_of(p).unwrap_or(0) };
+        let stars = p.star_cost;
+        self.energy += refund;
+        self.stars += stars;
+        self.play(i);
+    }
+
+    /// Discards N cards of your choice: Sly cards first (they play for
+    /// free), then dead cards, then the least useful.
+    fn discard_chosen(&mut self, n: i32) {
+        for _ in 0..n.max(0) {
+            let Some(k) = self.least_wanted(true) else { return };
+            let i = self.hand.remove(k);
+            self.discard_from_hand(i);
+        }
+    }
+
+    /// Exhausts N cards: dead cards first, then the least useful; or at random.
+    fn exhaust_chosen(&mut self, n: i32, random: bool, from: Pile) {
+        for _ in 0..n.max(0) {
+            let len = if from == Pile::Draw { self.draw.len() } else { self.hand.len() };
+            if len == 0 {
+                return;
+            }
+            let k = if random {
+                (self.rng.next() % len as u64) as usize
+            } else if from == Pile::Draw {
+                self.draw.iter().position(|&i| self.s.plays[i].cost.is_none()).unwrap_or(len - 1)
+            } else {
+                match self.least_wanted(false) {
+                    Some(k) => k,
+                    None => return,
+                }
+            };
+            let i = if from == Pile::Draw { self.draw.remove(k) } else { self.hand.remove(k) };
+            self.exhaust(i);
+        }
+    }
+
+    /// The hand card to give up: a Sly card (when discarding), a dead
+    /// card, or the one worth least to play.
+    fn least_wanted(&self, sly_first: bool) -> Option<usize> {
+        let plays = self.s.plays;
+        if sly_first && let Some(k) = self.hand.iter().position(|&i| plays[i].sly) {
+            return Some(k);
+        }
+        if let Some(k) = self.hand.iter().position(|&i| plays[i].cost.is_none()) {
+            return Some(k);
+        }
+        self.hand
+            .iter()
+            .enumerate()
+            .map(|(k, &i)| (k, self.score(&plays[i], Lean::Damage).max(self.score(&plays[i], Lean::Block))))
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(k, _)| k)
+    }
+
+    /// Gains a Melody: its triggers, and "every Melody" when the set completes.
+    fn gain_melody(&mut self, m: Melody) {
+        let k = Melody::ALL.iter().position(|x| *x == m).unwrap_or(0);
+        let had_all = self.melodies.iter().all(|h| *h);
+        self.melodies[k] = true;
+        self.on(Event::Melody(m));
+        if !had_all && self.melodies.iter().all(|h| *h) {
+            self.on(Event::AllMelodies);
+        }
     }
 
     /// What a card counts, now.
@@ -1259,6 +1386,8 @@ impl<'a> Fight<'a> {
             Count::Block => self.log.block as usize,
             Count::HpLosses => self.hp_losses as usize,
             Count::OstyAttacksThisTurn => self.osty_turn as usize,
+            Count::Melodies => self.melodies.iter().filter(|h| **h).count(),
+            Count::OstyHp => self.osty_hp.max(0) as usize,
         };
         n as i32
     }
@@ -1282,6 +1411,8 @@ impl<'a> Fight<'a> {
             }
             Cond::Kill => false,
             Cond::OstyAttackedThisTurn => self.osty_turn > 0,
+            Cond::OstyAlive => self.osty_hp > 0,
+            Cond::HaveMelody(w, c, k) => (w && self.melodies[0]) || (c && self.melodies[1]) || (k && self.melodies[2]),
         }
     }
 
@@ -1551,8 +1682,8 @@ impl<'a> Fight<'a> {
                 }
             }
         }
-        if e.osty > 0 {
-            let dealt = ((e.osty + self.mods.extra_osty) * e.hits * times) as f32;
+        if e.osty > 0 && self.osty_hp > 0 {
+            let dealt = ((self.osty_of(p) + self.mods.extra_osty) * e.hits * times) as f32;
             self.log.damage += dealt;
             if p.all {
                 self.log.area += dealt;
@@ -1612,6 +1743,7 @@ impl<'a> Fight<'a> {
         let r = &mut self.log.resources;
         r[Resource::Stars as usize] += (e.stars * times) as f32;
         r[Resource::Summon as usize] += (e.summon * times) as f32;
+        self.osty_hp += e.summon * times;
         self.forge(e.forge * times);
         let r = &mut self.log.resources;
         r[Resource::Doom as usize] += (e.doom * times) as f32;
@@ -1639,7 +1771,14 @@ impl<'a> Fight<'a> {
             .iter()
             .filter_map(|m| if let CardMod::CostPer(c, n) = m { Some(n * self.count(c, p)) } else { None })
             .sum();
-        let mut cost = base - less - per + self.cost_delta[p.index] + self.hand_delta[p.index] + self.now_rules.cost_up;
+        let cheaper: i32 = p
+            .text
+            .mods
+            .iter()
+            .filter_map(|m| if let CardMod::CheaperIf(c, n) = m { self.cond(*c, p).then_some(*n) } else { None })
+            .sum();
+        let mut cost =
+            base - less - per - cheaper + self.cost_delta[p.index] + self.hand_delta[p.index] + self.now_rules.cost_up;
         if let Some(cap) = self.now_rules.hand_cost {
             cost = cost.min(cap);
         }
@@ -1686,7 +1825,11 @@ impl<'a> Fight<'a> {
                 },
                 CardMod::NamedDoubleTurn(name) => self.now_rules.named_double.push(name.clone()),
                 CardMod::EndTurn => self.now_rules.end = true,
-                CardMod::CostPer(..) | CardMod::CostOnDraw(_) | CardMod::GrowOnDraw(_) | CardMod::FreeIf(_) => {}
+                CardMod::CostPer(..)
+                | CardMod::CostOnDraw(_)
+                | CardMod::GrowOnDraw(_)
+                | CardMod::FreeIf(_)
+                | CardMod::CheaperIf(..) => {}
             }
         }
     }
@@ -1808,7 +1951,7 @@ impl<'a> Fight<'a> {
         // Evokes and orb triggers: what the orbs they take would give now.
         let orbs: f32 = p
             .text
-            .orb_actions
+            .actions
             .iter()
             .map(|e| {
                 let (pick, n, evoke) = match e {
@@ -1846,7 +1989,7 @@ impl<'a> Fight<'a> {
             .sum();
         // A Status or Curse that costs something is worth playing away.
         let clear = if matches!(p.card_type, CardType::Status | CardType::Curse) { 1.0 } else { 0.0 };
-        let value = main + side + setup + made + clear + orbs + this_turn;
+        let value = main + side + setup + made + clear + orbs + this_turn + self.actions_worth(p, times, lean);
         let cost = self.cost_of(p).unwrap_or(0).max(if p.x { self.energy } else { 0 });
         value / (cost as f32).max(0.5)
     }
@@ -1860,6 +2003,43 @@ impl<'a> Fight<'a> {
         } else {
             1
         }
+    }
+
+    /// What a card's pile actions are worth now: replays from the Exhaust
+    /// Pile by what they'd deal, other free plays and random cards at a
+    /// typical card's worth, fetches like a draw, and clearing dead or Sly
+    /// cards out of the hand.
+    fn actions_worth(&self, p: &Play, times: i32, lean: Lean) -> f32 {
+        const CARD: f32 = 6.0;
+        let plays = self.s.plays;
+        let hit = if lean == Lean::Damage { 1.0 } else { 0.1 };
+        p.text
+            .actions
+            .iter()
+            .map(|e| match e {
+                Effect::AutoPlay { from: Source::Exhaust, filter, .. } => self
+                    .exhausted
+                    .iter()
+                    .filter(|&&i| matches(filter, &plays[i]))
+                    .map(|&i| ((self.damage_of(&plays[i]) + self.strength) * plays[i].now.hits.max(1)) as f32 * hit)
+                    .sum::<f32>(),
+                Effect::AutoPlay { from: Source::DrawTop, n, .. } => (if *n < 0 { times } else { *n }) as f32 * CARD,
+                Effect::AutoPlay { n, .. } => (if *n < 0 { 2 } else { *n }) as f32 * CARD,
+                Effect::MakeRandom { n, free, .. } => {
+                    (if *n < 0 { times } else { *n }) as f32 * if *free { CARD * 1.5 } else { CARD }
+                }
+                Effect::Fetch { n, .. } => (if *n < 0 { 2 } else { *n }) as f32 * 3.0,
+                Effect::Discard(n) => {
+                    let sly = self.hand.iter().filter(|&&i| plays[i].sly).count() as f32;
+                    sly.min(*n as f32) * CARD + 0.5
+                }
+                Effect::Exhaust { n, .. } => {
+                    let dead = self.hand.iter().filter(|&&i| plays[i].cost.is_none()).count() as f32;
+                    dead.min(*n as f32) * 2.0 + 0.5
+                }
+                _ => 0.0,
+            })
+            .sum()
     }
 
     /// What an orb effect of this size is worth to the lean.
@@ -2028,6 +2208,9 @@ impl<'a> Fight<'a> {
         self.played_combat += 1;
         self.energy_turn += paid;
         self.card_mods(p);
+        for &m in &p.melodies {
+            self.gain_melody(m);
+        }
         match p.card_type {
             CardType::Attack => self.attacks_turn += 1,
             CardType::Skill => self.skills_turn += 1,
@@ -2056,7 +2239,125 @@ impl<'a> Fight<'a> {
         if exhausted {
             self.exhaust(i);
         } else if !p.power {
-            self.discard.push(i);
+            match p.text.returns {
+                Some(Pile::Hand) if self.hand.len() < self.s.rules.max_hand as usize => self.hand.push(i),
+                Some(Pile::Draw) => {
+                    self.discard.push(i);
+                    self.returning.push(i);
+                }
+                _ => self.discard.push(i),
+            }
+        }
+    }
+
+    /// Moves N matching cards (-1: all) from a pile to the hand or onto the
+    /// Draw Pile, the best first.
+    fn fetch(&mut self, from: Pile, to: Pile, n: i32, filter: &CardFilter) {
+        let plays = self.s.plays;
+        let mut left = if n < 0 { usize::MAX } else { n as usize };
+        while left > 0 {
+            let pile = if from == Pile::Draw { &self.draw } else { &self.discard };
+            let best = pile
+                .iter()
+                .enumerate()
+                .filter(|(_, i)| matches(filter, &plays[**i]) && plays[**i].cost.is_some())
+                .map(|(k, i)| (k, self.score(&plays[*i], Lean::Damage).max(self.score(&plays[*i], Lean::Block))))
+                .max_by(|a, b| a.1.total_cmp(&b.1));
+            let Some((k, _)) = best else { return };
+            let i = if from == Pile::Draw { self.draw.remove(k) } else { self.discard.remove(k) };
+            match to {
+                Pile::Hand if self.hand.len() < self.s.rules.max_hand as usize => self.hand.push(i),
+                Pile::Hand => self.discard.push(i),
+                _ => self.draw.push(i),
+            }
+            left -= 1;
+        }
+    }
+
+    /// Plays N matching cards for free from somewhere other than the hand's choice.
+    fn autoplay(&mut self, from: Source, n: i32, filter: &CardFilter, exhaust: bool) {
+        if self.depth >= MAX_DEPTH {
+            return;
+        }
+        self.depth += 1;
+        let plays = self.s.plays;
+        let all = n < 0;
+        let mut left = if all { usize::MAX } else { n as usize };
+        while left > 0 {
+            let i = match from {
+                Source::DrawTop => {
+                    if self.draw.is_empty() {
+                        self.rng.shuffle(&mut self.discard);
+                        self.draw.append(&mut self.discard);
+                        self.on(Event::Shuffle);
+                    }
+                    self.draw.pop()
+                }
+                Source::Draw | Source::Discard | Source::Hand => {
+                    let pile = match from {
+                        Source::Draw => &self.draw,
+                        Source::Discard => &self.discard,
+                        _ => &self.hand,
+                    };
+                    let fits: Vec<usize> = (0..pile.len())
+                        .filter(|&k| matches(filter, &plays[pile[k]]) && plays[pile[k]].cost.is_some())
+                        .collect();
+                    if fits.is_empty() {
+                        None
+                    } else {
+                        let k = fits[(self.rng.next() % fits.len() as u64) as usize];
+                        Some(match from {
+                            Source::Draw => self.draw.remove(k),
+                            Source::Discard => self.discard.remove(k),
+                            _ => self.hand.remove(k),
+                        })
+                    }
+                }
+                Source::HandCheapest => {
+                    let k = (0..self.hand.len())
+                        .filter(|&k| plays[self.hand[k]].cost.is_some())
+                        .min_by_key(|&k| self.cost_of(&plays[self.hand[k]]).unwrap_or(99));
+                    k.map(|k| self.hand.remove(k))
+                }
+                Source::Exhaust => {
+                    // They stay in the Exhaust Pile: played as copies.
+                    let fits: Vec<usize> =
+                        self.exhausted.iter().copied().filter(|&i| matches(filter, &plays[i])).collect();
+                    for i in fits.into_iter().take(left) {
+                        self.apply(&plays[i], 1);
+                    }
+                    break;
+                }
+            };
+            let Some(i) = i else { break };
+            if plays[i].cost.is_none() {
+                // An unplayable card can't be played: it goes where it would.
+                if exhaust { self.exhaust(i) } else { self.discard.push(i) }
+            } else {
+                self.play_free(i);
+                if exhaust && let Some(k) = self.discard.iter().rposition(|&d| d == i) {
+                    self.discard.remove(k);
+                    self.exhaust(i);
+                }
+            }
+            left -= 1;
+        }
+        self.depth -= 1;
+    }
+
+    /// Adds N random cards from a pool; free ones cost 0 until played.
+    fn make_random(&mut self, pool: &Pool, n: i32, pile: Pile, free: bool) {
+        let setup: &'a Setup<'a> = self.s;
+        let Some((_, cards)) = setup.pools.iter().find(|(p, _)| p == pool) else { return };
+        if cards.is_empty() {
+            return;
+        }
+        for _ in 0..n.max(0) {
+            let card = cards[(self.rng.next() % cards.len() as u64) as usize];
+            if free {
+                self.hand_delta[card] = -setup.plays[card].cost.unwrap_or(0);
+            }
+            self.make(card, 1, pile);
         }
     }
 
@@ -2065,10 +2366,13 @@ impl<'a> Fight<'a> {
     fn resolve(&mut self, p: &Play, times: i32) {
         let mut discarded = 0;
         if p.text.discards_hand {
-            discarded = self.hand.len() as i32;
-            self.discard.append(&mut self.hand);
-            for _ in 0..discarded {
-                self.on(Event::Discard);
+            let hand = std::mem::take(&mut self.hand);
+            discarded = hand.len() as i32;
+            for i in hand {
+                self.discard_from_hand(i);
+            }
+            if p.text.draw_per_discard {
+                self.draw_cards(discarded);
             }
         }
         let mut per = times;
@@ -2089,11 +2393,26 @@ impl<'a> Fight<'a> {
             }
         }
         self.apply(p, per);
-        for e in &p.text.orb_actions {
+        for e in &p.text.actions {
             match e {
                 Effect::Evoke(pick, n) => self.evoke(pick, if *n < 0 { times } else { *n }),
                 Effect::OrbPassive(pick, n) => self.orb_passive(pick, if *n < 0 { times } else { *n }),
+                Effect::Discard(n) => self.discard_chosen(*n),
+                Effect::Exhaust { n, random, from } => self.exhaust_chosen(*n, *random, *from),
+                Effect::OstyDies => self.osty_hp = 0,
+                Effect::AutoPlay { from, n, filter, exhaust } => {
+                    self.autoplay(*from, if *n < 0 && *from == Source::DrawTop { times } else { *n }, filter, *exhaust)
+                }
+                Effect::MakeRandom { pool, n, pile, free } => {
+                    self.make_random(pool, if *n < 0 { times } else { *n }, *pile, *free)
+                }
+                Effect::Fetch { from, to, n, filter } => self.fetch(*from, *to, *n, filter),
                 _ => {}
+            }
+        }
+        for &(c, b) in &p.text.bonus_if {
+            if b == Bonus::RetainHand && self.cond(c, p) {
+                self.now_rules.retain = true;
             }
         }
         if p.text.block_if_exhausted > 0 && self.exhausted_this_turn {
@@ -2194,6 +2513,12 @@ impl<'a> Fight<'a> {
             }
         }
         self.hand.extend(hand_before);
+        for i in std::mem::take(&mut self.returning) {
+            if let Some(k) = self.discard.iter().rposition(|&d| d == i) {
+                self.discard.remove(k);
+                self.hand.push(i);
+            }
+        }
         let extra = std::mem::take(&mut self.pending_draw);
         self.draw_cards(self.s.rules.hand_size as i32 + extra);
         // Imbued cards play themselves, free, as the combat starts.
@@ -2302,6 +2627,22 @@ impl<'a> Fight<'a> {
 
 // ---------------------------------------------------------------- entry
 
+/// Every random-card pool the deck's cards, powers and relics draw on.
+fn random_pools(plays: &[Play], relics: &[(String, Mechanics)]) -> Vec<Pool> {
+    let rules = |m: &Mechanics| m.triggers.iter().flat_map(|(_, es)| es.clone()).collect::<Vec<Effect>>();
+    plays
+        .iter()
+        .flat_map(|p| {
+            let mut es: Vec<Effect> = p.text.actions.clone();
+            es.extend(p.text.per_card.iter().cloned());
+            es.extend(rules(&p.mech));
+            es
+        })
+        .chain(relics.iter().flat_map(|(_, m)| rules(m)))
+        .filter_map(|e| if let Effect::MakeRandom { pool, .. } = e { Some(pool) } else { None })
+        .collect()
+}
+
 /// The card a text names ("shivs", "soul", "sweeping gaze"), singular or
 /// plural.
 fn named_card<'c>(catalog: &'c Catalog, name: &str) -> Option<&'c Card> {
@@ -2385,6 +2726,49 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
             made.push((name, plays.len() - 1));
         }
     }
+    // Random-card pools: a spread of the pool's cards, each once outside
+    // the deck, so "add a random Attack" plays a real card.
+    let class = state.character.as_ref().map(|c| c.as_str().to_lowercase()).unwrap_or_default();
+    let mut pools: Vec<(Pool, Vec<usize>)> = Vec::new();
+    for want in random_pools(&plays, &relics) {
+        if pools.iter().any(|(p, _)| *p == want) {
+            continue;
+        }
+        let mut cards: Vec<&Card> = catalog
+            .cards
+            .values()
+            .filter(|c| {
+                let playable = matches!(c.card_type, CardType::Attack | CardType::Skill | CardType::Power);
+                let kind = matches!(c.rarity, Rarity::Common | Rarity::Uncommon | Rarity::Rare);
+                let own = match &want {
+                    Pool::Colorless => c.color == "colorless",
+                    Pool::Tarot => false,
+                    _ => c.color == class,
+                };
+                playable && kind && own
+            })
+            .filter(|c| match &want {
+                Pool::Class(Some(t)) => c.card_type == *t,
+                _ => true,
+            })
+            .collect();
+        cards.sort_by(|a, b| a.id.cmp(&b.id));
+        let mut picked = Vec::new();
+        for card in cards {
+            let play = play_of(card, false, MADE_GROUP, &orbs, &all_orbs);
+            if let Pool::ClassWith(f) = &want
+                && !matches(f, &play)
+            {
+                continue;
+            }
+            plays.push(play);
+            picked.push(plays.len() - 1);
+        }
+        // A spread of at most 12 keeps the fight small.
+        let step = picked.len().div_ceil(12).max(1);
+        let keep: Vec<usize> = picked.iter().copied().step_by(step).collect();
+        pools.push((want, keep));
+    }
     for (k, p) in plays.iter_mut().enumerate() {
         p.index = k;
         p.makes = p
@@ -2419,6 +2803,7 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
         deck_len,
         forged_card,
         made,
+        pools,
         worth: setup_worth(&plays),
     };
 

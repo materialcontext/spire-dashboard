@@ -28,6 +28,12 @@ pub enum CardFilter {
     Upgraded(CardType),
     /// Cards with a keyword (lowercase): "ethereal".
     Keyword(String),
+    /// Cards that cost 0.
+    ZeroCost,
+    /// Cards that Shoot an Arrow.
+    Shooter,
+    /// Cards whose name contains any of these (lowercase).
+    AnyNamed(Vec<String>),
 }
 
 impl CardFilter {
@@ -41,6 +47,9 @@ impl CardFilter {
             CardFilter::Named(n) => format!("a card named \"{n}\""),
             CardFilter::Upgraded(t) => format!("an upgraded {}", t.label()),
             CardFilter::Keyword(k) => format!("an {k} card"),
+            CardFilter::ZeroCost => "a 0-cost card".into(),
+            CardFilter::Shooter => "a card that can Shoot".into(),
+            CardFilter::AnyNamed(names) => format!("a card named {}", names.join(" or ")),
         }
     }
 }
@@ -101,11 +110,42 @@ pub enum When {
         what: Counted,
         n: u32,
     },
+    /// Gaining a Melody (of this kind, or any).
+    OnMelody(Option<Melody>),
+    /// Holding every Melody, the moment it happens.
+    OnAllMelodies,
     /// Only the first time the trigger fires each turn (or each combat).
     First {
         when: Box<When>,
         per_turn: bool,
     },
+}
+
+/// One of The Fool's Melodies, gained by playing a Wah, Cho or Ki card
+/// (per community guides; the card data names the Melodies, not the rule).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Melody {
+    Wah,
+    Cho,
+    Ki,
+}
+
+impl Melody {
+    pub const ALL: [Melody; 3] = [Melody::Wah, Melody::Cho, Melody::Ki];
+
+    fn named(w: &str) -> Option<Melody> {
+        match w {
+            "wah" => Some(Melody::Wah),
+            "cho" => Some(Melody::Cho),
+            "ki" => Some(Melody::Ki),
+            _ => None,
+        }
+    }
+
+    /// The Melodies a card's name gives ("Wah Cho" gives two).
+    pub fn of_card(name: &str) -> Vec<Melody> {
+        name.split_whitespace().filter_map(|w| Melody::named(&w.to_lowercase())).collect()
+    }
 }
 
 /// A debuff a trigger watches for.
@@ -170,6 +210,11 @@ impl When {
             When::OnDiscard => "Whenever you discard a card".into(),
             When::OnAttackHit => "Whenever an attack hits".into(),
             When::Every { what, n } => format!("Every {n} {what:?}"),
+            When::OnMelody(m) => match m {
+                Some(m) => format!("Whenever you gain a {m:?} Melody"),
+                None => "Whenever you gain a Melody".into(),
+            },
+            When::OnAllMelodies => "When you gain every Melody".into(),
             When::First { when, per_turn } => {
                 format!("First time each {}: {}", if *per_turn { "turn" } else { "combat" }, when.describe())
             }
@@ -211,6 +256,39 @@ pub enum Effect {
     Evoke(OrbPick, i32),
     /// Trigger orbs' passives `times` times.
     OrbPassive(OrbPick, i32),
+    /// Discard N cards of your choice from your hand.
+    Discard(i32),
+    /// Exhaust N cards (`up_to`: as many as you like, up to N), chosen or
+    /// at random, from your hand or Draw Pile.
+    Exhaust {
+        n: i32,
+        random: bool,
+        from: Pile,
+    },
+    /// Osty dies.
+    OstyDies,
+    /// Moves N matching cards (-1: all) from a pile to the hand, or to the
+    /// top of the Draw Pile (`to: Draw`).
+    Fetch {
+        from: Pile,
+        to: Pile,
+        n: i32,
+        filter: CardFilter,
+    },
+    /// Plays N matching cards (-1: X, or all) for free; `exhaust` exhausts them after.
+    AutoPlay {
+        from: Source,
+        n: i32,
+        filter: CardFilter,
+        exhaust: bool,
+    },
+    /// Adds N random cards (-1: X) from a pool; `free` makes them cost 0 until played.
+    MakeRandom {
+        pool: Pool,
+        n: i32,
+        pile: Pile,
+        free: bool,
+    },
     /// Cards made and put in a pile: "add 1 Shiv into your Hand". `name`
     /// is as written (plural or not); the simulator finds the card.
     Make {
@@ -218,6 +296,32 @@ pub enum Effect {
         n: i32,
         pile: Pile,
     },
+}
+
+/// Where a random card comes from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Pool {
+    /// The character's own cards (of one type, or any).
+    Class(Option<CardType>),
+    Colorless,
+    /// Cards that match a filter, from the character's own cards.
+    ClassWith(CardFilter),
+    /// The Tarot cards Mythic Form makes.
+    Tarot,
+}
+
+/// Where cards are played from by "Play the top card…" and the like.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Source {
+    DrawTop,
+    /// At random from a pile.
+    Draw,
+    Discard,
+    Hand,
+    /// The cheapest card in the hand.
+    HandCheapest,
+    /// Every matching card in the Exhaust Pile (they stay there).
+    Exhaust,
 }
 
 /// Which orbs an evoke or passive trigger takes.
@@ -268,6 +372,16 @@ impl Effect {
             Effect::LoseHp(n) => format!("lose {n} HP"),
             Effect::Evoke(pick, n) => format!("evoke {pick:?} ×{n}"),
             Effect::OrbPassive(pick, n) => format!("trigger {pick:?} passive ×{n}"),
+            Effect::Discard(n) => format!("discard {n}"),
+            Effect::Exhaust { n, random, .. } => format!("exhaust {n}{}", if *random { " at random" } else { "" }),
+            Effect::OstyDies => "Osty dies".into(),
+            Effect::Fetch { from, to, n, filter } => {
+                format!("put {n} {} from {from:?} into {to:?}", filter.describe())
+            }
+            Effect::AutoPlay { from, n, filter, .. } => format!("play {n} {} from {from:?}", filter.describe()),
+            Effect::MakeRandom { pool, n, pile, free } => {
+                format!("add {n} random {pool:?} to {pile:?}{}", if *free { ", free" } else { "" })
+            }
             Effect::Make { name, n, pile } => format!("add {n} {name} to your {pile:?}"),
         }
     }
@@ -368,6 +482,12 @@ impl Effect {
             Effect::LoseHp(_) => "hp_loss",
             Effect::Evoke(..) => "evoke",
             Effect::OrbPassive(..) => "orb_passive",
+            Effect::Discard(_) => "discard",
+            Effect::Exhaust { .. } => "exhaust",
+            Effect::OstyDies => "osty_dies",
+            Effect::Fetch { .. } => "fetch",
+            Effect::AutoPlay { .. } => "autoplay",
+            Effect::MakeRandom { .. } => "random_card",
             Effect::Make { .. } => "make",
         }
     }
@@ -690,6 +810,13 @@ fn timing(ws: &[String]) -> (Option<When>, usize) {
             return (Some(When::Every { what, n: n.max(1) as u32 }), end);
         }
     }
+    if starts(&["whenever", "you", "gain", "a"]) && s.contains(&"melody") {
+        let kind = s.get(4).and_then(|w| Melody::named(w));
+        return (Some(When::OnMelody(kind)), if kind.is_some() { 6 } else { 5 });
+    }
+    if starts(&["when", "you", "gain", "every", "melody"]) {
+        return (Some(When::OnAllMelodies), 5);
+    }
     // Parry: "Sovereign Blade now gains 10 Block".
     if starts(&["sovereign", "blade", "now", "gains"]) {
         return (Some(When::OnPlay(CardFilter::Named("sovereign blade".into()))), 3);
@@ -793,6 +920,121 @@ fn effects(ws: &[String], orbs: &[Orb]) -> Vec<Effect> {
                     continue;
                 }
             }
+            "put" if !theirs => {
+                // "Put a card from your Discard Pile into your Hand",
+                // "Put an Attack from your Draw Pile into your Hand",
+                // "Put a card from your Discard Pile on top of your Draw Pile".
+                if let (Some((n, used)), Some(from)) =
+                    (amount(&s[i + 1..]), s.iter().skip(i).position(|w| *w == "from").map(|k| k + i))
+                {
+                    let filter = kind(&s[i + 1 + used..from]);
+                    let source = if s.get(from + 2) == Some(&"draw") { Pile::Draw } else { Pile::Discard };
+                    let to = if s[from..].windows(2).any(|w| w == ["on", "top"]) { Pile::Draw } else { Pile::Hand };
+                    out.push(Effect::Fetch { from: source, to, n, filter });
+                    i = from + 4;
+                    continue;
+                }
+            }
+            "choose" if !theirs => {
+                // "Choose 1 of 3 cards in your Draw Pile to add into your Hand",
+                // "Choose 1 of 3 random Colorless cards to add into your Hand".
+                let end = s.iter().skip(i).position(|w| *w == "add").map_or(s.len(), |k| k + i);
+                let phrase = &s[i..end];
+                if phrase.contains(&"random") {
+                    let at = phrase.iter().position(|w| *w == "random").unwrap_or(0) + 1;
+                    out.push(Effect::MakeRandom { pool: pool(&phrase[at..]), n: 1, pile: Pile::Hand, free: false });
+                } else {
+                    out.push(Effect::Fetch { from: Pile::Draw, to: Pile::Hand, n: 1, filter: CardFilter::Any });
+                }
+                i = end + 1;
+                continue;
+            }
+            "play" if !theirs => {
+                let rest = &s[i + 1..];
+                let has = |p: &[&str]| rest.windows(p.len()).any(|w| w == p);
+                let exhaust = has(&["exhaust", "it"]);
+                let found = if rest.starts_with(&["the", "top"]) {
+                    let n = match rest.get(2) {
+                        Some(&"card") => 1,
+                        Some(&"x") => -1,
+                        Some(w) => number(w).unwrap_or(1),
+                        None => 1,
+                    };
+                    Some(Effect::AutoPlay { from: Source::DrawTop, n, filter: CardFilter::Any, exhaust })
+                } else if rest.starts_with(&["the", "least", "expensive"]) {
+                    Some(Effect::AutoPlay { from: Source::HandCheapest, n: 1, filter: CardFilter::Any, exhaust })
+                } else if let Some((n, used)) = amount(rest) {
+                    let pile = rest.iter().rposition(|w| *w == "pile" || *w == "hand").unwrap_or(rest.len());
+                    let words = &rest[used..pile.min(rest.len())];
+                    let from = if has(&["exhaust", "pile"]) {
+                        Source::Exhaust
+                    } else if has(&["discard", "pile"]) {
+                        Source::Discard
+                    } else if has(&["draw", "pile"]) {
+                        Source::Draw
+                    } else {
+                        Source::Hand
+                    };
+                    Some(Effect::AutoPlay { from, n, filter: kind(words), exhaust })
+                } else {
+                    None
+                };
+                if let Some(e) = found {
+                    out.push(e);
+                    i = s.len();
+                    continue;
+                }
+            }
+            "discard" if !theirs => {
+                let n = match s.get(i + 1) {
+                    Some(&"a") => Some(1),
+                    Some(w) => number(w),
+                    None => None,
+                };
+                if let Some(n) = n.filter(|_| s.get(i + 2).is_some_and(|w| w.starts_with("card"))) {
+                    out.push(Effect::Discard(n));
+                    i += 3;
+                    continue;
+                }
+            }
+            "exhaust" if !theirs => {
+                // "Exhaust 1 card", "Exhaust a card", "Exhaust 1 card at random",
+                // "Exhaust up to 3 cards in your Hand", "Exhaust 1 card from your Draw Pile".
+                let j = if s.get(i + 1..i + 3) == Some(&["up", "to"]) { i + 3 } else { i + 1 };
+                let n = match s.get(j) {
+                    Some(&"a") => Some(1),
+                    Some(w) => number(w),
+                    None => None,
+                };
+                if let Some(n) = n.filter(|_| s.get(j + 1).is_some_and(|w| w.starts_with("card"))) {
+                    let rest = &s[j + 2..];
+                    let random = rest.starts_with(&["at", "random"]);
+                    let from = if rest.windows(2).any(|w| w == ["draw", "pile"]) { Pile::Draw } else { Pile::Hand };
+                    out.push(Effect::Exhaust { n, random, from });
+                    i = j + 2;
+                    continue;
+                }
+            }
+            // Stampede: "1 random Attack in your Hand is played against a random enemy".
+            w if number(w).is_some()
+                && s.get(i + 1) == Some(&"random")
+                && s[i..].windows(2).any(|w| w == ["is", "played"]) =>
+            {
+                let end = s.iter().skip(i).position(|w| *w == "in").map_or(i + 3, |k| k + i);
+                out.push(Effect::AutoPlay {
+                    from: Source::Hand,
+                    n: number(w).unwrap_or(1),
+                    filter: kind(&s[i + 2..end]),
+                    exhaust: false,
+                });
+                i = s.len();
+                continue;
+            }
+            "osty" if s.get(i + 1) == Some(&"dies") => {
+                out.push(Effect::OstyDies);
+                i += 2;
+                continue;
+            }
             "evoke" => {
                 let pick = match (s.get(i + 1), s.get(i + 2)) {
                     (Some(&"your"), Some(&"rightmost")) => Some((OrbPick::Rightmost, i + 4)),
@@ -870,6 +1112,18 @@ fn effects(ws: &[String], orbs: &[Orb]) -> Vec<Effect> {
                     continue;
                 }
             }
+            "add" | "adds"
+                if !theirs && s[i..].iter().take_while(|w| !matches!(**w, "into" | "to")).any(|w| *w == "random") =>
+            {
+                // "Add a random Attack into your Hand", "Add 3 random Colorless cards into your Hand".
+                let to = s.iter().skip(i).position(|w| matches!(*w, "into" | "to")).map_or(s.len(), |k| k + i);
+                let (n, _) = amount(&s[i + 1..]).unwrap_or((1, 1));
+                let at = s[i..to].iter().position(|w| *w == "random").map_or(i + 1, |k| k + i + 1);
+                let pile = if s[to..].windows(2).any(|w| w == ["draw", "pile"]) { Pile::Draw } else { Pile::Hand };
+                out.push(Effect::MakeRandom { pool: pool(&s[at..to]), n, pile, free: false });
+                i = to + 1;
+                continue;
+            }
             "add" | "adds" | "shuffle" if !theirs || s[i - 1] == "players" => {
                 if let Some((made, used)) = make(&s[i + 1..]) {
                     out.extend(made);
@@ -905,6 +1159,60 @@ fn effects(ws: &[String], orbs: &[Orb]) -> Vec<Effect> {
         i += 1;
     }
     out
+}
+
+/// How many: "a" → 1, "all"/"every" → -1 (all), "x" → -1, "up to N" → N.
+fn amount(s: &[&str]) -> Option<(i32, usize)> {
+    match s {
+        ["a" | "an", ..] => Some((1, 1)),
+        ["all" | "every" | "x", ..] => Some((-1, 1)),
+        ["up", "to", n, ..] => number(n).map(|n| (n, 3)),
+        [n, ..] => number(n).map(|n| (n, 1)),
+        _ => None,
+    }
+}
+
+/// The kind of card a phrase names: "card", "Attack", "card that can
+/// Shoot", "0 Energy cards", "Ethereal cards", "Shiv", "“Wah” and “Ki” cards".
+fn kind(s: &[&str]) -> CardFilter {
+    let has = |p: &[&str]| s.windows(p.len()).any(|w| w == p);
+    let melody: Vec<String> = s.iter().filter(|w| matches!(**w, "wah" | "cho" | "ki")).map(|w| w.to_string()).collect();
+    if !melody.is_empty() {
+        return CardFilter::AnyNamed(melody);
+    }
+    if has(&["can", "shoot"]) {
+        return CardFilter::Shooter;
+    }
+    if has(&["0", "energy"]) {
+        return CardFilter::ZeroCost;
+    }
+    if s.contains(&"ethereal") {
+        return CardFilter::Keyword("ethereal".into());
+    }
+    for w in s {
+        if let Some(t) = card_type(w) {
+            return CardFilter::Type(t);
+        }
+        if matches!(w.trim_end_matches('s'), "shiv" | "soul") {
+            return CardFilter::Named(w.trim_end_matches('s').into());
+        }
+    }
+    CardFilter::Any
+}
+
+/// The random pool a phrase names: "Attack", "Colorless card", "Tarot card"…
+fn pool(s: &[&str]) -> Pool {
+    if s.contains(&"colorless") {
+        return Pool::Colorless;
+    }
+    if s.contains(&"tarot") {
+        return Pool::Tarot;
+    }
+    match kind(s) {
+        CardFilter::Type(t) => Pool::Class(Some(t)),
+        CardFilter::Any => Pool::Class(None),
+        f => Pool::ClassWith(f),
+    }
 }
 
 /// "twice" → 2, "4 times" → 4, "X times" → -1, else 1; and the words used.
@@ -998,6 +1306,10 @@ pub enum Count {
     /// Times you lost HP this combat.
     HpLosses,
     OstyAttacksThisTurn,
+    /// Melodies you hold.
+    Melodies,
+    /// Osty's current and Max HP (the same: nothing hits him here).
+    OstyHp,
 }
 
 /// What a count changes.
@@ -1041,6 +1353,9 @@ pub enum Cond {
     /// A kill: the simulator's target doesn't die, so never.
     Kill,
     OstyAttackedThisTurn,
+    OstyAlive,
+    /// Holding any of these Melodies.
+    HaveMelody(bool, bool, bool),
 }
 
 /// What a condition gates when it isn't the whole card.
@@ -1053,6 +1368,7 @@ pub enum Bonus {
     /// Block gained this many more times.
     BlockTimes(i32),
     DoubleDamage,
+    RetainHand,
 }
 
 /// Rules a card sets on costs, growth and the turn.
@@ -1083,6 +1399,8 @@ pub enum CardMod {
     GrowNamed(String, i32),
     /// Costs 0 while a condition holds.
     FreeIf(Cond),
+    /// Costs N less while a condition holds.
+    CheaperIf(Cond, i32),
     RetainHand,
     /// No more draws this turn.
     DrawLock,
@@ -1157,8 +1475,11 @@ pub struct CardText {
     /// Triggers that last this turn: "Whenever you play an Attack this
     /// turn, gain 3 Block."
     pub this_turn: Vec<(When, Vec<Effect>)>,
-    /// Evokes and orb passive triggers: "Evoke your rightmost Orb twice."
-    pub orb_actions: Vec<Effect>,
+    /// Evokes, orb passive triggers, chosen discards and exhausts:
+    /// "Evoke your rightmost Orb twice", "Discard 1 card", "Exhaust 1 card".
+    pub actions: Vec<Effect>,
+    /// "Discard your Hand, then draw that many cards."
+    pub draw_per_discard: bool,
     /// HP you lose by playing it ("Lose 3 HP").
     pub lose_hp: i32,
     /// What it does if it's still in your hand at the end of your turn
@@ -1176,6 +1497,8 @@ pub struct CardText {
     pub dislodges: bool,
     /// Rules it sets on costs, growth and the turn.
     pub mods: Vec<CardMod>,
+    /// It goes back to your hand: right away, or at the start of next turn.
+    pub returns: Option<Pile>,
 }
 
 /// A sentence's rule on costs, growth or the turn, if it has one.
@@ -1214,6 +1537,9 @@ fn card_mod(s: &[&str], ws: &[String]) -> Option<CardMod> {
         CardMod::Grow(after("by")?)
     } else if starts(&["increase", "the", "damage", "of", "all"]) {
         CardMod::GrowNamed(s.get(5)?.to_string(), after("by")?)
+    } else if starts(&["costs"]) && has(&["less", "energy", "if"]) {
+        let at = s.iter().position(|w| *w == "if")?;
+        CardMod::CheaperIf(condition(&s[at..])?, s.get(1).and_then(|w| number(w))?)
     } else if has(&["costs", "0", "energy", "if", "osty", "has", "attacked", "this", "turn"]) {
         CardMod::FreeIf(Cond::OstyAttackedThisTurn)
     } else if has(&["retain", "your", "hand", "this", "turn"]) {
@@ -1269,6 +1595,11 @@ fn condition(s: &[&str]) -> Option<Cond> {
         Cond::AppliedDoomThisTurn
     } else if has(&["this", "dislodges"]) {
         Cond::Dislodges
+    } else if has(&["osty", "is", "alive"]) {
+        Cond::OstyAlive
+    } else if has(&["you", "have", "a"]) && s.contains(&"melody") {
+        let any = |m: &str| s.contains(&m);
+        Cond::HaveMelody(any("wah"), any("cho"), any("ki"))
     } else if has(&["this", "kills"]) || s.contains(&"fatal") {
         Cond::Kill
     } else {
@@ -1331,6 +1662,10 @@ fn count(s: &[&str]) -> Option<Count> {
         Count::HpLosses
     } else if has(&["he", "has", "attacked", "this", "turn"]) {
         Count::OstyAttacksThisTurn
+    } else if has(&["melody", "you", "have"]) {
+        Count::Melodies
+    } else if has(&["osty's", "current", "hp"]) || has(&["osty's", "max", "hp"]) || has(&["his", "max", "hp"]) {
+        Count::OstyHp
     } else if has(&["attack", "played", "this", "turn"]) {
         Count::AttacksThisTurn
     } else if has(&["skill", "played", "this", "turn"]) {
@@ -1349,8 +1684,14 @@ fn scale(s: &[&str]) -> Option<Scale> {
     let before = |w: &str| at(w).and_then(|i| i.checked_sub(1)).and_then(|i| number(s[i]));
     let (into, per) = if has(&["hits", "an", "additional", "time"]) {
         (Scaled::Hits, 1)
+    } else if has(&["block", "equal", "to", "triple"]) {
+        (Scaled::Block, 3)
     } else if has(&["gain", "block", "equal", "to"]) {
         (Scaled::Block, 1)
+    } else if s.first() == Some(&"gain") && s.get(2) == Some(&"block") && has(&["for", "each"]) {
+        (Scaled::Block, s.get(1).and_then(|w| number(w))?)
+    } else if has(&["additional", "damage", "equal", "to"]) {
+        (Scaled::DamageAdd, 1)
     } else if s.first() == Some(&"draw") {
         (Scaled::Draw, s.get(1).and_then(|w| number(w)).unwrap_or(1))
     } else if has(&["damage", "equal", "to"]) {
@@ -1388,6 +1729,23 @@ pub fn card_text(text: &str, orbs: &[Orb]) -> CardText {
         let s: Vec<&str> = ws.iter().map(String::as_str).collect();
         let has = |p: &[&str]| s.windows(p.len()).any(|w| w == p);
         let starts = |p: &[&str]| s.len() >= p.len() && s[..p.len()] == *p;
+        if has(&["return", "this", "card", "to", "your", "hand"]) && !starts(&["whenever"]) {
+            c.returns = Some(Pile::Hand);
+        }
+        if has(&["start", "of", "your", "next", "turn", "return", "this", "to", "your", "hand"]) {
+            c.returns = Some(Pile::Draw);
+            continue;
+        }
+        // "It's free to play this turn": the random card just made.
+        if starts(&["it's", "free"]) || starts(&["they're", "free"]) {
+            for e in c.actions.iter_mut().rev() {
+                if let Effect::MakeRandom { free, .. } = e {
+                    *free = true;
+                    break;
+                }
+            }
+            continue;
+        }
         if let Some(m) = card_mod(&s, &ws) {
             c.mods.push(m);
             continue;
@@ -1452,11 +1810,21 @@ pub fn card_text(text: &str, orbs: &[Orb]) -> CardText {
             if has(&["hits", "twice"]) || s.windows(3).any(|w| w[0] == "hits" && w[2] == "times") {
                 parts.push(Bonus::Hits);
             }
+            if has(&["retain", "your", "hand"]) {
+                parts.push(Bonus::RetainHand);
+            }
+            if has(&["he", "dies"]) {
+                c.actions.push(Effect::OstyDies);
+            }
             if has(&["gain", "block"]) && has(&["additional"]) {
                 let n = s.iter().position(|w| *w == "additional").and_then(|i| s.get(i - 1)).and_then(|w| number(w));
                 parts.push(Bonus::BlockTimes(n.unwrap_or(1)));
             }
-            let whole = has(&["deal"]) || has(&["apply"]) || has(&["dislodge"]);
+            let whole = has(&["deal"])
+                || has(&["deals"])
+                || has(&["apply"])
+                || has(&["dislodge"])
+                || has(&["block", "equal", "to"]);
             if whole {
                 c.works_if = Some(cond);
             } else {
@@ -1467,7 +1835,14 @@ pub fn card_text(text: &str, orbs: &[Orb]) -> CardText {
         if !trigger && !starts(&["if"]) {
             for e in effects(&ws, orbs) {
                 match e {
-                    Effect::Evoke(..) | Effect::OrbPassive(..) => c.orb_actions.push(e),
+                    Effect::Evoke(..)
+                    | Effect::OrbPassive(..)
+                    | Effect::Discard(_)
+                    | Effect::Exhaust { .. }
+                    | Effect::OstyDies
+                    | Effect::Fetch { .. }
+                    | Effect::AutoPlay { .. }
+                    | Effect::MakeRandom { .. } => c.actions.push(e),
                     Effect::LoseHp(n) => c.lose_hp += n,
                     _ => {}
                 }
@@ -1512,6 +1887,7 @@ pub fn card_text(text: &str, orbs: &[Orb]) -> CardText {
         }
         if starts(&["discard", "your", "hand"]) {
             c.discards_hand = true;
+            c.draw_per_discard = has(&["draw", "that", "many"]);
         }
         if has(&["for", "each", "card", "exhausted"]) && !has(&["this", "combat"]) {
             let at = s.iter().position(|w| *w == "for").unwrap_or(s.len());
@@ -1680,7 +2056,8 @@ pub fn read(text: &str, orbs: &[Orb], played: bool) -> Mechanics {
         let counted = matches!(timing(&ws).0, Some(When::Every { .. }));
         let per_star = matches!(timing(&ws).0, Some(When::OnStars { each: true, .. }));
         // Conditions and one-offs aren't guessed at.
-        let conditional = ws.first().is_some_and(|w| w == "if" || w == "while" || w == "when")
+        let every_melody = matches!(timing(&ws).0, Some(When::OnAllMelodies));
+        let conditional = ws.first().is_some_and(|w| w == "if" || w == "while" || (w == "when" && !every_melody))
             || (lower.contains("the first time") && !first)
             || lower.contains("upon pickup")
             || lower.contains("elite")
@@ -1693,6 +2070,13 @@ pub fn read(text: &str, orbs: &[Orb], played: bool) -> Mechanics {
         if !conditional && let Some(p) = passive(sentence) {
             // Corruption's second sentence ("Whenever you play a Skill, Exhaust it") is part of FreeSkills.
             m.passives.push(p);
+            continue;
+        }
+        if ws.first().is_some_and(|w| w == "it's" || w == "they're")
+            && lower.contains("free to play")
+            && let Some(Effect::MakeRandom { free, .. }) = m.triggers.last_mut().and_then(|(_, es)| es.last_mut())
+        {
+            *free = true;
             continue;
         }
         if conditional {
@@ -1961,7 +2345,7 @@ mod tests {
             vec![(When::TurnStart, vec![Effect::OrbPassive(OrbPick::Rightmost, 2)])]
         );
         let c = card_text("Evoke your rightmost Orb twice.", &lightning());
-        assert_eq!(c.orb_actions, vec![Effect::Evoke(OrbPick::Rightmost, 2)]);
+        assert_eq!(c.actions, vec![Effect::Evoke(OrbPick::Rightmost, 2)]);
         let rage = card_text("Whenever you play an Attack this turn, gain 3 Block.", &[]);
         assert_eq!(rage.this_turn, vec![(When::OnPlay(CardFilter::Type(CardType::Attack)), vec![Effect::Block(3)])]);
         assert_eq!(card_text("Lose 3 HP. Gain 2 Energy.", &[]).lose_hp, 3);

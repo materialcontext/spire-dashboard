@@ -379,3 +379,118 @@ fn growth_and_costs_play_out() {
     let plain = fight("IRONCLAD", &[("STOMP", 3), ("WOUND", 7)], &[]);
     assert!(total(&stomp, true) > total(&plain, true) + 20.0);
 }
+
+#[test]
+fn osty_melody_sly_and_exhaust_choices() {
+    use spire_core::mechanics::{Cond, Count, Effect, Pile, Scaled};
+    // Readings.
+    assert!(of("UNLEASH").text.scale.iter().any(|s| s.count == Count::OstyHp && s.into == Scaled::DamageAdd));
+    assert_eq!(of("SACRIFICE").text.works_if, Some(Cond::OstyAlive));
+    assert!(of("BONE_SHARDS").text.actions.contains(&Effect::OstyDies));
+    assert!(of("HARMONIC_SHIELD").text.scale.iter().any(|s| s.count == Count::Melodies && s.per == 5));
+    assert_eq!(of("WAH_BLAST").text.bonus_if.first().map(|b| b.0), Some(Cond::HaveMelody(false, true, true)));
+    assert_eq!(of("SURVIVOR").text.actions, vec![Effect::Discard(1)]);
+    assert_eq!(of("BURNING_PACT").text.actions, vec![Effect::Exhaust { n: 1, random: false, from: Pile::Hand }]);
+    assert_eq!(of("CINDER").text.actions, vec![Effect::Exhaust { n: 1, random: true, from: Pile::Hand }]);
+    assert!(of("CALCULATED_GAMBLE").text.draw_per_discard);
+
+    // Unleash grows with Osty's HP: Bodyguard's Summons raise it.
+    let summoned = fight("NECROBINDER", &[("UNLEASH", 5), ("BODYGUARD", 5)], &[]);
+    let bare = fight("NECROBINDER", &[("UNLEASH", 5), ("WOUND", 5)], &[]);
+    assert!(total(&summoned, true) > total(&bare, true) + 10.0, "{} vs {}", total(&summoned, true), total(&bare, true));
+    // Violent Chord: 9 to all per Wah Melody gained.
+    let chord = fight("FOOL", &[("VIOLENT_CHORD", 1), ("WAH_SWEEP", 9)], &[]);
+    let plain = fight("FOOL", &[("WOUND", 1), ("WAH_SWEEP", 9)], &[]);
+    assert!(total(&chord, true) > total(&plain, true) + 20.0, "{} vs {}", total(&chord, true), total(&plain, true));
+    // Sly: Tactician discarded by Survivor plays for free (+1 energy).
+    let sly = fight("SILENT", &[("SURVIVOR", 3), ("TACTICIAN", 3), ("LEG_SWEEP", 4)], &[]);
+    let dull = fight("SILENT", &[("SURVIVOR", 3), ("WOUND", 3), ("LEG_SWEEP", 4)], &[]);
+    // The free Tactician's energy plays more Survivors.
+    assert!(total(&sly, false) > total(&dull, false) + 3.0, "{} vs {}", total(&sly, false), total(&dull, false));
+    // Feel No Pain pays off Burning Pact's chosen exhaust (of the Wounds).
+    let pact = fight("IRONCLAD", &[("FEEL_NO_PAIN", 1), ("BURNING_PACT", 4), ("WOUND", 5)], &[]);
+    let none = fight("IRONCLAD", &[("WOUND", 1), ("BURNING_PACT", 4), ("WOUND", 5)], &[]);
+    assert!(total(&pact, false) > total(&none, false) + 5.0, "{} vs {}", total(&pact, false), total(&none, false));
+}
+
+#[test]
+fn piles_autoplay_and_random_cards_are_read() {
+    use spire_core::catalog::CardType;
+    use spire_core::mechanics::{CardFilter, Effect, Pile, Pool, Source};
+    let a = |id: &str| of(id).text.actions;
+    assert_eq!(
+        a("HOLOGRAM"),
+        vec![Effect::Fetch { from: Pile::Discard, to: Pile::Hand, n: 1, filter: CardFilter::Any }]
+    );
+    assert_eq!(
+        a("HEADBUTT"),
+        vec![Effect::Fetch { from: Pile::Discard, to: Pile::Draw, n: 1, filter: CardFilter::Any }]
+    );
+    assert_eq!(
+        a("SECRET_WEAPON"),
+        vec![Effect::Fetch { from: Pile::Draw, to: Pile::Hand, n: 1, filter: CardFilter::Type(CardType::Attack) }]
+    );
+    assert_eq!(
+        a("ALL_FOR_ONE"),
+        vec![Effect::Fetch { from: Pile::Discard, to: Pile::Hand, n: -1, filter: CardFilter::ZeroCost }]
+    );
+    assert_eq!(
+        a("HAVOC"),
+        vec![Effect::AutoPlay { from: Source::DrawTop, n: 1, filter: CardFilter::Any, exhaust: true }]
+    );
+    assert_eq!(
+        a("CASCADE"),
+        vec![Effect::AutoPlay { from: Source::DrawTop, n: -1, filter: CardFilter::Any, exhaust: false }]
+    );
+    assert_eq!(
+        a("BEAT_DOWN"),
+        vec![Effect::AutoPlay {
+            from: Source::Discard,
+            n: 3,
+            filter: CardFilter::Type(CardType::Attack),
+            exhaust: false
+        }]
+    );
+    assert_eq!(
+        a("KNIFE_TRAP"),
+        vec![Effect::AutoPlay {
+            from: Source::Exhaust,
+            n: -1,
+            filter: CardFilter::Named("shiv".into()),
+            exhaust: false
+        }]
+    );
+    assert_eq!(
+        a("INFERNAL_BLADE"),
+        vec![Effect::MakeRandom { pool: Pool::Class(Some(CardType::Attack)), n: 1, pile: Pile::Hand, free: true }]
+    );
+    assert_eq!(
+        a("BUNDLE_OF_JOY"),
+        vec![Effect::MakeRandom { pool: Pool::Colorless, n: 3, pile: Pile::Hand, free: false }]
+    );
+    assert_eq!(of("TRICK_SHOT").text.returns, Some(Pile::Hand));
+    assert_eq!(of("BOLAS").text.returns, Some(Pile::Draw));
+    assert!(power("CREATIVE_AI").iter().any(|(_, es)| es.iter().any(|e| matches!(e, Effect::MakeRandom { .. }))));
+    assert!(power("STAMPEDE").iter().any(|(_, es)| es.iter().any(|e| matches!(e, Effect::AutoPlay { .. }))));
+}
+
+#[test]
+fn piles_autoplay_and_random_cards_play_out() {
+    // Knife Trap replays every Shiv in the Exhaust Pile.
+    let trap = fight("SILENT", &[("BLADE_DANCE", 6), ("KNIFE_TRAP", 4)], &[]);
+    let none = fight("SILENT", &[("BLADE_DANCE", 6), ("WOUND", 4)], &[]);
+    assert!(total(&trap, true) > total(&none, true) + 20.0, "{} vs {}", total(&trap, true), total(&none, true));
+    // Havoc plays the top card for free.
+    let havoc = fight("IRONCLAD", &[("HAVOC", 4), ("STRIKE_IRONCLAD", 3), ("WOUND", 3)], &[]);
+    let dead = fight("IRONCLAD", &[("WOUND", 4), ("STRIKE_IRONCLAD", 3), ("WOUND", 3)], &[]);
+    // On turn 1 it plays an extra card; later it has exhausted the Strikes
+    // it played, which the fight remembers.
+    let first = |s: &spire_core::analysis::sim::DeckSim| s.turns[0].damage.mean;
+    assert!(first(&havoc) > first(&dead) + 1.0, "{} vs {}", first(&havoc), first(&dead));
+    // Infernal Blade makes a free random Attack.
+    let blade = fight("IRONCLAD", &[("INFERNAL_BLADE", 5), ("WOUND", 5)], &[]);
+    assert!(total(&blade, true) > 20.0, "{}", total(&blade, true));
+    // Thrumming Hatchet comes back every turn.
+    let hatchet = fight("IRONCLAD", &[("THRUMMING_HATCHET", 1), ("WOUND", 9)], &[]);
+    assert!(hatchet.turns[3].damage.mean > 8.0, "{}", hatchet.turns[3].damage.mean);
+}
