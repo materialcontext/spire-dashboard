@@ -13,13 +13,18 @@
 //!
 //! Forge: the first Forge each combat adds the rules' Forge card (Sovereign
 //! Blade) to the hand; every Forge adds its amount to that card's damage.
+//! Named cards a card or power makes (Shivs, Souls, Sadness, Wounds…) join
+//! the named pile; copies of a card go where it says; the Exhaust Pile is
+//! kept, so exhaust triggers, "for each card in your Exhaust Pile" and
+//! "play it from your Exhaust Pile" work ([`mechanics::card_text`]).
 //!
 //! Not modelled: enemy actions, potions, enchantments, conditions ("if this
-//! kills"), other generated cards and random effects. The numbers are for comparing
+//! kills"), random cards, choices ("put a card from your Discard Pile into
+//! your Hand") and random effects. The numbers are for comparing
 //! decks and spotting gaps, not for predicting a fight.
 
 use crate::catalog::{Card, CardType, Catalog, Orb, OrbEffect, Target};
-use crate::mechanics::{self, CardFilter, Effect, Mechanics, Passive, When};
+use crate::mechanics::{self, CardFilter, CardText, Effect, ExhaustWhich, Mechanics, Passive, Pile, When};
 use crate::playbook::{SimAssumptions, contains_ci};
 use crate::run::{DeckCard, RunState};
 
@@ -31,8 +36,9 @@ const MAX_PLAYS: usize = 50;
 /// Turns reported for draw odds.
 const ODDS_TURNS: usize = 3;
 
-/// The group of the card Forge makes: not a deck card, so no draw odds.
-const FORGED_GROUP: usize = usize::MAX;
+/// The group of cards made during a fight (the Forge card, Shivs…): not
+/// deck cards, so no draw odds.
+const MADE_GROUP: usize = usize::MAX;
 
 /// A mean with the middle half of outcomes (25th to 75th percentile).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -279,6 +285,13 @@ struct Play {
     ethereal: bool,
     innate: bool,
     retain: bool,
+    /// What the text does beyond the numbers.
+    text: CardText,
+    /// Cards it makes, resolved: (play index, count, pile); a count of -1
+    /// is X, -2 one per card discarded.
+    makes: Vec<(usize, i32, Pile)>,
+    /// The Forge card: its damage grows with every Forge.
+    forged: bool,
 }
 
 fn play_of(card: &Card, upgraded: bool, group: usize, orbs: &[&Orb], all_orbs: &[Orb]) -> Play {
@@ -292,17 +305,32 @@ fn play_of(card: &Card, upgraded: bool, group: usize, orbs: &[&Orb], all_orbs: &
         card.text_at(upgraded).split('.').any(|s| contains_ci(s, "next turn") && contains_ci(s, "energy"));
     let mut e = Effects::default();
     let mut mech = Mechanics::default();
+    let mut text = mechanics::card_text(card.text_at(upgraded), all_orbs);
+    if power {
+        // A power makes cards through its triggers ("At the start of your
+        // turn, add 1 Shiv"), read below.
+        text.makes.clear();
+    }
     if power {
         // Powers say what they do in prose; the reader turns it into triggers.
         mech = mechanics::read(card.text_at(upgraded), all_orbs, true);
     } else {
         e = Effects {
-            damage: v("damage"),
+            // Some cards give their base damage only as the calculation's
+            // base (Ashen Strike: 6 plus 3 per exhausted card).
+            damage: if v("damage") > 0 { v("damage") } else { v("calculationbase").max(v("calculateddamage")) },
             hits: v("hitcount").max(1),
             osty: v("ostydamage"),
             block: v("block"),
-            draw: if card.draw.is_some() { v("cards") } else { 0 },
-            energy: if card.energy.is_some() && !next_turn_energy { v("energy") } else { 0 },
+            // The data's card count also marks "Add 3 Shivs" and "3 or more
+            // cards": only a card that says "draw" draws.
+            draw: if card.draw.is_some() && text.draws { v("cards") } else { 0 },
+            // "When this card is Exhausted, gain 2 Energy" isn't on play.
+            energy: if card.energy.is_some() && !next_turn_energy && text.when_exhausted.is_empty() {
+                v("energy")
+            } else {
+                0
+            },
             energy_next: if card.energy.is_some() && next_turn_energy { v("energy") } else { 0 },
             stars: if base_stars > 0 && contains_ci(&card.text, &format!("gain {base_stars} star")) {
                 v("stars")
@@ -367,6 +395,9 @@ fn play_of(card: &Card, upgraded: bool, group: usize, orbs: &[&Orb], all_orbs: &
         ethereal: card.has_keyword("Ethereal", upgraded),
         innate: card.has_keyword("Innate", upgraded),
         retain: card.has_keyword("Retain", upgraded),
+        text,
+        makes: Vec::new(),
+        forged: false,
     }
 }
 
@@ -491,9 +522,13 @@ struct Setup<'a> {
     relic_rules: Vec<&'a Rule>,
     relic_mods: Mods,
     rules: &'a SimAssumptions,
-    /// The card Forge makes (an index into `plays`, outside the deck), if
-    /// the deck forges.
+    /// Plays from this index on aren't in the deck: they're made in the
+    /// fight (the Forge card, Shivs…).
+    deck_len: usize,
+    /// The card Forge makes (an index into `plays`), if the rules name one.
     forged_card: Option<usize>,
+    /// Made cards by the name the text uses ("shivs", "soul").
+    made: Vec<(String, usize)>,
     /// What setup is worth per point: Aim by the deck's Shoot cards (their
     /// mean multiplier), Vigor by its attacks, Stretch by its Block cards;
     /// 0 when the deck has nothing to spend it on. It lasts until used, so
@@ -544,9 +579,16 @@ struct Fight<'a> {
     hits_toward_return: i32,
     energy: i32,
     next_energy: i32,
-    /// Damage forged onto the Forge card, and whether it's been made.
+    /// Damage forged onto the Forge card, whether it's been made, and the
+    /// replays it has gained.
     forged: i32,
     forge_card_made: bool,
+    forge_replay: i32,
+    /// The Exhaust Pile, and whether a card was exhausted this turn.
+    exhausted: Vec<usize>,
+    exhausted_this_turn: bool,
+    /// "Your next Skill is played an extra time": the types waiting.
+    next_extra: Vec<CardType>,
     /// Extra cards to draw with this turn's hand (start-of-turn effects).
     pending_draw: i32,
     played_this_turn: u32,
@@ -567,10 +609,10 @@ struct FightResult {
 impl<'a> Fight<'a> {
     fn new(s: &'a Setup<'a>, seed: u64) -> Self {
         let mut rng = Rng(seed);
-        // The Forge card isn't in the deck until a Forge makes it.
-        let mut draw: Vec<usize> = (0..s.plays.len()).filter(|i| Some(*i) != s.forged_card).collect();
+        // Made cards aren't in the deck until something makes them.
+        let mut draw: Vec<usize> = (0..s.deck_len).collect();
         rng.shuffle(&mut draw);
-        let unseen: Vec<bool> = (0..s.plays.len()).map(|i| Some(i) != s.forged_card).collect();
+        let unseen: Vec<bool> = (0..s.plays.len()).map(|i| i < s.deck_len).collect();
         // Innate cards go on top (the end of the vector is the top).
         draw.sort_by_key(|&i| s.plays[i].innate);
         Fight {
@@ -604,6 +646,10 @@ impl<'a> Fight<'a> {
             next_energy: 0,
             forged: 0,
             forge_card_made: false,
+            forge_replay: 0,
+            exhausted: Vec::new(),
+            exhausted_this_turn: false,
+            next_extra: Vec::new(),
             pending_draw: 0,
             played_this_turn: 0,
             attacked_this_turn: false,
@@ -756,6 +802,11 @@ impl<'a> Fight<'a> {
             }
             Effect::OrbSlots(n) => self.orb_slots = (self.orb_slots + n).clamp(0, self.s.rules.max_orb_slots as i32),
             Effect::Arrows(n) => self.gain(Store::Arrows, *n),
+            Effect::Make { name, n, pile } => {
+                if let Some(&(_, card)) = self.s.made.iter().find(|(m, _)| m == name) {
+                    self.make(card, *n, *pile);
+                }
+            }
         }
     }
 
@@ -778,9 +829,75 @@ impl<'a> Fight<'a> {
         self.forged += n;
     }
 
-    /// A card's printed damage, plus what's been forged onto the Forge card.
+    /// A card's printed damage, plus what's been forged onto the Forge card
+    /// and what the Exhaust Pile adds.
     fn damage_of(&self, p: &Play) -> i32 {
-        p.now.damage + if p.group == FORGED_GROUP { self.forged } else { 0 }
+        let forged = if p.forged { self.forged } else { 0 };
+        let pile = p.text.per_exhausted.as_ref().map_or(0, |(n, what)| {
+            let counted = self
+                .exhausted
+                .iter()
+                .filter(|&&i| what.as_ref().is_none_or(|w| self.s.plays[i].name.trim_end_matches('s') == *w))
+                .count();
+            n * counted as i32
+        });
+        p.now.damage + forged + pile
+    }
+
+    /// Adds `n` copies of a card to a pile. A full hand sends the rest to
+    /// the discard pile; the draw pile takes them at random places.
+    fn make(&mut self, card: usize, n: i32, pile: Pile) {
+        for _ in 0..n.max(0) {
+            match pile {
+                Pile::Hand if self.hand.len() < self.s.rules.max_hand as usize => self.hand.push(card),
+                Pile::Hand | Pile::Discard => self.discard.push(card),
+                Pile::Draw => {
+                    let at = (self.rng.next() % (self.draw.len() as u64 + 1)) as usize;
+                    self.draw.insert(at, card);
+                }
+            }
+        }
+    }
+
+    /// Puts a card in the Exhaust Pile and fires what that triggers.
+    fn exhaust(&mut self, i: usize) {
+        self.exhausted.push(i);
+        self.exhausted_this_turn = true;
+        self.fire(|w| *w == When::OnExhaust);
+        let setup: &'a Setup<'a> = self.s;
+        for e in &setup.plays[i].text.when_exhausted {
+            self.effect(e);
+        }
+    }
+
+    /// Whether a card's condition holds now ("If you Exhausted a card this
+    /// turn", "If you have 3 or more cards in your Exhaust Pile").
+    fn works(&self, p: &Play) -> bool {
+        (!p.text.needs_exhaust_this_turn || self.exhausted_this_turn)
+            && p.text.exhausted_at_least.is_none_or(|n| self.exhausted.len() as i32 >= n)
+    }
+
+    /// The cards an "Exhaust …" card takes, removed from where they are.
+    fn take_for_exhaust(&mut self, which: &ExhaustWhich) -> Vec<usize> {
+        let setup: &'a Setup<'a> = self.s;
+        let pick = |i: &usize| {
+            let p = &setup.plays[*i];
+            match which {
+                ExhaustWhich::Hand => true,
+                ExhaustWhich::HandNonAttacks => p.card_type != CardType::Attack,
+                ExhaustWhich::Statuses => p.card_type == CardType::Status,
+                ExhaustWhich::HandNamed(n) => p.name.trim_end_matches('s') == n.trim_end_matches('s'),
+            }
+        };
+        let mut taken: Vec<usize> = self.hand.iter().copied().filter(|i| pick(i)).collect();
+        self.hand.retain(|i| !pick(i));
+        if *which == ExhaustWhich::Statuses {
+            taken.extend(self.draw.iter().copied().filter(|i| pick(i)));
+            taken.extend(self.discard.iter().copied().filter(|i| pick(i)));
+            self.draw.retain(|i| !pick(i));
+            self.discard.retain(|i| !pick(i));
+        }
+        taken
     }
 
     /// Adds to a store, counting what was made.
@@ -916,16 +1033,41 @@ impl<'a> Fight<'a> {
     }
 
     fn cost_of(&self, p: &Play) -> Option<i32> {
-        if self.mods.free_skills && p.card_type == CardType::Skill { p.cost.map(|_| 0) } else { p.cost }
+        if self.mods.free_skills && p.card_type == CardType::Skill {
+            return p.cost.map(|_| 0);
+        }
+        // "Costs 1 less Energy for each card Exhausted this combat."
+        let less = if p.text.cheaper_per_exhausted { self.exhausted.len() as i32 } else { 0 };
+        p.cost.map(|c| (c - less).max(0))
     }
 
     /// How much a play is worth to the current lean, per energy. Setup and
     /// acceleration are given rough exchange rates so they get played.
     fn score(&self, p: &Play, lean: Lean) -> f32 {
         let times = if p.x { self.energy } else { 1 };
-        if times == 0 {
+        if times == 0 || !self.works(p) {
             return 0.0;
         }
+        // "… for each card Exhausted": the hand it would take, less itself.
+        let times = match &p.text.exhausts {
+            Some(which) if p.text.own_per_card => {
+                let n = self
+                    .hand
+                    .iter()
+                    .filter(|&&i| {
+                        let q = &self.s.plays[i];
+                        match which {
+                            ExhaustWhich::Hand => true,
+                            ExhaustWhich::HandNonAttacks => q.card_type != CardType::Attack,
+                            ExhaustWhich::Statuses => q.card_type == CardType::Status,
+                            ExhaustWhich::HandNamed(n) => q.name.trim_end_matches('s') == n.trim_end_matches('s'),
+                        }
+                    })
+                    .count() as i32;
+                (n - i32::from(*which != ExhaustWhich::Statuses)).max(0) * times
+            }
+            _ => times,
+        };
         let e = &p.now;
         let t = times as f32;
         let damage = self.damage_of(p);
@@ -966,7 +1108,15 @@ impl<'a> Fight<'a> {
         } else {
             0.0
         };
-        let setup = (e.strength + e.dexterity) as f32 * 4.0
+        // Replay for the Forge card: its damage again, each time it's played.
+        let replay = match (&p.text.gives_replay, self.s.forged_card) {
+            (Some((name, n)), Some(f)) if self.s.plays[f].name == *name => {
+                8.0 + self.damage_of(&self.s.plays[f]) as f32 * *n as f32
+            }
+            _ => 0.0,
+        };
+        let setup = replay
+            + (e.strength + e.dexterity) as f32 * 4.0
             + e.focus as f32 * 3.0 * self.orb_slots as f32
             + e.draw as f32 * 3.0 * t
             + (e.energy + e.energy_next) as f32 * 4.0
@@ -980,7 +1130,26 @@ impl<'a> Fight<'a> {
                     (orb.passive.max(1) * 2 + orb.evoke) as f32 * n as f32 * 0.5
                 })
                 .sum::<f32>();
-        let value = main + side + setup;
+        // Cards it makes: what they'd do, half when they land in a pile.
+        let made: f32 = p
+            .makes
+            .iter()
+            .map(|&(card, n, pile)| {
+                let q = &self.s.plays[card].now;
+                let n = match n {
+                    -1 => times,
+                    -2 => self.hand.len() as i32 - 1,
+                    n => n,
+                };
+                let worth = match lean {
+                    Lean::Damage => (q.damage * q.hits) as f32 + q.block as f32 * 0.1,
+                    Lean::Block => q.block as f32 + (q.damage * q.hits) as f32 * 0.1,
+                } + (q.draw * 3 + q.energy * 4) as f32;
+                worth * n.max(0) as f32 * if pile == Pile::Hand { 1.0 } else { 0.5 }
+            })
+            .sum::<f32>()
+            + if p.text.next_extra.is_some() { 6.0 } else { 0.0 };
+        let value = main + side + setup + made;
         let cost = self.cost_of(p).unwrap_or(0).max(if p.x { self.energy } else { 0 });
         value / (cost as f32).max(0.5)
     }
@@ -1037,7 +1206,18 @@ impl<'a> Fight<'a> {
         }
         let echo = (self.mods.echo_each_turn && self.played_this_turn == 0)
             || (self.mods.echo_first_of_combat && !self.played_any);
-        for _ in 0..if echo { 2 } else { 1 } {
+        // "Your next Skill is played an extra time", and the Forge card's
+        // Replay.
+        let extra = match self.next_extra.iter().position(|t| *t == p.card_type) {
+            Some(k) => {
+                self.next_extra.remove(k);
+                1
+            }
+            None => 0,
+        };
+        let replay = if p.forged { self.forge_replay } else { 0 };
+        let works = self.works(p);
+        for _ in 0..1 + i32::from(echo) + extra + replay {
             for &(orb, n, x) in &p.channels {
                 for _ in 0..if x { n * times } else { n } {
                     self.channel(orb);
@@ -1053,8 +1233,16 @@ impl<'a> Fight<'a> {
                         self.effect(e);
                     }
                 }
-            } else {
-                self.apply(p, times);
+            } else if works {
+                self.resolve(p, times);
+            }
+            if let Some(t) = p.text.next_extra {
+                self.next_extra.push(t);
+            }
+            if let Some((name, n)) = &p.text.gives_replay
+                && setup.forged_card.is_some_and(|f| setup.plays[f].name == *name)
+            {
+                self.forge_replay += n;
             }
         }
         self.played_this_turn += 1;
@@ -1070,13 +1258,70 @@ impl<'a> Fight<'a> {
                 }
             }
         }
+        if let Some(pile) = p.text.copy_to {
+            self.make(i, 1, pile);
+        }
         // A card resolves before it leaves the hand, so its own draw can't
         // shuffle it back into the draw pile.
         let exhausted = p.exhausts || (self.mods.free_skills && p.card_type == CardType::Skill);
         if exhausted {
-            self.fire(|w| *w == When::OnExhaust);
+            self.exhaust(i);
         } else if !p.power {
             self.discard.push(i);
+        }
+    }
+
+    /// A non-power card's effect: what it exhausts or discards first, its
+    /// numbers (per card exhausted when it says so), what it makes.
+    fn resolve(&mut self, p: &Play, times: i32) {
+        let mut discarded = 0;
+        if p.text.discards_hand {
+            discarded = self.hand.len() as i32;
+            self.discard.append(&mut self.hand);
+        }
+        let mut per = times;
+        if let Some(which) = &p.text.exhausts {
+            let taken = self.take_for_exhaust(which);
+            let k = taken.len() as i32;
+            for c in taken {
+                self.exhaust(c);
+            }
+            if p.text.own_per_card {
+                per = times * k;
+            } else {
+                for _ in 0..k {
+                    for e in &p.text.per_card {
+                        self.effect(e);
+                    }
+                }
+            }
+        }
+        self.apply(p, per);
+        if p.text.block_if_exhausted > 0 && self.exhausted_this_turn {
+            self.log.block += (p.text.block_if_exhausted + self.dexterity).max(0) as f32;
+        }
+        for &(card, n, pile) in &p.makes {
+            let n = match n {
+                -1 => times,
+                -2 => discarded,
+                n => n,
+            };
+            self.make(card, n, pile);
+        }
+    }
+
+    /// Cards in the Exhaust Pile that play themselves at this timing
+    /// (Bombardment at the start of the turn, Howl from Beyond at the end).
+    fn play_from_exhaust(&mut self, when: When) {
+        let setup: &'a Setup<'a> = self.s;
+        let due: Vec<usize> = self
+            .exhausted
+            .iter()
+            .copied()
+            .filter(|&i| setup.plays[i].text.replays_from_exhaust == Some(when.clone()))
+            .collect();
+        for i in due {
+            self.apply(&setup.plays[i], 1);
         }
     }
 
@@ -1110,6 +1355,8 @@ impl<'a> Fight<'a> {
 
     fn begin_turn(&mut self) {
         self.log = TurnLog::default();
+        self.exhausted_this_turn = false;
+        self.next_extra.clear();
         if self.turn > 0 {
             self.plating = (self.plating - 1).max(0);
         }
@@ -1127,6 +1374,7 @@ impl<'a> Fight<'a> {
         let hand_before = std::mem::take(&mut self.hand);
         let t = self.turn as u32 + 1;
         self.fire(move |w| starts_turn(w, t));
+        self.play_from_exhaust(When::TurnStart);
         self.hand.extend(hand_before);
         let extra = std::mem::take(&mut self.pending_draw);
         self.draw_cards(self.s.rules.hand_size as i32 + extra);
@@ -1134,6 +1382,7 @@ impl<'a> Fight<'a> {
 
     fn end_turn(&mut self) {
         self.fire(|w| *w == When::TurnEnd);
+        self.play_from_exhaust(When::TurnEnd);
         self.log.block += self.plating as f32;
         for k in 0..self.orbs.len() {
             let o = self.orbs[k];
@@ -1167,12 +1416,13 @@ impl<'a> Fight<'a> {
             })
             .sum::<i32>() as f32;
         let hand = std::mem::take(&mut self.hand);
+        let setup: &'a Setup<'a> = self.s;
         for i in hand {
-            let p = &self.s.plays[i];
+            let p = &setup.plays[i];
             if p.retain || (self.mods.retain_hand && !p.ethereal) {
                 self.hand.push(i);
             } else if p.ethereal {
-                self.fire(|w| *w == When::OnExhaust);
+                self.exhaust(i);
             } else {
                 self.discard.push(i);
             }
@@ -1200,6 +1450,17 @@ impl<'a> Fight<'a> {
 }
 
 // ---------------------------------------------------------------- entry
+
+/// The card a text names ("shivs", "soul", "sweeping gaze"), singular or
+/// plural.
+fn named_card<'c>(catalog: &'c Catalog, name: &str) -> Option<&'c Card> {
+    let single = name.strip_suffix('s').unwrap_or(name);
+    catalog
+        .cards
+        .values()
+        .find(|c| c.name.eq_ignore_ascii_case(name))
+        .or_else(|| catalog.cards.values().find(|c| c.name.eq_ignore_ascii_case(single)))
+}
 
 /// Simulates the current deck. Deterministic: the same deck gives the same numbers.
 pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> DeckSim {
@@ -1237,9 +1498,10 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
     if plays.is_empty() || rules.trials == 0 || rules.turns == 0 {
         return DeckSim::default();
     }
+    let deck_len = plays.len();
     // The card Forge makes, kept outside the deck until a Forge.
     let forged_card = catalog.rules.forge_card.as_ref().and_then(|id| catalog.cards.get(id)).map(|card| {
-        plays.push(play_of(card, false, FORGED_GROUP, &orbs, &all_orbs));
+        plays.push(Play { forged: true, ..play_of(card, false, MADE_GROUP, &orbs, &all_orbs) });
         plays.len() - 1
     });
 
@@ -1250,6 +1512,38 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
         .filter_map(|r| catalog.relics.get(r))
         .map(|r| (r.name.clone(), mechanics::read(&r.text, &all_orbs, false)))
         .collect();
+
+    // Cards the deck, its powers and relics make, by the name the text
+    // uses, each once outside the deck.
+    let names: Vec<String> = plays
+        .iter()
+        .flat_map(|p| p.text.makes.iter().chain(p.mech.triggers.iter().flat_map(|(_, es)| es)))
+        .chain(relics.iter().flat_map(|(_, m)| m.triggers.iter().flat_map(|(_, es)| es)))
+        .filter_map(|e| if let Effect::Make { name, .. } = e { Some(name.clone()) } else { None })
+        .collect();
+    let mut made: Vec<(String, usize)> = Vec::new();
+    for name in names {
+        if made.iter().any(|(m, _)| *m == name) {
+            continue;
+        }
+        if let Some(card) = named_card(catalog, &name) {
+            plays.push(play_of(card, false, MADE_GROUP, &orbs, &all_orbs));
+            made.push((name, plays.len() - 1));
+        }
+    }
+    for p in &mut plays {
+        p.makes = p
+            .text
+            .makes
+            .iter()
+            .filter_map(|e| match e {
+                Effect::Make { name, n, pile } => {
+                    made.iter().find(|(m, _)| m == name).map(|&(_, card)| (card, *n, *pile))
+                }
+                _ => None,
+            })
+            .collect();
+    }
     let mut relic_mods = Mods::default();
     for (_, m) in &relics {
         for p in &m.passives {
@@ -1267,7 +1561,9 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
         relic_rules: relics.iter().flat_map(|(_, m)| m.triggers.iter()).collect(),
         relic_mods,
         rules,
+        deck_len,
         forged_card,
+        made,
         worth: setup_worth(&plays),
     };
 

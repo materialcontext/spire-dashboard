@@ -122,6 +122,21 @@ pub enum Effect {
     OrbSlots(i32),
     /// Arrows for the Fool.
     Arrows(i32),
+    /// Cards made and put in a pile: "add 1 Shiv into your Hand". `name`
+    /// is as written (plural or not); the simulator finds the card.
+    Make {
+        name: String,
+        n: i32,
+        pile: Pile,
+    },
+}
+
+/// Where a made or moved card goes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pile {
+    Hand,
+    Draw,
+    Discard,
 }
 
 impl Effect {
@@ -150,6 +165,7 @@ impl Effect {
             Effect::Channel(orb, n) => format!("Channel {n} {}", orb.as_str().trim_end_matches("_ORB").to_lowercase()),
             Effect::OrbSlots(n) => signed(*n, "orb slots"),
             Effect::Arrows(n) => signed(*n, "Arrows"),
+            Effect::Make { name, n, pile } => format!("add {n} {name} to your {pile:?}"),
         }
     }
 }
@@ -239,6 +255,7 @@ impl Effect {
             Effect::Channel(..) => "channel",
             Effect::OrbSlots(_) => "orb_slots",
             Effect::Arrows(_) => "arrows",
+            Effect::Make { .. } => "make",
         }
     }
 
@@ -571,6 +588,13 @@ fn effects(ws: &[String], orbs: &[Orb]) -> Vec<Effect> {
                     continue;
                 }
             }
+            "add" | "adds" if !theirs || s[i - 1] == "players" => {
+                if let Some((made, used)) = make(&s[i + 1..]) {
+                    out.extend(made);
+                    i += 1 + used;
+                    continue;
+                }
+            }
             "forge" => {
                 if let Some(n) = s.get(i + 1).and_then(|w| number(w)) {
                     out.push(Effect::Forge(n));
@@ -599,6 +623,191 @@ fn effects(ws: &[String], orbs: &[Orb]) -> Vec<Effect> {
         i += 1;
     }
     out
+}
+
+/// "3 Shivs into your Hand", "a Soul into your Draw Pile, Hand, and Discard
+/// Pile", "2 Shivs to ALL players' Hands": the cards made and where they go,
+/// and how many words that took. Random cards and copies aren't read here.
+fn make(s: &[&str]) -> Option<(Vec<Effect>, usize)> {
+    let n = match *s.first()? {
+        "a" | "an" => 1,
+        "x" => -1,
+        w => number(w)?,
+    };
+    let to = s.iter().position(|w| matches!(*w, "into" | "to"))?;
+    let name: Vec<&str> = s[1..to].to_vec();
+    if name.is_empty() || name.iter().any(|w| matches!(*w, "random" | "copy" | "copies" | "of" | "card" | "cards")) {
+        return None;
+    }
+    let mut piles = Vec::new();
+    let mut j = to + 1;
+    while j < s.len() {
+        match s[j] {
+            "hand" | "hands" => piles.push(Pile::Hand),
+            "draw" if s.get(j + 1) == Some(&"pile") => piles.push(Pile::Draw),
+            "discard" if s.get(j + 1) == Some(&"pile") => piles.push(Pile::Discard),
+            "your" | "all" | "players'" | "their" | "pile" | "and" | "everyone's" => {}
+            _ => break,
+        }
+        j += 1;
+    }
+    if piles.is_empty() {
+        return None;
+    }
+    let name = name.join(" ");
+    Some((piles.into_iter().map(|pile| Effect::Make { name: name.clone(), n, pile }).collect(), j))
+}
+
+/// What a card's text does beyond its numbers, for the simulator.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CardText {
+    /// Cards it makes ("Add 3 Shivs into your Hand"); `n` of -1 means X.
+    pub makes: Vec<Effect>,
+    /// "Add a copy of this card into your Discard Pile."
+    pub copy_to: Option<Pile>,
+    /// Whether it really draws (the data's card count is also set for
+    /// "Add 3 Shivs" and "3 or more cards").
+    pub draws: bool,
+    /// "Exhaust your Hand" and the like: which cards go, and what it does
+    /// for each (its own numbers when `own_per_card`, else `per_card`).
+    pub exhausts: Option<ExhaustWhich>,
+    pub own_per_card: bool,
+    pub per_card: Vec<Effect>,
+    /// "Discard your Hand. Add 1 Shiv … for each card discarded."
+    pub discards_hand: bool,
+    /// "N additional damage for each card in your Exhaust Pile" (a name
+    /// counts only those cards: "for each Soul").
+    pub per_exhausted: Option<(i32, Option<String>)>,
+    /// Works only with at least this many cards in the Exhaust Pile.
+    pub exhausted_at_least: Option<i32>,
+    /// Works only if a card was exhausted this turn ("If you Exhausted a
+    /// card this turn, gain 3 Energy"), or gives this much more Block then.
+    pub needs_exhaust_this_turn: bool,
+    pub block_if_exhausted: i32,
+    /// "When this card is Exhausted, gain 2 Energy."
+    pub when_exhausted: Vec<Effect>,
+    /// "If this is in your Exhaust Pile, play it" at the start or end of
+    /// your turn.
+    pub replays_from_exhaust: Option<When>,
+    /// "This turn, your next Skill is played an extra time."
+    pub next_extra: Option<CardType>,
+    /// "Costs 1 less Energy for each card Exhausted this combat."
+    pub cheaper_per_exhausted: bool,
+    /// "<card> gains Replay N": the card's name and N.
+    pub gives_replay: Option<(String, i32)>,
+}
+
+/// Which cards an "Exhaust …" sentence takes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ExhaustWhich {
+    /// The whole hand.
+    Hand,
+    /// Every non-Attack in the hand.
+    HandNonAttacks,
+    /// Every Status card, wherever it is.
+    Statuses,
+    /// Every card with this name in the hand.
+    HandNamed(String),
+}
+
+/// Reads what a card's text does beyond its numbers (`vars`).
+pub fn card_text(text: &str, orbs: &[Orb]) -> CardText {
+    let mut c = CardText::default();
+    for sentence in sentences(text) {
+        let ws = words(&sentence);
+        let s: Vec<&str> = ws.iter().map(String::as_str).collect();
+        let has = |p: &[&str]| s.windows(p.len()).any(|w| w == p);
+        let starts = |p: &[&str]| s.len() >= p.len() && s[..p.len()] == *p;
+        // "Draw 2 cards", "draw a card"; not "into your Draw Pile".
+        if s.windows(2).any(|w| w[0] == "draw" && (number(w[1]).is_some() || w[1] == "a")) {
+            c.draws = true;
+        }
+        if has(&["copy", "of", "this", "card"]) {
+            c.copy_to = if has(&["discard", "pile"]) {
+                Some(Pile::Discard)
+            } else if s.contains(&"hand") {
+                Some(Pile::Hand)
+            } else {
+                Some(Pile::Draw)
+            };
+            continue;
+        }
+        if starts(&["exhaust", "your", "hand"]) {
+            c.exhausts = Some(ExhaustWhich::Hand);
+        } else if starts(&["exhaust", "all", "non-attack", "cards", "in", "your", "hand"]) {
+            c.exhausts = Some(ExhaustWhich::HandNonAttacks);
+        } else if starts(&["exhaust", "all", "your", "status", "cards"]) {
+            c.exhausts = Some(ExhaustWhich::Statuses);
+        } else if starts(&["exhaust", "all"]) && has(&["in", "your", "hand"]) {
+            let end = s.iter().position(|w| *w == "in").unwrap_or(2);
+            c.exhausts = Some(ExhaustWhich::HandNamed(s[2..end].join(" ")));
+        }
+        if starts(&["discard", "your", "hand"]) {
+            c.discards_hand = true;
+        }
+        if has(&["for", "each", "card", "exhausted"]) && !has(&["this", "combat"]) {
+            let at = s.iter().position(|w| *w == "for").unwrap_or(s.len());
+            let per = effects(&ws[..at], orbs);
+            // A card whose own numbers are per card ("Deal 7 damage for
+            // each card Exhausted") uses them; others read the sentence.
+            if per.iter().any(|e| matches!(e, Effect::Damage(_) | Effect::Block(_))) {
+                c.own_per_card = true;
+            } else {
+                c.per_card = per;
+            }
+        }
+        if has(&["for", "each", "card", "discarded"]) {
+            c.makes.extend(effects(&ws, orbs).into_iter().filter_map(|e| match e {
+                Effect::Make { name, pile, .. } => Some(Effect::Make { name, n: -2, pile }),
+                _ => None,
+            }));
+            continue;
+        }
+        if has(&["additional", "damage", "for", "each"]) && has(&["exhaust", "pile"]) {
+            let n = s.iter().position(|w| *w == "additional").and_then(|i| i.checked_sub(1)).and_then(|i| number(s[i]));
+            let each = s.iter().position(|w| *w == "each").map_or(s.len(), |i| i + 1);
+            let what = s.get(each).filter(|w| **w != "card").map(|w| w.trim_end_matches('s').to_string());
+            c.per_exhausted = n.map(|n| (n, what));
+            continue;
+        }
+        if starts(&["if", "you", "have"]) && has(&["or", "more", "cards", "in", "your", "exhaust", "pile"]) {
+            c.exhausted_at_least = s.get(3).and_then(|w| number(w));
+        }
+        if has(&["exhausted", "a", "card", "this", "turn"]) {
+            if has(&["another"]) {
+                c.block_if_exhausted = s
+                    .iter()
+                    .position(|w| *w == "another")
+                    .and_then(|i| s.get(i + 1))
+                    .and_then(|w| number(w))
+                    .unwrap_or(0);
+            } else {
+                c.needs_exhaust_this_turn = true;
+            }
+        }
+        if starts(&["when", "this", "card", "is", "exhausted"]) {
+            c.when_exhausted = effects(&ws[5..], orbs);
+        }
+        if has(&["if", "this", "is", "in", "your", "exhaust", "pile", "play", "it"]) {
+            c.replays_from_exhaust =
+                if has(&["start", "of", "your", "turn"]) { Some(When::TurnStart) } else { Some(When::TurnEnd) };
+        }
+        if has(&["is", "played", "an", "extra", "time"]) && starts(&["this", "turn", "your", "next"]) {
+            c.next_extra = s.get(4).and_then(|w| card_type(w));
+        }
+        if has(&["for", "each", "card", "exhausted", "this", "combat"]) && s.contains(&"less") {
+            c.cheaper_per_exhausted = true;
+        }
+        if let Some(i) = s.iter().position(|w| *w == "gains")
+            && s.get(i + 1) == Some(&"replay")
+        {
+            c.gives_replay = Some((s[..i].join(" "), s.get(i + 2).and_then(|w| number(w)).unwrap_or(1)));
+        }
+        if s.contains(&"add") || s.contains(&"adds") {
+            c.makes.extend(effects(&ws, orbs).into_iter().filter(|e| matches!(e, Effect::Make { .. })));
+        }
+    }
+    c
 }
 
 /// Sentence-level rules that modify other cards.
@@ -663,9 +872,11 @@ fn passive(sentence: &str) -> Option<Passive> {
     None
 }
 
-/// Plain sentences: split on full stops, keeping "0.5" style numbers intact.
-fn sentences(text: &str) -> Vec<&str> {
-    text.split(['.', '\n']).map(str::trim).filter(|s| !s.is_empty()).collect()
+/// Plain sentences: split on full stops and line breaks, keeping "0.5"
+/// style numbers intact. A line ending in a comma runs on ("Whenever a card
+/// is Exhausted,⏎draw 1 card.").
+fn sentences(text: &str) -> Vec<String> {
+    text.replace(",\n", ", ").split(['.', '\n']).map(str::trim).filter(|s| !s.is_empty()).map(String::from).collect()
 }
 
 /// Reads a power's or relic's text. `played` says whether sentences without
@@ -674,6 +885,7 @@ fn sentences(text: &str) -> Vec<&str> {
 pub fn read(text: &str, orbs: &[Orb], played: bool) -> Mechanics {
     let mut m = Mechanics::default();
     for sentence in sentences(text) {
+        let sentence = sentence.as_str();
         let ws = words(sentence);
         let lower = sentence.to_lowercase();
         // Conditions and one-offs aren't guessed at.
@@ -733,6 +945,61 @@ mod tests {
 
     fn triggers(text: &str, played: bool) -> Vec<(When, Vec<Effect>)> {
         read(text, &lightning(), played).triggers
+    }
+
+    #[test]
+    fn a_line_ending_in_a_comma_runs_on() {
+        assert_eq!(
+            triggers("Whenever a card is Exhausted,\ndraw 1 card.", true),
+            vec![(When::OnExhaust, vec![Effect::Draw(1)])]
+        );
+    }
+
+    #[test]
+    fn reads_cards_made_and_where_they_go() {
+        let make = |name: &str, n, pile| Effect::Make { name: name.into(), n, pile };
+        assert_eq!(card_text("Add 3 Shivs into your Hand.", &[]).makes, vec![make("shivs", 3, Pile::Hand)]);
+        assert_eq!(
+            card_text("Deal 13 damage. Add a Soul into your Draw Pile, Hand, and Discard Pile.", &[]).makes,
+            vec![make("soul", 1, Pile::Draw), make("soul", 1, Pile::Hand), make("soul", 1, Pile::Discard)]
+        );
+        assert_eq!(
+            triggers("At the start of your turn, add 1 Shiv into your Hand.", true),
+            vec![(When::TurnStart, vec![make("shiv", 1, Pile::Hand)])]
+        );
+        // Random cards and copies aren't named cards.
+        assert!(card_text("Add a random Attack into your Hand.", &[]).makes.is_empty());
+        let anger = card_text("Deal 6 damage. Add a copy of this card into your Discard Pile.", &[]);
+        assert_eq!((anger.makes.len(), anger.copy_to), (0, Some(Pile::Discard)));
+        // "Add 3 Shivs" doesn't draw; "Draw 2 cards" does.
+        assert!(!card_text("Add 3 Shivs into your Hand.", &[]).draws);
+        assert!(card_text("Draw 2 cards.", &[]).draws);
+    }
+
+    #[test]
+    fn reads_exhaust_and_replay_phrases() {
+        let fiend = card_text("Exhaust your Hand. Deal 7 damage for each card Exhausted.", &[]);
+        assert_eq!((fiend.exhausts, fiend.own_per_card), (Some(ExhaustWhich::Hand), true));
+        let growth = card_text("Exhaust ALL Sadness in your Hand. Gain 4 Stretch for each card Exhausted.", &[]);
+        assert_eq!(growth.exhausts, Some(ExhaustWhich::HandNamed("sadness".into())));
+        assert_eq!(growth.per_card, vec![Effect::Stretch(4)]);
+        let ashen = card_text("Deal 6 damage. Deals 3 additional damage for each card in your Exhaust Pile.", &[]);
+        assert_eq!(ashen.per_exhausted, Some((3, None)));
+        let storm = card_text("Deal 9 damage. Deals 4 additional damage for each Soul in your Exhaust Pile.", &[]);
+        assert_eq!(storm.per_exhausted, Some((4, Some("soul".into()))));
+        assert!(card_text("If you Exhausted a card this turn, gain 3 Energy.", &[]).needs_exhaust_this_turn);
+        assert_eq!(
+            card_text("Draw 2 cards. When this card is Exhausted, gain 2 Energy.", &[]).when_exhausted,
+            vec![Effect::Energy(2)]
+        );
+        let bomb =
+            card_text("Deal 18 damage. At the start of your turn, if this is in your Exhaust Pile, play it.", &[]);
+        assert_eq!(bomb.replays_from_exhaust, Some(When::TurnStart));
+        assert_eq!(
+            card_text("This turn, your next Skill is played an extra time.", &[]).next_extra,
+            Some(CardType::Skill)
+        );
+        assert_eq!(card_text("Sovereign Blade gains Replay 1.", &[]).gives_replay, Some(("sovereign blade".into(), 1)));
     }
 
     #[test]
