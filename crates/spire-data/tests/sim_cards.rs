@@ -494,3 +494,16 @@ fn piles_autoplay_and_random_cards_play_out() {
     let hatchet = fight("IRONCLAD", &[("THRUMMING_HATCHET", 1), ("WOUND", 9)], &[]);
     assert!(hatchet.turns[3].damage.mean > 8.0, "{}", hatchet.turns[3].damage.mean);
 }
+
+#[test]
+fn survival_reads_weak_and_self_damage() {
+    assert_eq!(cat().rules.weak_pct, Some(25), "Weak's percentage comes from the power data");
+    // Neutralize keeps the enemy Weak: a share of its attacks is taken off.
+    let weak = fight("SILENT", &[("NEUTRALIZE", 5), ("DEFEND_SILENT", 5)], &[]);
+    assert!(weak.turns[2].mitigation > 0.05, "{}", weak.turns[2].mitigation);
+    let none = fight("SILENT", &[("STRIKE_SILENT", 5), ("DEFEND_SILENT", 5)], &[]);
+    assert_eq!(none.turns[2].mitigation, 0.0);
+    // Bloodletting costs 3 HP each play.
+    let blood = fight("IRONCLAD", &[("BLOODLETTING", 5), ("STRIKE_IRONCLAD", 5)], &[]);
+    assert!(blood.turns[0].self_damage > 2.0, "{}", blood.turns[0].self_damage);
+}

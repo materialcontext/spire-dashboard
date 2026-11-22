@@ -404,6 +404,8 @@ pub enum Passive {
     PoisonExtraTicks(i32),
     /// Each Poison applied is this much more.
     PoisonBonus(i32),
+    /// Weak is this many percent instead of the game's default.
+    WeakIs(i32),
     /// The first N cards each turn are free.
     FreeFirst(i32),
     /// The hand is not discarded at end of turn.
@@ -432,6 +434,7 @@ impl Passive {
             Passive::VulnerableIs(n) => format!("Vulnerable is {n}%"),
             Passive::PoisonExtraTicks(n) => format!("Poison ticks {n} more time(s)"),
             Passive::PoisonBonus(n) => format!("Poison applied +{n}"),
+            Passive::WeakIs(n) => format!("Weak is {n}%"),
             Passive::FreeFirst(n) => format!("First {n} cards each turn are free"),
             Passive::RetainHand => "Keep your hand".into(),
             Passive::ConserveEnergy => "Unspent Energy carries over".into(),
@@ -522,6 +525,7 @@ impl Passive {
             Passive::VulnerableBonus(_) | Passive::VulnerableIs(_) => "vulnerable_bonus",
             Passive::PoisonExtraTicks(_) => "poison_ticks",
             Passive::PoisonBonus(_) => "poison_bonus",
+            Passive::WeakIs(_) => "weak_is",
             Passive::FreeFirst(_) => "free_first",
             Passive::RetainHand => "retain_hand",
             Passive::ConserveEnergy => "conserve_energy",
@@ -1983,6 +1987,9 @@ fn passive(sentence: &str) -> Option<Passive> {
             return Some(Passive::ExtraDamage(CardFilter::Upgraded(CardType::Attack), n));
         }
         return None;
+    }
+    if has(&["weak", "deal"]) && has(&["rather", "than"]) {
+        return pct.map(Passive::WeakIs);
     }
     if has(&["vulnerable", "take"]) && has(&["rather", "than"]) {
         return pct.map(Passive::VulnerableIs);

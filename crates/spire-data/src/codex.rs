@@ -180,7 +180,12 @@ struct WPowerDef {
 
 /// "Receive [blue]50%[/blue] more damage from Attacks…" → 50.
 fn vulnerable_pct(powers: &[WPowerDef]) -> Option<u32> {
-    let v = powers.iter().find(|p| p.id == "VULNERABLE" || p.id == "VULNERABLE_POWER")?;
+    power_pct(powers, "VULNERABLE")
+}
+
+/// The first percentage in a power's description ("deal [blue]25%[/blue] less") .
+fn power_pct(powers: &[WPowerDef], id: &str) -> Option<u32> {
+    let v = powers.iter().find(|p| p.id == id || p.id == format!("{id}_POWER"))?;
     let after = v.description.split("[blue]").nth(1)?;
     after.split('%').next()?.trim().parse().ok()
 }
@@ -939,6 +944,7 @@ pub fn to_pack(
     let mut rules = rules_from(&ascensions);
     if let Some(r) = rules.as_mut().filter(|_| !powers.is_empty()) {
         r.vulnerable_pct = vulnerable_pct(&powers);
+        r.weak_pct = power_pct(&powers, "WEAK");
     }
     if let Some(r) = rules.as_mut() {
         r.forge_card = responses.get(GLOSSARY).and_then(|b| forge_card(b, &cards));

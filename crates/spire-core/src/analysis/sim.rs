@@ -164,6 +164,11 @@ pub struct TurnOutput {
     /// That Block's whole spread: what a bad draw blocks, not only the
     /// middle half.
     pub block_steps: Steps,
+    /// Share of the enemy's attack damage that Weak takes away this turn
+    /// (how often the enemy is Weak on its turn, times Weak's percentage).
+    pub mitigation: f32,
+    /// HP you lose on purpose this turn (Bloodletting, Burns held).
+    pub self_damage: f32,
 }
 
 /// Character resources a deck produces, averaged per turn.
@@ -571,6 +576,7 @@ struct Mods {
     vulnerable_is: Option<i32>,
     poison_extra: i32,
     poison_bonus: i32,
+    weak_is: Option<i32>,
     free_first: i32,
     retain_hand: bool,
     conserve_energy: bool,
@@ -591,6 +597,7 @@ impl Mods {
             Passive::VulnerableIs(n) => self.vulnerable_is = Some(*n),
             Passive::PoisonExtraTicks(n) => self.poison_extra += n,
             Passive::PoisonBonus(n) => self.poison_bonus += n,
+            Passive::WeakIs(n) => self.weak_is = Some(*n),
             Passive::FreeFirst(n) => self.free_first += n,
             Passive::RetainHand => self.retain_hand = true,
             Passive::ConserveEnergy => self.conserve_energy = true,
@@ -660,6 +667,8 @@ struct TurnLog {
     dead: u32,
     /// HP you lost on purpose (self-damage cards, held Burns).
     hp_lost: f32,
+    /// The enemy is Weak going into its turn.
+    weak_end: bool,
     resources: [f32; 6],
     stores: [Flow; 5],
 }
@@ -703,6 +712,8 @@ struct Setup<'a> {
     arrows: i32,
     /// The game's Vulnerable percentage (from the power data), if known.
     vulnerable: i32,
+    /// Weak's percentage (from the power data), and Paper Krane's if held.
+    weak_pct: f32,
     relic_rules: Vec<&'a Rule>,
     relic_mods: Mods,
     rules: &'a SimAssumptions,
@@ -2569,6 +2580,7 @@ impl<'a> Fight<'a> {
             self.poison = (self.poison - 1).max(0);
         }
         self.vulnerable = (self.vulnerable - 1).max(0);
+        self.log.weak_end = self.weak > 0;
         self.weak = (self.weak - 1).max(0);
         self.temp = [0; 3];
         // This-turn triggers (Rage, Oblivion) end with the turn.
@@ -2797,6 +2809,7 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
         orb_slots,
         arrows,
         vulnerable: catalog.rules.vulnerable_pct.map_or(0, |n| n as i32),
+        weak_pct: relic_mods.weak_is.map_or(catalog.rules.weak_pct.unwrap_or(0) as f32, |n| n as f32),
         relic_rules: relics.iter().flat_map(|(_, m)| m.triggers.iter()).collect(),
         relic_mods,
         rules,
@@ -2810,6 +2823,10 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
     let turns = rules.turns as usize;
     let mut damage = vec![Vec::with_capacity(rules.trials as usize); turns];
     let mut block = vec![Vec::with_capacity(rules.trials as usize); turns];
+    // Per turn, playing for block: fights where the enemy is Weak on its
+    // turn, and HP lost on purpose.
+    let mut weakened = vec![0.0f32; turns];
+    let mut self_damage = vec![0.0f32; turns];
     let mut turnover = 0usize;
     let mut drawn_by = vec![[0u32; ODDS_TURNS]; groups.len()];
     let (mut drawn, mut dead, mut unspent, mut stranded) = (0u32, 0u32, 0.0f32, 0.0f32);
@@ -2825,6 +2842,8 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
         for (t, (a, d)) in attack.turns.iter().zip(&defend.turns).enumerate() {
             damage[t].push(a.damage);
             block[t].push(d.block);
+            weakened[t] += f32::from(u8::from(d.weak_end));
+            self_damage[t] += d.hp_lost;
             hits += a.hits;
             hit_damage += a.attack_damage;
             area += a.area;
@@ -2867,6 +2886,7 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
         .map(|((card, name, copies), by)| DrawOdds { card, name, copies, by_turn: by.map(|c| c as f32 / n) })
         .collect();
     odds.sort_by(|a, b| b.by_turn[0].total_cmp(&a.by_turn[0]).then_with(|| a.name.cmp(&b.name)));
+    let weak_cut = setup.weak_pct / 100.0;
     let (simulated, not): (Vec<_>, Vec<_>) = relics.into_iter().partition(|(_, m)| !m.is_empty());
     DeckSim {
         trials: rules.trials,
@@ -2875,10 +2895,17 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
         turns: damage
             .into_iter()
             .zip(block)
-            .map(|(mut d, mut b)| {
+            .enumerate()
+            .map(|(t, (mut d, mut b))| {
                 d.sort_by(f32::total_cmp);
                 b.sort_by(f32::total_cmp);
-                TurnOutput { damage: Spread::of(&d), block: Spread::of(&b), block_steps: Steps::of(&b) }
+                TurnOutput {
+                    damage: Spread::of(&d),
+                    block: Spread::of(&b),
+                    block_steps: Steps::of(&b),
+                    mitigation: weakened[t] / n * weak_cut,
+                    self_damage: self_damage[t] / n,
+                }
             })
             .collect(),
         turnover: turnover as f32 / n,
