@@ -203,6 +203,8 @@ pub(crate) struct WCard {
 pub(crate) struct WId {
     #[serde(deserialize_with = "lenient::id")]
     pub(crate) id: String,
+    /// An enchantment's amount ("Sharp 3"); absent elsewhere.
+    pub(crate) amount: Option<u32>,
 }
 
 #[derive(Deserialize, Default)]

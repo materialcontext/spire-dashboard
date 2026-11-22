@@ -38,7 +38,9 @@ fn fool_run(cat: &Catalog) -> Run {
     let mut changes: Vec<Change> = cards
         .iter()
         .enumerate()
-        .map(|(i, c)| Change::AddCard(DeckCard { card: c.clone(), upgraded: i % 3 == 0, enchantment: None }))
+        .map(|(i, c)| {
+            Change::AddCard(DeckCard { card: c.clone(), upgraded: i % 3 == 0, enchantment: None, enchant_amount: None })
+        })
         .collect();
     changes.extend(
         cat.relics

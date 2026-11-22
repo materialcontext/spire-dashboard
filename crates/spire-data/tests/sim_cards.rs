@@ -255,3 +255,81 @@ fn soul_and_star_engines() {
     let none = fight("REGENT", &[("DEFEND_REGENT", 1), ("VENERATE", 5), ("FALLING_STAR", 4)], &[]);
     assert!(total(&hole, true) > total(&none, true), "{} vs {}", total(&hole, true), total(&none, true));
 }
+
+#[test]
+fn enchantments_change_the_play() {
+    use spire_core::ids::{CharacterId, EnchantmentId};
+    use spire_core::run::{DeckCard, RunEvent, RunState, apply};
+    let run = |enchant: Option<(&str, u32)>| {
+        let start = RunEvent::start(cat(), &CharacterId::new("IRONCLAD"), 0).expect("starts");
+        let mut s: RunState = apply(RunState::default(), &start);
+        s.deck = (0..10)
+            .map(|_| DeckCard {
+                enchantment: enchant.map(|(e, _)| EnchantmentId::new(e)),
+                enchant_amount: enchant.map(|(_, n)| n),
+                ..DeckCard::new(CardId::new("STRIKE_IRONCLAD"))
+            })
+            .collect();
+        s.relics.clear();
+        let mut rules = spire_data::bundled_playbook().simulation;
+        rules.trials = 100;
+        spire_core::analysis::sim::simulate(&s, cat(), &rules).turns[1].damage.mean
+    };
+    let plain = run(None);
+    assert_eq!(plain, 18.0, "three Strikes a turn");
+    assert_eq!(run(Some(("SHARP", 3))), 27.0);
+    // Tezcatara's Ember: free and +3, so all five in hand are played.
+    assert_eq!(run(Some(("TEZCATARAS_EMBER", 1))), 45.0);
+    assert!(run(Some(("SPIRAL", 1))) > 30.0, "each Strike plays twice");
+}
+
+#[test]
+fn conditions_and_counts_are_read() {
+    use spire_core::mechanics::{Bonus, Cond, Count, Scaled};
+    let t = |id: &str| of(id).text;
+    assert_eq!(t("GRAND_FINALE").play_if, Some(Cond::DrawPileEmpty));
+    assert_eq!(t("CLASH").play_if, Some(Cond::HandAllAttacks));
+    assert_eq!(t("NAIL").works_if, Some(Cond::EnemyImpaled));
+    assert_eq!(t("BUBBLE_BUBBLE").works_if, Some(Cond::EnemyPoisoned));
+    assert!(t("WREST").dislodges && t("WREST").works_if == Some(Cond::EnemyImpaled));
+    assert_eq!(t("BOW_SMACK").bonus_if, vec![(Cond::EnemyImpaled, Bonus::Energy)]);
+    assert_eq!(t("DISMANTLE").bonus_if, vec![(Cond::EnemyVulnerable, Bonus::Hits)]);
+    assert_eq!(t("SPITE").bonus_if, vec![(Cond::LostHpThisTurn, Bonus::Hits)]);
+    assert_eq!(t("CHO_FIRM").bonus_if, vec![(Cond::HaveArrow, Bonus::BlockTimes(1))]);
+    assert_eq!(t("DEATHS_DOOR").bonus_if, vec![(Cond::AppliedDoomThisTurn, Bonus::BlockTimes(2))]);
+    assert_eq!(t("WAH_HAMMER").bonus_if, vec![(Cond::EnemyImpaled, Bonus::DoubleDamage)]);
+    let scale = |id: &str| t(id).scale.into_iter().map(|s| (s.count, s.per, s.into)).collect::<Vec<_>>();
+    assert_eq!(scale("PERFECTED_STRIKE"), vec![(Count::DeckNamed(vec!["strike".into()]), 2, Scaled::DamageAdd)]);
+    assert_eq!(scale("FINISHER"), vec![(Count::AttacksThisTurn, 6, Scaled::DamagePer)]);
+    assert_eq!(scale("BODY_SLAM"), vec![(Count::Block, 1, Scaled::DamagePer)]);
+    assert_eq!(scale("TIMES_UP"), vec![(Count::EnemyDoom, 1, Scaled::DamagePer)]);
+    assert_eq!(scale("PRECISE_CUT"), vec![(Count::OtherCardsInHand, -2, Scaled::DamageAdd)]);
+    assert_eq!(scale("TEAR_ASUNDER"), vec![(Count::HpLosses, 1, Scaled::Hits)]);
+    assert_eq!(scale("STACK"), vec![(Count::DiscardPile, 1, Scaled::Block)]);
+    assert_eq!(scale("COMPILE_DRIVER"), vec![(Count::UniqueOrbs, 1, Scaled::Draw)]);
+    assert_eq!(
+        scale("WAH_SYMPHONY"),
+        vec![(Count::DeckNamed(vec!["wah".into(), "cho".into(), "ki".into()]), 4, Scaled::DamageAdd)]
+    );
+    assert_eq!(scale("ANGUISH"), vec![(Count::Made(Some("sadness".into())), 6, Scaled::DamageAdd)]);
+    assert_eq!(now("FINISHER").damage, 0, "per Attack, not a base");
+}
+
+#[test]
+fn conditions_and_counts_play_out() {
+    // Perfected Strike counts every Strike in the deck: with 6 more it hits far harder.
+    let strikes = fight("IRONCLAD", &[("PERFECTED_STRIKE", 4), ("STRIKE_IRONCLAD", 6)], &[]);
+    let plain = fight("IRONCLAD", &[("PERFECTED_STRIKE", 4), ("DEFEND_IRONCLAD", 6)], &[]);
+    assert!(total(&strikes, true) > total(&plain, true) + 20.0);
+    // Body Slam hits for the Block gained first.
+    let slam = fight("IRONCLAD", &[("BODY_SLAM", 4), ("SHRUG_IT_OFF", 6)], &[]);
+    assert!(total(&slam, true) > 20.0, "{}", total(&slam, true));
+    // Grand Finale waits for an empty Draw Pile, so it isn't played on turn 1 of a full deck.
+    let finale = fight("SILENT", &[("GRAND_FINALE", 1), ("DEFEND_SILENT", 14)], &[]);
+    assert!(finale.turns[0].damage.mean < 30.0, "{}", finale.turns[0].damage.mean);
+    // Dismantle hits twice only on a Vulnerable enemy.
+    let alone = fight("IRONCLAD", &[("DISMANTLE", 10)], &[]);
+    let with_bash = fight("IRONCLAD", &[("DISMANTLE", 7), ("TREMBLE", 3)], &[]);
+    assert!(alone.turns[0].damage.mean <= 24.0 + 0.1, "one hit each: {}", alone.turns[0].damage.mean);
+    assert!(with_bash.turns[2].damage.mean > alone.turns[2].damage.mean);
+}

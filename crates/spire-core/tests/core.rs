@@ -739,14 +739,14 @@ fn a_card_takes_one_enchantment_ever() {
     let mut run = started(&cat);
     let strike = DeckCard::new("STRIKE".into());
     run.push(RunEvent::Adjust(vec![
-        Change::Enchant { card: strike.clone(), enchantment: "SHARP".into() },
-        Change::Enchant { card: strike.clone(), enchantment: "SHARP".into() },
+        Change::Enchant { card: strike.clone(), enchantment: "SHARP".into(), amount: None },
+        Change::Enchant { card: strike.clone(), enchantment: "SHARP".into(), amount: None },
     ]));
     let s = run.state();
     let enchanted: Vec<_> = s.deck.iter().filter(|c| c.enchantment.is_some()).collect();
     // Two Strikes: each enchant lands on a different, unenchanted Strike.
     assert_eq!(enchanted.len(), 2);
-    run.push(RunEvent::Adjust(vec![Change::Enchant { card: strike, enchantment: "OTHER".into() }]));
+    run.push(RunEvent::Adjust(vec![Change::Enchant { card: strike, enchantment: "OTHER".into(), amount: None }]));
     let s = run.state();
     assert!(
         !s.deck.iter().any(|c| c.enchantment == Some("OTHER".into())),
@@ -875,8 +875,10 @@ fn role_source_explains_rules_and_overrides() {
 fn sim_state(cat: &Catalog, deck: &[(&str, bool)]) -> RunState {
     let start = RunEvent::start(cat, &CharacterId::new("HERO"), 0).expect("hero starts");
     let mut s = run::apply(RunState::default(), &start);
-    s.deck =
-        deck.iter().map(|(id, up)| DeckCard { card: CardId::new(*id), upgraded: *up, enchantment: None }).collect();
+    s.deck = deck
+        .iter()
+        .map(|(id, up)| DeckCard { card: CardId::new(*id), upgraded: *up, enchantment: None, enchant_amount: None })
+        .collect();
     s
 }
 

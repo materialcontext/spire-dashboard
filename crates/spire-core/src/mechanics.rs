@@ -960,6 +960,96 @@ fn make(s: &[&str]) -> Option<(Vec<Effect>, usize)> {
     Some((made, j))
 }
 
+/// Something a card's number counts ("for each Skill in your Hand").
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Count {
+    /// Deck cards whose name contains any of these (lowercase).
+    DeckNamed(Vec<String>),
+    /// Deck cards that cost Stars.
+    DeckStarCost,
+    /// Other Osty Attacks in the deck.
+    DeckOtherOsty,
+    EnemyVulnerable,
+    EnemyDoom,
+    EnemyPoison,
+    /// Distinct debuffs on the enemy.
+    EnemyDebuffs,
+    AttacksThisTurn,
+    SkillsThisTurn,
+    SkillsInHand,
+    OtherCardsInHand,
+    Orbs,
+    UniqueOrbs,
+    DrawnThisCombat,
+    DrawnThisTurn,
+    EtherealPlayed,
+    StarsGainedThisTurn,
+    /// Cards created this combat (of this name, or any).
+    Made(Option<String>),
+    EnergySpentThisTurn,
+    PlayedThisCombat,
+    DrawPile,
+    DiscardPile,
+    Block,
+    /// Times you lost HP this combat.
+    HpLosses,
+    OstyAttacksThisTurn,
+}
+
+/// What a count changes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Scaled {
+    /// Damage is `per` × count ("Deal 5 damage for each Skill in your Hand").
+    DamagePer,
+    /// Damage gains `per` × count ("Deals 2 additional damage for each…").
+    DamageAdd,
+    /// Hits gain the count.
+    Hits,
+    /// Block is the count.
+    Block,
+    /// Draws `per` × count.
+    Draw,
+}
+
+/// A number that scales with something in the fight or the deck.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Scale {
+    pub count: Count,
+    pub per: i32,
+    pub into: Scaled,
+}
+
+/// A condition a card checks ("If the enemy is Impaled").
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Cond {
+    EnemyImpaled,
+    EnemyVulnerable,
+    EnemyPoisoned,
+    LostHpThisTurn,
+    HaveArrow,
+    DrawPileEmpty,
+    HandAllAttacks,
+    NoAttacksInHand,
+    HandEmpty,
+    AppliedDoomThisTurn,
+    /// The card's own hits bring an Arrow back.
+    Dislodges,
+    /// A kill: the simulator's target doesn't die, so never.
+    Kill,
+}
+
+/// What a condition gates when it isn't the whole card.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Bonus {
+    Energy,
+    Draw,
+    /// The card's extra hits.
+    Hits,
+    /// Block gained this many more times.
+    BlockTimes(i32),
+    DoubleDamage,
+}
+
 /// What a card's text does beyond its numbers, for the simulator.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CardText {
@@ -1019,6 +1109,135 @@ pub struct CardText {
     /// What it does if it's still in your hand at the end of your turn
     /// ("At the end of your turn, if this is in your Hand, take 2 damage").
     pub held_end: Vec<Effect>,
+    /// Numbers that scale with the fight or the deck.
+    pub scale: Vec<Scale>,
+    /// "Can only be played if…"
+    pub play_if: Option<Cond>,
+    /// The whole effect needs this ("If the enemy is Impaled, Deal 20…").
+    pub works_if: Option<Cond>,
+    /// Parts that need a condition ("If the enemy is Impaled, gain 1 Energy").
+    pub bonus_if: Vec<(Cond, Bonus)>,
+    /// It brings back a stuck Arrow ("Dislodge and draw 2 cards").
+    pub dislodges: bool,
+}
+
+/// The condition after "if" ("the enemy is Impaled", "you lost HP this turn").
+fn condition(s: &[&str]) -> Option<Cond> {
+    let has = |p: &[&str]| s.windows(p.len()).any(|w| w == p);
+    Some(if has(&["enemy", "is", "impaled"]) {
+        Cond::EnemyImpaled
+    } else if has(&["enemy", "is", "vulnerable"]) {
+        Cond::EnemyVulnerable
+    } else if has(&["enemy", "has", "poison"]) {
+        Cond::EnemyPoisoned
+    } else if has(&["lost", "hp", "this", "turn"]) {
+        Cond::LostHpThisTurn
+    } else if has(&["you", "have", "an", "arrow"]) {
+        Cond::HaveArrow
+    } else if has(&["no", "cards", "in", "your", "draw", "pile"]) {
+        Cond::DrawPileEmpty
+    } else if has(&["every", "card", "in", "your", "hand", "is", "an", "attack"]) {
+        Cond::HandAllAttacks
+    } else if has(&["no", "attacks", "in", "your", "hand"]) {
+        Cond::NoAttacksInHand
+    } else if has(&["your", "hand", "is", "empty"]) {
+        Cond::HandEmpty
+    } else if has(&["applied", "doom", "this", "turn"]) {
+        Cond::AppliedDoomThisTurn
+    } else if has(&["this", "dislodges"]) {
+        Cond::Dislodges
+    } else if has(&["this", "kills"]) || s.contains(&"fatal") {
+        Cond::Kill
+    } else {
+        return None;
+    })
+}
+
+/// What "for each …", "for ALL your cards …" or "equal to …" counts.
+fn count(s: &[&str]) -> Option<Count> {
+    let has = |p: &[&str]| s.windows(p.len()).any(|w| w == p);
+    Some(if let Some(i) = s.iter().position(|w| *w == "containing") {
+        Count::DeckNamed(s[i + 1..].iter().filter(|w| !matches!(**w, "or" | "and")).map(|w| w.to_string()).collect())
+    } else if has(&["star", "cost"]) {
+        Count::DeckStarCost
+    } else if has(&["other", "osty", "attacks"]) {
+        Count::DeckOtherOsty
+    } else if has(&["vulnerable", "on", "the", "enemy"]) {
+        Count::EnemyVulnerable
+    } else if has(&["enemy's", "doom"]) {
+        Count::EnemyDoom
+    } else if has(&["poison", "on", "all", "enemies"]) {
+        Count::EnemyPoison
+    } else if has(&["unique", "debuff"]) {
+        Count::EnemyDebuffs
+    } else if has(&["attack", "already", "played", "this", "turn"]) {
+        Count::AttacksThisTurn
+    } else if has(&["skill", "already", "played", "this", "turn"]) {
+        Count::SkillsThisTurn
+    } else if has(&["skill", "in", "your", "hand"]) {
+        Count::SkillsInHand
+    } else if has(&["other", "card", "in", "your", "hand"]) {
+        Count::OtherCardsInHand
+    } else if has(&["channeled", "orb"]) {
+        Count::Orbs
+    } else if has(&["unique", "orb"]) {
+        Count::UniqueOrbs
+    } else if has(&["drawn", "this", "combat"]) {
+        Count::DrawnThisCombat
+    } else if has(&["drawn", "during", "your", "turn"]) {
+        Count::DrawnThisTurn
+    } else if has(&["ethereal", "card", "played"]) {
+        Count::EtherealPlayed
+    } else if has(&["star", "gained", "this", "turn"]) {
+        Count::StarsGainedThisTurn
+    } else if has(&["sadness", "you", "have", "created"]) {
+        Count::Made(Some("sadness".into()))
+    } else if has(&["card", "you", "created"]) {
+        Count::Made(None)
+    } else if has(&["energy", "spent", "on", "other", "cards"]) {
+        Count::EnergySpentThisTurn
+    } else if has(&["cards", "played", "this", "combat"]) {
+        Count::PlayedThisCombat
+    } else if has(&["cards", "in", "your", "draw", "pile"]) {
+        Count::DrawPile
+    } else if has(&["cards", "in", "your", "discard", "pile"]) {
+        Count::DiscardPile
+    } else if has(&["your", "block"]) {
+        Count::Block
+    } else if has(&["lost", "hp", "this", "combat"]) {
+        Count::HpLosses
+    } else if has(&["he", "has", "attacked", "this", "turn"]) {
+        Count::OstyAttacksThisTurn
+    } else {
+        return None;
+    })
+}
+
+/// A sentence's scaling, if it has one.
+fn scale(s: &[&str]) -> Option<Scale> {
+    let has = |p: &[&str]| s.windows(p.len()).any(|w| w == p);
+    let at = |w: &str| s.iter().position(|x| *x == w);
+    let from = s.windows(2).position(|w| w == ["for", "each"] || w == ["for", "all"] || w == ["equal", "to"])?;
+    let c = count(&s[from..])?;
+    let before = |w: &str| at(w).and_then(|i| i.checked_sub(1)).and_then(|i| number(s[i]));
+    let (into, per) = if has(&["hits", "an", "additional", "time"]) {
+        (Scaled::Hits, 1)
+    } else if has(&["gain", "block", "equal", "to"]) {
+        (Scaled::Block, 1)
+    } else if s.first() == Some(&"draw") {
+        (Scaled::Draw, s.get(1).and_then(|w| number(w)).unwrap_or(1))
+    } else if has(&["damage", "equal", "to"]) {
+        (Scaled::DamagePer, 1)
+    } else if has(&["additional", "damage"]) {
+        (Scaled::DamageAdd, before("additional")?)
+    } else if has(&["less", "damage"]) {
+        (Scaled::DamageAdd, -before("less")?)
+    } else if s.first() == Some(&"deal") {
+        (Scaled::DamagePer, before("damage")?)
+    } else {
+        return None;
+    };
+    Some(Scale { count: c, per, into })
 }
 
 /// Which cards an "Exhaust …" sentence takes.
@@ -1078,6 +1297,40 @@ pub fn card_text(text: &str, orbs: &[Orb]) -> CardText {
         // "Draw 2 cards", "draw a card"; not "into your Draw Pile".
         if s.windows(2).any(|w| w[0] == "draw" && (number(w[1]).is_some() || w[1] == "a")) {
             c.draws = true;
+        }
+        if let Some(sc) = scale(&s) {
+            c.scale.push(sc);
+        }
+        if starts(&["dislodge"]) || has(&["dislodge", "and"]) {
+            c.dislodges = true;
+        }
+        if has(&["can", "only", "be", "played", "if"]) {
+            c.play_if = condition(&s);
+        } else if has(&["deals", "double", "damage", "to", "impaled"]) {
+            c.bonus_if.push((Cond::EnemyImpaled, Bonus::DoubleDamage));
+        } else if starts(&["if"])
+            && let Some(cond) = condition(&s)
+        {
+            let mut parts = Vec::new();
+            if s.windows(3).any(|w| w[0] == "gain" && number(w[1]).is_some() && w[2] == "energy") {
+                parts.push(Bonus::Energy);
+            }
+            if s.windows(2).any(|w| w[0] == "draw" && number(w[1]).is_some()) {
+                parts.push(Bonus::Draw);
+            }
+            if has(&["hits", "twice"]) || s.windows(3).any(|w| w[0] == "hits" && w[2] == "times") {
+                parts.push(Bonus::Hits);
+            }
+            if has(&["gain", "block"]) && has(&["additional"]) {
+                let n = s.iter().position(|w| *w == "additional").and_then(|i| s.get(i - 1)).and_then(|w| number(w));
+                parts.push(Bonus::BlockTimes(n.unwrap_or(1)));
+            }
+            let whole = has(&["deal"]) || has(&["apply"]) || has(&["dislodge"]);
+            if whole {
+                c.works_if = Some(cond);
+            } else {
+                c.bonus_if.extend(parts.into_iter().map(|b| (cond, b)));
+            }
         }
         let trigger = matches!(s.first(), Some(&"whenever") | Some(&"when") | Some(&"every"));
         if !trigger && !starts(&["if"]) {

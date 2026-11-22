@@ -19,11 +19,14 @@ pub struct DeckCard {
     pub upgraded: bool,
     #[serde(default)]
     pub enchantment: Option<EnchantmentId>,
+    /// The enchantment's amount ("Sharp 3"), when the source says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enchant_amount: Option<u32>,
 }
 
 impl DeckCard {
     pub fn new(card: CardId) -> Self {
-        Self { card, upgraded: false, enchantment: None }
+        Self { card, upgraded: false, enchantment: None, enchant_amount: None }
     }
 }
 
@@ -40,6 +43,9 @@ pub enum Change {
     Enchant {
         card: DeckCard,
         enchantment: EnchantmentId,
+        /// Its amount ("Sharp 3"), when the source says.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        amount: Option<u32>,
     },
     Transform {
         from: DeckCard,
@@ -321,9 +327,10 @@ pub fn apply_change(mut s: RunState, change: &Change) -> RunState {
                 card.upgraded = true;
             }
         }
-        Change::Enchant { card, enchantment } => {
+        Change::Enchant { card, enchantment, amount } => {
             if let Some(card) = find_mut(&mut s.deck, card) {
                 card.enchantment = Some(enchantment.clone());
+                card.enchant_amount = *amount;
             }
         }
         Change::Transform { from, to } => {

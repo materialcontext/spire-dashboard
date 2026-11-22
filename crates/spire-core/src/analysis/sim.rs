@@ -26,7 +26,8 @@
 use crate::catalog::{Card, CardType, Catalog, Orb, OrbEffect, Target};
 use crate::ids::OrbId;
 use crate::mechanics::{
-    self, CardFilter, CardText, Counted, Debuff, Effect, ExhaustWhich, Mechanics, OrbPick, Passive, Pile, When,
+    self, Bonus, CardFilter, CardText, Cond, Count, Counted, Debuff, Effect, ExhaustWhich, Mechanics, OrbPick, Passive,
+    Pile, Scaled, When,
 };
 use crate::playbook::{SimAssumptions, contains_ci};
 use crate::run::{DeckCard, RunState};
@@ -302,6 +303,63 @@ struct Play {
     makes: Vec<(usize, i32, Pile)>,
     /// The Forge card: its damage grows with every Forge.
     forged: bool,
+    /// Its index in the plays (for per-card state in a fight).
+    index: usize,
+    /// Extra plays every time (Spiral), and the first time each combat
+    /// (Glam), from an enchantment.
+    replays: i32,
+    first: FirstPlay,
+    /// Damage it gains each time it's played this combat (Momentum).
+    grows: i32,
+    /// Played for free at the start of combat (Imbued).
+    imbued: bool,
+}
+
+/// What a card does extra the first time it's played each combat.
+#[derive(Clone, Copy, Debug, Default)]
+struct FirstPlay {
+    damage: i32,
+    draw: i32,
+    energy: i32,
+    replays: i32,
+}
+
+/// An enchantment on a deck card, applied to its play. `amount` is the
+/// enchantment's number ("Sharp 3"), 1 when the run doesn't say.
+fn enchant(p: &mut Play, id: &str, amount: i32) {
+    let e = &mut p.now;
+    match id {
+        "SHARP" if e.damage > 0 => e.damage += amount,
+        "INSTINCT" => e.damage *= 2,
+        "TEZCATARAS_EMBER" => {
+            p.cost = p.cost.map(|_| 0);
+            e.damage += 3;
+        }
+        "CORRUPTED" => {
+            e.damage = e.damage * 3 / 2;
+            p.text.lose_hp += 2;
+        }
+        "NIMBLE" if e.block > 0 => e.block += amount,
+        "ADROIT" => e.block += amount,
+        "INKY" => e.weak += 1,
+        "VIGOROUS" => p.first.damage += amount,
+        "SWIFT" => p.first.draw += amount,
+        "SOWN" => p.first.energy += amount,
+        "GLAM" => p.first.replays += 1,
+        "SPIRAL" => p.replays += 1,
+        "MOMENTUM" => p.grows += amount,
+        "GOOPY" => p.exhausts = true,
+        "SOULS_POWER" => p.exhausts = false,
+        "STEADY" => p.retain = true,
+        "ROYALLY_APPROVED" => {
+            p.retain = true;
+            p.innate = true;
+        }
+        "IMBUED" => p.imbued = true,
+        // Clone, Perfect Fit, Slither, Slumbering Essence: outside the fight
+        // or about draw order and random costs.
+        _ => {}
+    }
 }
 
 fn play_of(card: &Card, upgraded: bool, group: usize, orbs: &[&Orb], all_orbs: &[Orb]) -> Play {
@@ -376,6 +434,10 @@ fn play_of(card: &Card, upgraded: bool, group: usize, orbs: &[&Orb], all_orbs: &
             temp: [stat(strength, true), stat(dexterity, true), stat(focus, true)],
         };
     }
+    // "Deal 5 damage for each Skill": the 5 is per count, not a base.
+    if text.scale.iter().any(|sc| sc.into == Scaled::DamagePer) {
+        e.damage = 0;
+    }
     // Energy next turn is `energy_next`; the rest of "later" runs as written.
     for (_, es) in &mut text.later {
         es.retain(|e| !matches!(e, Effect::Energy(_)));
@@ -420,9 +482,7 @@ fn play_of(card: &Card, upgraded: bool, group: usize, orbs: &[&Orb], all_orbs: &
         all: card.target == Target::AllEnemies,
         shoots: contains_ci(body, "shoot an arrow to"),
         aim_multiplier: v("aimmultiplier").max(1),
-        dislodges: card.card_type == CardType::Attack
-            && contains_ci(&card.text, "dislodge")
-            && !contains_ci(&card.text, "shoot"),
+        dislodges: text.dislodges,
         card_type: card.card_type,
         name: card.name.to_lowercase(),
         upgraded,
@@ -434,6 +494,11 @@ fn play_of(card: &Card, upgraded: bool, group: usize, orbs: &[&Orb], all_orbs: &
         text,
         makes: Vec::new(),
         forged: false,
+        index: 0,
+        replays: 0,
+        first: FirstPlay::default(),
+        grows: 0,
+        imbued: false,
     }
 }
 
@@ -669,6 +734,23 @@ struct Fight<'a> {
     this_turn: Vec<bool>,
     /// The enemy's Doom.
     doom: i32,
+    /// This turn: Attacks and Skills played, energy spent, Osty's attacks,
+    /// and whether Doom was applied.
+    attacks_turn: i32,
+    skills_turn: i32,
+    energy_turn: i32,
+    osty_turn: i32,
+    doom_turn: bool,
+    /// This combat: cards drawn, played, Ethereal cards played, and cards
+    /// made (in all, and per made card).
+    drawn_combat: i32,
+    played_combat: i32,
+    ethereal_played: i32,
+    made_total: i32,
+    made_count: Vec<i32>,
+    /// Per play: played yet this combat, and damage it has grown by.
+    played_once: Vec<bool>,
+    grown: Vec<i32>,
     /// Times you lost HP this combat, and whether you did this turn.
     hp_losses: i32,
     lost_hp_this_turn: bool,
@@ -747,6 +829,18 @@ impl<'a> Fight<'a> {
             fired: vec![false; s.relic_rules.len()],
             this_turn: vec![false; s.relic_rules.len()],
             doom: 0,
+            attacks_turn: 0,
+            skills_turn: 0,
+            energy_turn: 0,
+            osty_turn: 0,
+            doom_turn: false,
+            drawn_combat: 0,
+            played_combat: 0,
+            ethereal_played: 0,
+            made_total: 0,
+            made_count: vec![0; s.plays.len()],
+            played_once: vec![false; s.plays.len()],
+            grown: vec![0; s.plays.len()],
             hp_losses: 0,
             lost_hp_this_turn: false,
             mods: s.relic_mods.clone(),
@@ -813,6 +907,7 @@ impl<'a> Fight<'a> {
                 self.log.dead += 1;
             }
             self.hand.push(i);
+            self.drawn_combat += 1;
             self.on(Event::Draw(i));
             self.on(Event::Count(Counted::CardsDrawn, 1));
         }
@@ -974,6 +1069,7 @@ impl<'a> Fight<'a> {
             }
             Effect::Doom(n) => {
                 self.doom += n;
+                self.doom_turn = true;
                 r(self, Resource::Doom, *n);
                 self.on(Event::Apply(Debuff::Doom));
             }
@@ -1043,7 +1139,114 @@ impl<'a> Fight<'a> {
                 .count();
             n * counted as i32
         });
-        p.now.damage + forged + pile
+        let first = if self.played_once[p.index] { 0 } else { p.first.damage };
+        let scaled: i32 = p
+            .text
+            .scale
+            .iter()
+            .filter(|sc| matches!(sc.into, Scaled::DamagePer | Scaled::DamageAdd))
+            .map(|sc| sc.per * self.count(&sc.count, p))
+            .sum();
+        let damage = (p.now.damage + forged + pile + self.grown[p.index] + first + scaled).max(0);
+        let double = p.text.bonus_if.iter().any(|&(c, b)| b == Bonus::DoubleDamage && self.cond(c, p));
+        if double { damage * 2 } else { damage }
+    }
+
+    /// What a card counts, now.
+    fn count(&self, c: &Count, p: &Play) -> i32 {
+        let deck = &self.s.plays[..self.s.deck_len];
+        let n = match c {
+            Count::DeckNamed(names) => {
+                deck.iter().filter(|q| names.iter().any(|n| q.name.contains(n.as_str()))).count()
+            }
+            Count::DeckStarCost => deck.iter().filter(|q| q.star_cost > 0 || q.x_stars).count(),
+            Count::DeckOtherOsty => {
+                deck.iter().filter(|q| q.now.osty > 0 && q.card_type == CardType::Attack && q.index != p.index).count()
+            }
+            Count::EnemyVulnerable => self.vulnerable.max(0) as usize,
+            Count::EnemyDoom => self.doom.max(0) as usize,
+            Count::EnemyPoison => self.poison.max(0) as usize,
+            Count::EnemyDebuffs => {
+                [self.vulnerable, self.weak, self.poison, self.doom].iter().filter(|n| **n > 0).count()
+            }
+            Count::AttacksThisTurn => self.attacks_turn as usize,
+            Count::SkillsThisTurn => self.skills_turn as usize,
+            Count::SkillsInHand => self.hand.iter().filter(|&&i| self.s.plays[i].card_type == CardType::Skill).count(),
+            Count::OtherCardsInHand => self.hand.len(),
+            Count::Orbs => self.orbs.len(),
+            Count::UniqueOrbs => {
+                let mut kinds: Vec<usize> = self.orbs.iter().map(|o| o.orb).collect();
+                kinds.sort_unstable();
+                kinds.dedup();
+                kinds.len()
+            }
+            Count::DrawnThisCombat => self.drawn_combat as usize,
+            Count::DrawnThisTurn => self.log.drawn as usize,
+            Count::EtherealPlayed => self.ethereal_played as usize,
+            Count::StarsGainedThisTurn => self.log.stores[Store::Stars as usize].gained as usize,
+            Count::Made(None) => self.made_total as usize,
+            Count::Made(Some(name)) => self
+                .made_count
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| self.s.plays[*i].name.trim_end_matches('s') == name.trim_end_matches('s'))
+                .map(|(_, n)| *n as usize)
+                .sum(),
+            Count::EnergySpentThisTurn => self.energy_turn as usize,
+            Count::PlayedThisCombat => self.played_combat as usize,
+            Count::DrawPile => self.draw.len(),
+            Count::DiscardPile => self.discard.len(),
+            Count::Block => self.log.block as usize,
+            Count::HpLosses => self.hp_losses as usize,
+            Count::OstyAttacksThisTurn => self.osty_turn as usize,
+        };
+        n as i32
+    }
+
+    /// Whether a card's condition holds now.
+    fn cond(&self, c: Cond, p: &Play) -> bool {
+        match c {
+            Cond::EnemyImpaled => self.stuck > 0,
+            Cond::EnemyVulnerable => self.vulnerable > 0,
+            Cond::EnemyPoisoned => self.poison > 0,
+            Cond::LostHpThisTurn => self.lost_hp_this_turn,
+            Cond::HaveArrow => self.arrows > 0,
+            Cond::DrawPileEmpty => self.draw.is_empty(),
+            Cond::HandAllAttacks => self.hand.iter().all(|&i| self.s.plays[i].card_type == CardType::Attack),
+            Cond::NoAttacksInHand => self.hand.iter().all(|&i| self.s.plays[i].card_type != CardType::Attack),
+            Cond::HandEmpty => self.hand.is_empty(),
+            Cond::AppliedDoomThisTurn => self.doom_turn,
+            // Its own hits bring an Arrow back if enough have landed.
+            Cond::Dislodges => {
+                self.stuck > 0 && self.hits_toward_return + p.now.hits >= self.s.rules.arrow_return_hits.max(1) as i32
+            }
+            Cond::Kill => false,
+        }
+    }
+
+    /// A card's numbers now: conditional parts dropped or added, counts applied.
+    fn effects_now(&self, p: &Play) -> Effects {
+        let mut e = p.now.clone();
+        for &(c, b) in &p.text.bonus_if {
+            let holds = self.cond(c, p);
+            match b {
+                Bonus::Energy if !holds => e.energy = 0,
+                Bonus::Draw if !holds => e.draw = 0,
+                Bonus::Hits if !holds => e.hits = 1,
+                Bonus::BlockTimes(n) if holds => e.block_times += n,
+                _ => {}
+            }
+        }
+        for sc in &p.text.scale {
+            let n = self.count(&sc.count, p);
+            match sc.into {
+                Scaled::Hits => e.hits += n,
+                Scaled::Block => e.block += n,
+                Scaled::Draw => e.draw += sc.per * n,
+                Scaled::DamagePer | Scaled::DamageAdd => {}
+            }
+        }
+        e
     }
 
     /// Adds `n` copies of a card to a pile. A full hand sends the rest to
@@ -1058,6 +1261,8 @@ impl<'a> Fight<'a> {
                     self.draw.insert(at, card);
                 }
             }
+            self.made_total += 1;
+            self.made_count[card] += 1;
             self.on(Event::Make(card));
         }
     }
@@ -1145,6 +1350,8 @@ impl<'a> Fight<'a> {
     fn works(&self, p: &Play) -> bool {
         (!p.text.needs_exhaust_this_turn || self.exhausted_this_turn)
             && p.text.exhausted_at_least.is_none_or(|n| self.exhausted.len() as i32 >= n)
+            && p.text.works_if.is_none_or(|c| self.cond(c, p))
+            && p.text.play_if.is_none_or(|c| self.cond(c, p))
     }
 
     /// The cards an "Exhaust …" card takes, removed from where they are.
@@ -1241,7 +1448,7 @@ impl<'a> Fight<'a> {
 
     /// A card's own effect, `times` times for X costs.
     fn apply(&mut self, p: &Play, times: i32) {
-        let e = &p.now;
+        let e = &self.effects_now(p);
         let damage = self.damage_of(p);
         if damage > 0 {
             // Per hit, in the game's order (Spire Codex, combat mechanics):
@@ -1290,6 +1497,7 @@ impl<'a> Fight<'a> {
                 self.log.area += dealt;
             }
             for _ in 0..times {
+                self.osty_turn += 1;
                 self.on(Event::OstyAttack);
             }
         }
@@ -1324,6 +1532,7 @@ impl<'a> Fight<'a> {
             self.poison += (e.poison + self.mods.poison_bonus) * times;
         }
         self.doom += e.doom * times;
+        self.doom_turn |= e.doom > 0;
         for (n, d) in [
             (e.vulnerable, Debuff::Vulnerable),
             (e.weak, Debuff::Weak),
@@ -1383,7 +1592,7 @@ impl<'a> Fight<'a> {
             }
             _ => times,
         };
-        let e = &p.now;
+        let e = &self.effects_now(p);
         let t = times as f32;
         let damage = self.damage_of(p);
         let attack = if damage > 0 { ((damage + self.strength + self.temp[0]).max(0) * e.hits) as f32 * t } else { 0.0 }
@@ -1563,7 +1772,12 @@ impl<'a> Fight<'a> {
 
     fn affordable(&self, p: &Play) -> bool {
         match self.cost_of(p) {
-            Some(c) => c <= self.energy && p.star_cost <= self.stars && (!p.shoots || self.arrows > 0),
+            Some(c) => {
+                c <= self.energy
+                    && p.star_cost <= self.stars
+                    && (!p.shoots || self.arrows > 0)
+                    && p.text.play_if.is_none_or(|cond| self.cond(cond, p))
+            }
             None => false,
         }
     }
@@ -1631,8 +1845,16 @@ impl<'a> Fight<'a> {
             None => 0,
         };
         let replay = if p.forged { self.forge_replay } else { 0 };
+        let first = !self.played_once[p.index];
+        let enchanted = p.replays + if first { p.first.replays } else { 0 };
+        if first {
+            self.energy += p.first.energy;
+            if p.first.draw > 0 {
+                self.draw_cards(p.first.draw);
+            }
+        }
         let works = self.works(p);
-        for _ in 0..1 + i32::from(echo) + extra + replay {
+        for _ in 0..1 + i32::from(echo) + extra + replay + enchanted {
             for &(orb, n, x) in &p.channels {
                 for _ in 0..if x { n * times } else { n } {
                     self.channel(orb);
@@ -1667,6 +1889,18 @@ impl<'a> Fight<'a> {
             }
         }
         self.played_this_turn += 1;
+        self.played_once[p.index] = true;
+        self.grown[p.index] += p.grows;
+        self.played_combat += 1;
+        self.energy_turn += paid;
+        match p.card_type {
+            CardType::Attack => self.attacks_turn += 1,
+            CardType::Skill => self.skills_turn += 1,
+            _ => {}
+        }
+        if p.ethereal {
+            self.ethereal_played += 1;
+        }
         self.played_any = true;
         self.on(Event::Played(i));
         // A new power's triggers start with the next card: "whenever you
@@ -1795,6 +2029,8 @@ impl<'a> Fight<'a> {
         self.played_this_turn = 0;
         self.attacked_this_turn = false;
         self.lost_hp_this_turn = false;
+        (self.attacks_turn, self.skills_turn, self.energy_turn, self.osty_turn) = (0, 0, 0, 0);
+        self.doom_turn = false;
         for (k, rule) in self.rules.iter().enumerate() {
             if let When::EveryPlays { per_turn: true, .. } = rule.0 {
                 self.counters[k] = 0;
@@ -1821,6 +2057,21 @@ impl<'a> Fight<'a> {
         self.hand.extend(hand_before);
         let extra = std::mem::take(&mut self.pending_draw);
         self.draw_cards(self.s.rules.hand_size as i32 + extra);
+        // Imbued cards play themselves, free, as the combat starts.
+        if self.turn == 0 {
+            let setup: &'a Setup<'a> = self.s;
+            for i in (0..setup.deck_len).filter(|&i| setup.plays[i].imbued) {
+                if let Some(k) = self.draw.iter().position(|&d| d == i) {
+                    self.draw.remove(k);
+                } else if let Some(k) = self.hand.iter().position(|&h| h == i) {
+                    self.hand.remove(k);
+                } else {
+                    continue;
+                }
+                self.energy += self.cost_of(&setup.plays[i]).unwrap_or(0);
+                self.play(i);
+            }
+        }
     }
 
     fn end_turn(&mut self) {
@@ -1949,6 +2200,9 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
             }
         };
         let mut play = play_of(card, d.upgraded, group, &orbs, &all_orbs);
+        if let Some(e) = &d.enchantment {
+            enchant(&mut play, e.as_str(), d.enchant_amount.map_or(1, |n| n as i32));
+        }
         if unmet.contains_key(&d.card) {
             play.cost = None;
         }
@@ -1990,7 +2244,8 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
             made.push((name, plays.len() - 1));
         }
     }
-    for p in &mut plays {
+    for (k, p) in plays.iter_mut().enumerate() {
+        p.index = k;
         p.makes = p
             .text
             .makes

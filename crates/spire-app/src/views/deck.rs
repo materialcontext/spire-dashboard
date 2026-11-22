@@ -286,7 +286,7 @@ fn card_menu_entries(v: &ViewCtx, row: &DeckRow) -> Vec<crate::actions::MenuEntr
                 .values()
                 .filter(|e| e.fits(card))
                 .map(|e| {
-                    let change = Change::Enchant { card: row.card.clone(), enchantment: e.id.clone() };
+                    let change = Change::Enchant { card: row.card.clone(), enchantment: e.id.clone(), amount: None };
                     MenuEntry::Item(e.name.clone(), Action::Draft(change))
                 })
                 .collect();
@@ -330,6 +330,7 @@ fn card_menu(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
                             out.push(Action::Draft(Change::Enchant {
                                 card: row.card.clone(),
                                 enchantment: e.id.clone(),
+                                amount: None,
                             }));
                             ui.close();
                         }
