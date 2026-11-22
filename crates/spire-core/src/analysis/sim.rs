@@ -11,8 +11,11 @@
 //! other cards (extra damage, Vulnerable, free Skills, echoes). What that
 //! reader can't parse is reported, not guessed.
 //!
+//! Forge: the first Forge each combat adds the rules' Forge card (Sovereign
+//! Blade) to the hand; every Forge adds its amount to that card's damage.
+//!
 //! Not modelled: enemy actions, potions, enchantments, conditions ("if this
-//! kills"), generated cards and random effects. The numbers are for comparing
+//! kills"), other generated cards and random effects. The numbers are for comparing
 //! decks and spotting gaps, not for predicting a fight.
 
 use crate::catalog::{Card, CardType, Catalog, Orb, OrbEffect, Target};
@@ -27,6 +30,9 @@ const MAX_TURNS: usize = 20;
 const MAX_PLAYS: usize = 50;
 /// Turns reported for draw odds.
 const ODDS_TURNS: usize = 3;
+
+/// The group of the card Forge makes: not a deck card, so no draw odds.
+const FORGED_GROUP: usize = usize::MAX;
 
 /// A mean with the middle half of outcomes (25th to 75th percentile).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -485,6 +491,9 @@ struct Setup<'a> {
     relic_rules: Vec<&'a Rule>,
     relic_mods: Mods,
     rules: &'a SimAssumptions,
+    /// The card Forge makes (an index into `plays`, outside the deck), if
+    /// the deck forges.
+    forged_card: Option<usize>,
     /// What setup is worth per point: Aim by the deck's Shoot cards (their
     /// mean multiplier), Vigor by its attacks, Stretch by its Block cards;
     /// 0 when the deck has nothing to spend it on. It lasts until used, so
@@ -535,6 +544,9 @@ struct Fight<'a> {
     hits_toward_return: i32,
     energy: i32,
     next_energy: i32,
+    /// Damage forged onto the Forge card, and whether it's been made.
+    forged: i32,
+    forge_card_made: bool,
     /// Extra cards to draw with this turn's hand (start-of-turn effects).
     pending_draw: i32,
     played_this_turn: u32,
@@ -555,8 +567,10 @@ struct FightResult {
 impl<'a> Fight<'a> {
     fn new(s: &'a Setup<'a>, seed: u64) -> Self {
         let mut rng = Rng(seed);
-        let mut draw: Vec<usize> = (0..s.plays.len()).collect();
+        // The Forge card isn't in the deck until a Forge makes it.
+        let mut draw: Vec<usize> = (0..s.plays.len()).filter(|i| Some(*i) != s.forged_card).collect();
         rng.shuffle(&mut draw);
+        let unseen: Vec<bool> = (0..s.plays.len()).map(|i| Some(i) != s.forged_card).collect();
         // Innate cards go on top (the end of the vector is the top).
         draw.sort_by_key(|&i| s.plays[i].innate);
         Fight {
@@ -565,8 +579,8 @@ impl<'a> Fight<'a> {
             draw,
             discard: Vec::new(),
             hand: Vec::new(),
-            unseen: vec![true; s.plays.len()],
-            unseen_left: s.plays.len(),
+            unseen_left: unseen.iter().filter(|u| **u).count(),
+            unseen,
             first_drawn: vec![None; s.groups],
             rules: s.relic_rules.clone(),
             counters: vec![0; s.relic_rules.len()],
@@ -588,6 +602,8 @@ impl<'a> Fight<'a> {
             hits_toward_return: 0,
             energy: 0,
             next_energy: 0,
+            forged: 0,
+            forge_card_made: false,
             pending_draw: 0,
             played_this_turn: 0,
             attacked_this_turn: false,
@@ -617,7 +633,9 @@ impl<'a> Fight<'a> {
                 self.unseen[i] = false;
                 self.unseen_left -= 1;
             }
-            self.first_drawn[p.group].get_or_insert(self.turn);
+            if let Some(first) = self.first_drawn.get_mut(p.group) {
+                first.get_or_insert(self.turn);
+            }
             self.log.drawn += 1;
             if p.cost.is_none() {
                 self.log.dead += 1;
@@ -723,7 +741,7 @@ impl<'a> Fight<'a> {
             }
             Effect::Doom(n) => r(self, Resource::Doom, *n),
             Effect::Vulnerable(n) => self.vulnerable += n,
-            Effect::Forge(n) => r(self, Resource::Forge, *n),
+            Effect::Forge(n) => self.forge(*n),
             Effect::Stars(n) => {
                 self.gain(Store::Stars, *n);
                 r(self, Resource::Stars, *n);
@@ -739,6 +757,30 @@ impl<'a> Fight<'a> {
             Effect::OrbSlots(n) => self.orb_slots = (self.orb_slots + n).clamp(0, self.s.rules.max_orb_slots as i32),
             Effect::Arrows(n) => self.gain(Store::Arrows, *n),
         }
+    }
+
+    /// Forges `n`: the first time in the fight it makes the Forge card (into
+    /// the hand, or the discard pile when the hand is full).
+    fn forge(&mut self, n: i32) {
+        if n <= 0 {
+            return;
+        }
+        self.log.resources[Resource::Forge as usize] += n as f32;
+        let Some(card) = self.s.forged_card else { return };
+        if !self.forge_card_made {
+            self.forge_card_made = true;
+            if self.hand.len() < self.s.rules.max_hand as usize {
+                self.hand.push(card);
+            } else {
+                self.discard.push(card);
+            }
+        }
+        self.forged += n;
+    }
+
+    /// A card's printed damage, plus what's been forged onto the Forge card.
+    fn damage_of(&self, p: &Play) -> i32 {
+        p.now.damage + if p.group == FORGED_GROUP { self.forged } else { 0 }
     }
 
     /// Adds to a store, counting what was made.
@@ -802,7 +844,8 @@ impl<'a> Fight<'a> {
     /// A card's own effect, `times` times for X costs.
     fn apply(&mut self, p: &Play, times: i32) {
         let e = &p.now;
-        if e.damage > 0 {
+        let damage = self.damage_of(p);
+        if damage > 0 {
             // Per hit, in the game's order (Spire Codex, combat mechanics):
             // printed damage plus flat bonuses (Strength, "deals N additional
             // damage", Vigor, and Aim on shots), then multipliers, rounded
@@ -827,7 +870,7 @@ impl<'a> Fight<'a> {
                 }
                 self.attacked_this_turn = true;
             }
-            let hit = |bonus: i32| ((e.damage + self.strength + extra + bonus).max(0) as f32 * mult).floor();
+            let hit = |bonus: i32| ((damage + self.strength + extra + bonus).max(0) as f32 * mult).floor();
             let dealt = hit(bonus) * hits as f32;
             self.log.damage += dealt;
             self.log.hits += hits as f32;
@@ -863,7 +906,8 @@ impl<'a> Fight<'a> {
         let r = &mut self.log.resources;
         r[Resource::Stars as usize] += (e.stars * times) as f32;
         r[Resource::Summon as usize] += (e.summon * times) as f32;
-        r[Resource::Forge as usize] += (e.forge * times) as f32;
+        self.forge(e.forge * times);
+        let r = &mut self.log.resources;
         r[Resource::Doom as usize] += (e.doom * times) as f32;
         r[Resource::Poison as usize] += (e.poison * times) as f32;
         if e.draw > 0 {
@@ -884,7 +928,8 @@ impl<'a> Fight<'a> {
         }
         let e = &p.now;
         let t = times as f32;
-        let attack = if e.damage > 0 { ((e.damage + self.strength).max(0) * e.hits) as f32 * t } else { 0.0 }
+        let damage = self.damage_of(p);
+        let attack = if damage > 0 { ((damage + self.strength).max(0) * e.hits) as f32 * t } else { 0.0 }
             + (e.osty as f32
                 + e.poison as f32 * 1.5
                 + e.doom as f32 * 0.5
@@ -1192,6 +1237,11 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
     if plays.is_empty() || rules.trials == 0 || rules.turns == 0 {
         return DeckSim::default();
     }
+    // The card Forge makes, kept outside the deck until a Forge.
+    let forged_card = catalog.rules.forge_card.as_ref().and_then(|id| catalog.cards.get(id)).map(|card| {
+        plays.push(play_of(card, false, FORGED_GROUP, &orbs, &all_orbs));
+        plays.len() - 1
+    });
 
     // Relics: what the reader understands joins every fight from the start.
     let relics: Vec<(String, Mechanics)> = state
@@ -1217,6 +1267,7 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
         relic_rules: relics.iter().flat_map(|(_, m)| m.triggers.iter()).collect(),
         relic_mods,
         rules,
+        forged_card,
         worth: setup_worth(&plays),
     };
 

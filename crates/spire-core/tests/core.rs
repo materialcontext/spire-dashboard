@@ -897,6 +897,31 @@ fn sim_is_deterministic_and_bounded_by_energy() {
 }
 
 #[test]
+fn forging_makes_the_forge_card_and_grows_its_damage() {
+    // Forge 8 a card; the first Forge adds a 1-cost, 10-damage Blade.
+    let mut cat = catalog();
+    let mut hone = card("HONE", CardType::Skill, Rarity::Common, "Forge 8.");
+    hone.target = Target::Own;
+    hone.vars = [("forge".to_string(), 8)].into_iter().collect();
+    let mut blade = card("BLADE", CardType::Attack, Rarity::Token, "Deal 10 damage.");
+    (blade.damage, blade.hits) = (Some(10), Some(1));
+    blade.vars = [("damage".to_string(), 10)].into_iter().collect();
+    for c in [hone, blade] {
+        cat.cards.insert(c.id.clone(), c);
+    }
+    let s = sim_state(&cat, &[("HONE", false); 10]);
+    let none = sim::simulate(&s, &cat, &quick());
+    assert!(none.turns.iter().all(|t| t.damage.mean == 0.0), "no Forge card: forging does nothing");
+    cat.rules.forge_card = Some(CardId::new("BLADE"));
+    let forged = sim::simulate(&s, &cat, &quick());
+    // The first Forge makes the Blade, played for 10 plus all forged so far;
+    // it grows over the fight.
+    let d: Vec<f32> = forged.turns.iter().map(|t| t.damage.mean).collect();
+    assert!(d[0] >= 18.0, "{d:?}");
+    assert!(d[4] > d[0], "the Blade grows: {d:?}");
+}
+
+#[test]
 fn sim_counts_dead_draws_and_upgrades() {
     let cat = catalog();
     let plain = sim_state(&cat, &[("STRIKE", false), ("STRIKE", false), ("REGRET", false), ("REGRET", false)]);

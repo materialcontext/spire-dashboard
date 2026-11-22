@@ -65,6 +65,11 @@ fn read_dir(dir: &std::path::Path) -> Result<(Responses, Option<String>), DataEr
             responses.insert(endpoint, body);
         }
     }
+    for optional in [codex::GLOSSARY, codex::CARD_METRICS] {
+        if let Ok(body) = std::fs::read_to_string(dir.join(format!("{optional}.json"))) {
+            responses.insert(optional, body);
+        }
+    }
     let version =
         std::fs::read_to_string(dir.join("versions.json")).ok().and_then(|b| codex::latest_stable_version(&b));
     Ok((responses, version))

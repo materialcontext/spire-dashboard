@@ -70,6 +70,7 @@ Card Block + Dexterity + Defend bonus (Fasten) + Stretch (spent by the card, add
 - Cards whose need nothing supplies (`simulation.requirements`: Sadness, Shivs, Souls, Sovereign Blade, orbs, Lightning, Arrows, Stars) are dead draws. *[Player]*
 - Setup is worth what the deck can spend: Aim at the deck's Shoot cards' mean multiplier, Vigor with any attack, Stretch with any Block card. Stores per turn feed `analysis::balance`.
 - A shot Arrow returns after 3 attack hits (`simulation.arrow_return_hits`). *[Player]*
+- Forge: the first Forge in a fight adds the Forge card (`GameRules::forge_card`, Sovereign Blade) to the hand, or the discard pile when the hand is full; every Forge adds its amount to that card's damage, wherever it is. It then cycles like any card. Its modifiers (Seeking Edge, Conqueror, Sword Sage, Parry) aren't read yet. *[Codex glossary]*
 - Each turn's Block keeps its spread (`TurnOutput::block_steps`, every 5%) for the survival check.
 
 **Open:** rounding per hit (Codex) versus once at the end (Wiki); they differ only when fractions add up across hits.
