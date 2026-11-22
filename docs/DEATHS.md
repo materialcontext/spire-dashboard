@@ -59,7 +59,9 @@ Elite death rate roughly halves per 20% more HP. Bosses kill 13% of full-HP runs
 
 ## Survival check (`analysis::survival`)
 
-Plays the fight on the simulator's damage and block against the lineup's expected damage per turn, four ways (**Race**, **Wall**, **Windows** on spike turns, **Scale**). Lead: the way losing least HP; where the data names what decides the fight, the way playing to it if it costs ≤ 10% of HP more (Block → Wall/Windows, Fast Damage → Race, Scaling → Scale).
+Plays the fight on the simulator's damage and block against the lineup's expected damage per turn, up to the turn by which 9 in 10 community wins there are over: A10 boss wins take 7–10 turns (90% by 12), elite wins 4–7 (90% by 8). Four internal ways (all-out attack, block what comes, block the spikes, split); the one losing least HP gives the turns and HP shown.
+
+**Deck styles, not play patterns.** Runs don't log turns, so how a player played can't be checked; how the deck was built can. Clustering 42,600 A10 elite and boss decks by their jobs (standardised within character and act) gives four styles: Guarded (Mitigation, Survival: bosses won 84%, ~9 turns, 29% of max HP), Burst (Fast Damage, Chip: 75%, ~8 turns, 38%), Wide (AoE: 77%), Build-up (Scaling: 78%). They differ most per fight: Kaiser Crab, Guarded 92% against Burst 67%; The Kin, Wide 84%. Each fight shows its clearly best style (the `risks` test) next to the deck's own.
 
 **Calibration.** On 29,700 A10 elite and boss fights the absolute rule (lose < 60% of HP: On track) called 93% of decks At risk; they died 12.8%. Played on averages, the check is too pessimistic, but it ranks decks: predicted to lose under their HP, 2–3% died; predicted no win, 23%. So the verdict is relative: the deck's score (predicted loss ÷ HP, +1 for no win) against community decks at the same fight.
 

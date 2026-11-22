@@ -17,6 +17,7 @@ pub mod requirements;
 pub mod rules;
 pub mod shape;
 pub mod sim;
+pub mod styles;
 pub mod survival;
 pub mod tags;
 pub mod threats;

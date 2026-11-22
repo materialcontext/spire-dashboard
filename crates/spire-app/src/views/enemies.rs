@@ -223,7 +223,8 @@ pub fn detail(ui: &mut Ui, v: &ViewCtx, b: &mut EnemyBrowser) {
     let Some((_, reading)) = &b.view else { return };
     let title = if v.state.started() { "Against your deck" } else { "Threat" };
     panel(ui, title, Some(&format!("A{asc}")), |ui| {
-        crate::views::threats::preview_body(ui, key, &reading.preview, reading.outlook.as_ref());
+        let styles = crate::views::threats::styles(v, &reading.preview);
+        crate::views::threats::preview_body(ui, key, &reading.preview, reading.outlook.as_ref(), styles);
     });
 
     // Deaths map onto one monster's turns only when it fights alone.

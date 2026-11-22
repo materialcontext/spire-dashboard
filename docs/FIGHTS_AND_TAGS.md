@@ -6,7 +6,7 @@ The model behind fight analysis and deck composition. Built (F1–F6).
 
 1. **Fight shape and rules** (enemy side), from move patterns and monster powers, keeping spikes and quiet turns rather than averaging them away. A shape asks for roles.
 2. **Roles** (player side), each measured as a **job** by the deck simulator, not by counting cards.
-3. **Ways to win**, played out against the shape (`analysis::survival`): whether each works, in how many turns, at what HP cost, and the role that limits it.
+3. **The fight played out** against the shape (`analysis::survival`), as long as community wins there take: in how many turns, at what HP cost, the role that limits it; and **deck styles** (`analysis::styles`): which build wins the fight most.
 
 ## Fight shape (`analysis::shape`)
 
@@ -45,16 +45,16 @@ Bad-draw damage is a note, not a role. Roles share no name with a card or relic.
 
 Fourteen, each with its number: Damage, Chip Damage, Multi-Hit, Area, Block, Weak, Vulnerable, Draw, Energy, Scaling and Setup on the damage or Block side, Clean-Up. Read from card numbers, the mechanics reader and `tag_rules`; hand-set and personal tags replace the reading. Roles come from tags (`tag_roles`, `role_rules`). A role shortfall points at the tags to look for.
 
-## Ways to win (`analysis::survival`)
+## Deck styles (`analysis::styles`)
 
-| Way | Plan |
+| Style | Strong in |
 |---|---|
-| Race | Beat it down fast, pay in HP |
-| Wall | Enough Block every turn |
-| Windows | Block the spike turns, hit between them |
-| Scale | Set up, win late |
+| Guarded | Mitigation, Survival |
+| Burst | Fast Damage, Chip |
+| Wide | AoE |
+| Build-up | Scaling Damage |
 
-Lead with the way losing least HP, unless it runs clearly past the community's pace in a fight with a clock or ramp (speed wins), or the data names what decides the fight and the way playing to it costs ≤ 10% of HP more.
+Found by clustering A10 decks' jobs, standardised within character and act. Each elite and boss records each style's win rate, turns and HP lost; the clearly best style shows next to the deck's own. The survival check still plays four internal ways (all-out, block what comes, block the spikes, split) for its turns and HP, up to the fight's real length.
 
 ## Decisions
 
@@ -67,7 +67,7 @@ Lead with the way losing least HP, unless it runs clearly past the community's p
 | D5 | Aim and Stretch last until first used, across turns |
 | D6 | Arrows return after 3 attack hits (each hit counts); Stars spent against gained |
 | D7 | Pattern gaps: move set first, then sourced research into `patterns.json` |
-| D8 | Choosing a way: least HP, unless too slow against a clock or ramp; else what decides the fight, if cheap |
+| D8 | Play patterns (Race, Wall…) aren't advice: runs can't show them. Deck styles are: measured per fight |
 | D11 | Elite and boss demands measured from community decks (roles whose low quarter dies clearly more); thresholds only for hallway and unmeasured fights. Verdict relative to community decks at the fight |
 | D9 | Role names share nothing with cards or relics; jobs are internal |
-| D10 | Fight rules from monster powers, played into the ways |
+| D10 | Fight rules from monster powers, played into the survival check |

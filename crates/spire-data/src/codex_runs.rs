@@ -399,6 +399,8 @@ fn outcomes<'a>(stats: &mut EncounterStats, fights: impl Iterator<Item = &'a Fig
     let won: Vec<&&Fight> = fights.iter().filter(|f| !f.died).collect();
     let damage: Vec<u32> = won.iter().filter_map(|f| f.damage_taken).collect();
     stats.win_damage = percentile(damage.clone(), 0.5).zip(percentile(damage, 0.9));
+    let turns: Vec<u32> = won.iter().filter_map(|f| f.turns.filter(|t| *t > 0)).collect();
+    stats.win_turns = percentile(turns.clone(), 0.5).zip(percentile(turns, 0.9));
     let hp = |list: &[&&Fight]| percentile(list.iter().filter_map(|f| f.hp_in).collect(), 0.5);
     stats.hp_in = hp(&won).zip(hp(&dead));
 }

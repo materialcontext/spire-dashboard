@@ -555,8 +555,15 @@ fn a_measured_boss_asks_only_for_what_decided_it() {
         lines: [(s.character.clone().unwrap(), 14.0)].into_iter().collect(),
         line: 12.0,
     };
-    cat.fights =
-        vec![FightDemands { encounter: boss, decks: 800.0, death_rate: 0.2, demands: vec![survival], outlook: None }];
+    cat.fights = vec![FightDemands {
+        encounter: boss,
+        decks: 800.0,
+        death_rate: 0.2,
+        demands: vec![survival],
+        outlook: None,
+        styles: vec![],
+        best: None,
+    }];
     let d = Dashboard::compute(&s, &cat, &pb);
     let checks = &d.bosses[0].checks;
     assert_eq!(checks.len(), 1, "only the measured role");

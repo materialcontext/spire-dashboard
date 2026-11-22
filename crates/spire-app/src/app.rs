@@ -52,6 +52,8 @@ pub struct Combat {
     pub checked: Vec<spire_core::analysis::ThreatPreview>,
     /// The deck's composition values, from `sim`.
     pub values: std::collections::BTreeMap<spire_core::catalog::Measure, f32>,
+    /// What the deck leans on, against its character's decks at this act.
+    pub style: Option<spire_core::catalog::Style>,
     /// The deck next to community decks that beat this act's boss, when the
     /// data has a benchmark for it.
     pub composition: Option<spire_core::analysis::composition::Composition>,
@@ -964,6 +966,10 @@ impl SpireApp {
             }
             let jobs = spire_core::analysis::jobs::measure(&sim);
             let values = spire_core::analysis::composition::values(&sim, &self.dash.deck);
+            let style = self.state.character.as_ref().and_then(|c| {
+                use spire_core::analysis::styles::{norm_for, style_of};
+                norm_for(&self.catalog.styles, c, self.state.act_index).map(|n| style_of(&values, n))
+            });
             let composition = self.composition(&values);
             // Elites and bosses, their demands checked against the deck.
             let mut checked: Vec<spire_core::analysis::ThreatPreview> = Vec::new();
@@ -996,6 +1002,7 @@ impl SpireApp {
                 outlooks,
                 checked,
                 values,
+                style,
                 composition,
                 advice,
                 balance,

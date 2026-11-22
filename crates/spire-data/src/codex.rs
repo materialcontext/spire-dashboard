@@ -953,6 +953,7 @@ pub fn to_pack(
         card_lift: responses.get(CARD_METRICS).map(|b| card_lift(b)).unwrap_or_default(),
         risks: Vec::new(),
         fights: Vec::new(),
+        styles: Vec::new(),
     })
 }
 
