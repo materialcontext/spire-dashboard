@@ -12,7 +12,10 @@ fn state(character: &str, cards: &[(&str, usize)]) -> RunState {
     s.deck = cards
         .iter()
         .flat_map(|(id, n)| {
-            std::iter::repeat_n(DeckCard { card: CardId::new(*id), upgraded: false, enchantment: None }, *n)
+            std::iter::repeat_n(
+                DeckCard { card: CardId::new(*id), upgraded: false, enchantment: None, enchant_amount: None },
+                *n,
+            )
         })
         .collect();
     s

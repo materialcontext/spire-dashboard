@@ -38,6 +38,7 @@ fn deck_card(c: &WCard) -> DeckCard {
         card: CardId::new(entry(&c.id)),
         upgraded: c.current_upgrade_level.unwrap_or(0) > 0,
         enchantment: c.enchantment.as_ref().map(|e| EnchantmentId::new(entry(&e.id))),
+        enchant_amount: c.enchantment.as_ref().and_then(|e| e.amount),
     }
 }
 
@@ -297,10 +298,12 @@ fn changes(s: &WStats, state: &RunState, catalog: &Catalog, note: &mut impl FnMu
     }
     for e in &s.cards_enchanted {
         let enchantment = EnchantmentId::new(entry(&e.enchantment));
-        let want = DeckCard { enchantment: None, ..deck_card(&e.card) };
+        let want = DeckCard { enchantment: None, enchant_amount: None, ..deck_card(&e.card) };
         let card = take(&mut deck, &want);
-        deck.push(DeckCard { enchantment: Some(enchantment.clone()), ..card.clone() });
-        out.push(Change::Enchant { card, enchantment });
+        let enchant_amount = e.card.enchantment.as_ref().and_then(|x| x.amount);
+        deck.push(DeckCard { enchantment: Some(enchantment.clone()), enchant_amount, ..card.clone() });
+        let amount = e.card.enchantment.as_ref().and_then(|x| x.amount);
+        out.push(Change::Enchant { card, enchantment, amount });
     }
     for c in &s.cards_gained {
         let card = deck_card(c);
@@ -406,7 +409,7 @@ mod tests {
         let c = WCard {
             id: "CARD.BASH".into(),
             current_upgrade_level: Some(1),
-            enchantment: Some(WId { id: "ENCHANTMENT.SHARP".into() }),
+            enchantment: Some(WId { id: "ENCHANTMENT.SHARP".into(), amount: Some(3) }),
         };
         let d = deck_card(&c);
         assert_eq!((d.card.as_str(), d.upgraded), ("BASH", true));

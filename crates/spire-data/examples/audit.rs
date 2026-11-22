@@ -17,6 +17,9 @@
 //! `--fights <page.gz>...` rebuilds A10 decks going into every elite and
 //! boss fight and shows, per encounter, how the death rate moves with each
 //! role's job and share, next to the playbook's demands for it.
+//! `--coverage` prints, per card, what the simulator reads from it and the
+//! sentences it leaves unread, and its tags (tab-separated; the card
+//! dossier's coverage).
 //! `--lookout <page.gz>...` rebuilds community decks at the end of each act
 //! they cleared (run export pages) and counts, per `relic_fits` rule, the
 //! share that qualify: a lookout warning should be rare.
@@ -45,6 +48,10 @@ fn main() {
     }
     if std::env::args().any(|a| a == "--outlook") {
         starter_outlooks(&cat, &pb);
+        return;
+    }
+    if std::env::args().any(|a| a == "--coverage") {
+        coverage(&cat, &pb);
         return;
     }
     if std::env::args().any(|a| a == "--mechanics") {
@@ -271,6 +278,91 @@ fn mechanics(cat: &Catalog) {
         r_ok += usize::from(report("R", &r.name, &r.text, false));
     }
     println!("powers read: {p_ok}/{p_all}  relics read: {r_ok}/{r_all}");
+}
+
+/// Splits a `Debug` struct body at its top-level commas and keeps the
+/// fields that differ from their default.
+fn set_fields(debug: &str) -> Vec<String> {
+    let body = debug.split_once(" { ").map_or("", |(_, b)| b.trim_end_matches(" }"));
+    let (mut out, mut depth, mut start) = (Vec::new(), 0i32, 0);
+    let mut push = |part: &str| {
+        let part = part.trim();
+        let empty = ["[]", "None", "false", "0", "[0, 0, 0]"];
+        if let Some((k, v)) = part.split_once(": ")
+            && !empty.contains(&v)
+        {
+            out.push(format!("{k}={v}"));
+        }
+    };
+    for (i, ch) in body.char_indices() {
+        match ch {
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth -= 1,
+            ',' if depth == 0 => {
+                push(&body[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    push(&body[start..]);
+    out
+}
+
+fn coverage(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
+    use spire_core::analysis::sim::reading;
+    println!("id\tstatus\treading\tunread\ttags");
+    for c in cat.cards.values() {
+        let r = reading(c, false, cat);
+        let mut read: Vec<String> =
+            set_fields(&format!("{:?}", r.now)).into_iter().filter(|f| f != "hits=1" && f != "block_times=1").collect();
+        read.extend(
+            r.channels.iter().map(|(o, n, x)| format!("channel {} {o}", if *x { "X".into() } else { n.to_string() })),
+        );
+        if r.x {
+            read.push("X-cost".into());
+        }
+        if r.x_stars {
+            read.push("X in Stars".into());
+        }
+        if r.star_cost > 0 {
+            read.push(format!("{} Stars to play", r.star_cost));
+        }
+        if r.all_enemies {
+            read.push("all enemies".into());
+        }
+        if r.shoots {
+            read.push("shoots".into());
+        }
+        // A power acts through its triggers; of its card text only these
+        // two fields are used.
+        let power = c.card_type == CardType::Power;
+        read.extend(
+            set_fields(&format!("{:?}", r.text))
+                .into_iter()
+                .filter(|f| !power || f.starts_with("next_extra") || f.starts_with("gives_replay")),
+        );
+        read.extend(r.mech.describe());
+        let unread = &r.mech.unread;
+        let status = match (read.is_empty(), unread.is_empty()) {
+            (_, true) => "read",
+            (false, false) => "partly",
+            (true, false) => "none",
+        };
+        let tags: Vec<String> =
+            spire_core::analysis::tags::tags(c, false, pb).iter().map(|t| t.tag.name().to_string()).collect();
+        println!("{}\t{status}\t{}\t{}\t{}", c.id, read.join("; "), unread.join(" / "), tags.join(", "));
+    }
+    let orbs: Vec<_> = cat.orbs.values().cloned().collect();
+    for r in cat.relics.values() {
+        let m = spire_core::mechanics::read(&r.text, &orbs, false);
+        let status = match (m.is_empty(), m.unread.is_empty()) {
+            (_, true) => "read",
+            (false, false) => "partly",
+            (true, false) => "none",
+        };
+        println!("{}\t{status}\t{}\t{}", r.id, m.describe().join("; "), m.unread.join(" / "));
+    }
 }
 
 fn tags(cat: &Catalog, pb: &spire_core::playbook::Playbook) {

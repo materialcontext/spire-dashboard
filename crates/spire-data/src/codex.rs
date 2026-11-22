@@ -167,6 +167,8 @@ struct WCard {
     upgrade: BTreeMap<String, serde_json::Value>,
     #[serde(default)]
     star_cost: Option<i32>,
+    #[serde(default)]
+    is_x_star_cost: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -178,7 +180,12 @@ struct WPowerDef {
 
 /// "Receive [blue]50%[/blue] more damage from Attacks…" → 50.
 fn vulnerable_pct(powers: &[WPowerDef]) -> Option<u32> {
-    let v = powers.iter().find(|p| p.id == "VULNERABLE" || p.id == "VULNERABLE_POWER")?;
+    power_pct(powers, "VULNERABLE")
+}
+
+/// The first percentage in a power's description ("deal [blue]25%[/blue] less") .
+fn power_pct(powers: &[WPowerDef], id: &str) -> Option<u32> {
+    let v = powers.iter().find(|p| p.id == id || p.id == format!("{id}_POWER"))?;
     let after = v.description.split("[blue]").nth(1)?;
     after.split('%').next()?.trim().parse().ok()
 }
@@ -410,7 +417,9 @@ struct WAct {
 // ---------------------------------------------------------------- helpers
 
 /// Strips Codex/Godot rich-text markup: `[gold]Block[/gold]` → `Block`,
-/// `[energy:2]` → `2 Energy`, `[star:1]` → `1 Star`.
+/// `[energy:2]` → `2 Energy`, `[star:1]` → `1 Star`. After a number or a
+/// comparison the icon is a unit, not an amount: `9 [star:1]` → `9 Star`,
+/// `costs 0[energy:1]` → `costs 0 Energy`, `1 less [energy:1]` → `1 less Energy`.
 pub fn strip_markup(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
@@ -428,7 +437,17 @@ pub fn strip_markup(text: &str) -> String {
                         "star" => "Star",
                         other => other,
                     };
-                    out.push_str(&format!("{n} {word}"));
+                    let before = out.trim_end();
+                    let unit = before.ends_with(|c: char| c.is_ascii_digit() || c == 'X')
+                        || before.ends_with("less")
+                        || before.ends_with("more");
+                    if unit {
+                        out.truncate(before.len());
+                        out.push(' ');
+                        out.push_str(word);
+                    } else {
+                        out.push_str(&format!("{n} {word}"));
+                    }
                 }
                 rest = &after[end + 1..];
             }
@@ -547,6 +566,7 @@ fn map_card(c: WCard) -> Card {
             .collect(),
         upgrade: upgrade(c.upgrade),
         star_cost: c.star_cost.and_then(|n| u8::try_from(n).ok()),
+        x_star_cost: c.is_x_star_cost.unwrap_or(false),
         channels: Vec::new(),
     }
 }
@@ -924,6 +944,7 @@ pub fn to_pack(
     let mut rules = rules_from(&ascensions);
     if let Some(r) = rules.as_mut().filter(|_| !powers.is_empty()) {
         r.vulnerable_pct = vulnerable_pct(&powers);
+        r.weak_pct = power_pct(&powers, "WEAK");
     }
     if let Some(r) = rules.as_mut() {
         r.forge_card = responses.get(GLOSSARY).and_then(|b| forge_card(b, &cards));
@@ -1169,6 +1190,10 @@ mod tests {
     fn strips_markup() {
         assert_eq!(strip_markup("Gain 5 [gold]Block[/gold]."), "Gain 5 Block.");
         assert_eq!(strip_markup("Gain [energy:2]."), "Gain 2 Energy.");
+        assert_eq!(strip_markup("Gain 9 [star:1]."), "Gain 9 Star.");
+        assert_eq!(strip_markup("Put ALL 0[energy:1] cards"), "Put ALL 0 Energy cards");
+        assert_eq!(strip_markup("Costs 1 less [energy:1] for"), "Costs 1 less Energy for");
+        assert_eq!(strip_markup("Costs [energy:2] less"), "Costs 2 Energy less");
         assert_eq!(strip_markup("[blue]X[/blue] [gold]Block[/gold]"), "X Block");
         assert_eq!(strip_markup("unclosed [tag"), "unclosed [tag");
     }

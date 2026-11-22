@@ -10,7 +10,12 @@ fn run(character: &str, extra: &[&str]) -> RunState {
     let cat = spire_data::bundled_catalog();
     let start = RunEvent::start(&cat, &CharacterId::new(character), 0).expect("character starts");
     let mut s = apply(RunState::default(), &start);
-    s.deck.extend(extra.iter().map(|id| DeckCard { card: CardId::new(*id), upgraded: false, enchantment: None }));
+    s.deck.extend(extra.iter().map(|id| DeckCard {
+        card: CardId::new(*id),
+        upgraded: false,
+        enchantment: None,
+        enchant_amount: None,
+    }));
     s
 }
 

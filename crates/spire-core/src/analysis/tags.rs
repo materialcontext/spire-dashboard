@@ -19,7 +19,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::catalog::{Card, Rarity, Target};
+use crate::catalog::{Card, CardType, Rarity, Target};
 use crate::mechanics::{self, Effect};
 use crate::playbook::Playbook;
 
@@ -178,6 +178,11 @@ pub enum TagSource {
 /// The tags read from a card, before any override. Upgrades are applied.
 pub fn read(card: &Card, upgraded: bool, playbook: &Playbook) -> Vec<Tagged> {
     let mut out: Vec<Tagged> = Vec::new();
+    // A Status's or Curse's numbers are its drawback ("draw 2 fewer"), and a
+    // card aimed at another player does nothing for this deck.
+    if matches!(card.card_type, CardType::Status | CardType::Curse) || card.target == Target::Ally {
+        return out;
+    }
     let mut add = |tag: Tag, value: i32, hits: u32| {
         let value = value.max(0) as u32;
         match out.iter_mut().find(|t| t.tag == tag) {
@@ -186,6 +191,7 @@ pub fn read(card: &Card, upgraded: bool, playbook: &Playbook) -> Vec<Tagged> {
         }
     };
     let effects = mechanics::read(card.text_at(upgraded), &[], true);
+    let text = mechanics::card_text(card.text_at(upgraded), &[]);
     let effects: Vec<&Effect> = effects.triggers.iter().flat_map(|(_, es)| es).collect();
     let power = |name: &str| card.powers.iter().find(|p| p.power.eq_ignore_ascii_case(name)).map(|p| p.amount);
 
@@ -242,13 +248,14 @@ pub fn read(card: &Card, upgraded: bool, playbook: &Playbook) -> Vec<Tagged> {
     let said_draw = effects.iter().filter_map(|e| if let Effect::Draw(n) = e { Some(*n) } else { None }).max();
     // The data's card count also marks "Add 3 Shivs" and "3 or more cards":
     // only a card that says "draw" draws.
-    let draws = mechanics::card_text(card.text_at(upgraded), &[]).draws;
+    let draws = text.draws;
     if (card.draw.is_some() && draw > 0 && draws) || said_draw.is_some_and(|n| n > 0) {
         add(Tag::Draw, draw.max(said_draw.unwrap_or(0)), 1);
     }
-    let energy = card.value("energy", upgraded);
+    // Only "Gain N Energy": not "costs 2 Energy or more" or "if this kills".
+    let energy = if text.gains_energy { card.value("energy", upgraded) } else { 0 };
     let said_energy = effects.iter().filter_map(|e| if let Effect::Energy(n) = e { Some(*n) } else { None }).max();
-    if (card.energy.is_some() && energy > 0) || said_energy.is_some_and(|n| n > 0) {
+    if energy > 0 || said_energy.is_some_and(|n| n > 0) {
         add(Tag::Energy, energy.max(said_energy.unwrap_or(0)), 1);
     }
 

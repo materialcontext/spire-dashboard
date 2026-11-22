@@ -19,7 +19,7 @@ fn describe(v: &ViewCtx, c: &Change) -> (String, egui::Color32) {
         Change::AddCard(d) => (format!("Add {}", card(d)), good()),
         Change::RemoveCard(d) => (format!("Remove {}", card(d)), bad()),
         Change::UpgradeCard(d) => (format!("Upgrade {}", card(d)), good()),
-        Change::Enchant { card: d, enchantment } => {
+        Change::Enchant { card: d, enchantment, .. } => {
             (format!("Enchant {} with {}", card(d), v.catalog.enchantment_name(enchantment)), info())
         }
         Change::Transform { from, to } => (format!("Transform {} into {}", card(from), card(to)), info()),
@@ -173,7 +173,7 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
         .chain(v.catalog.cards.values().filter(|c| c.color != pool))
         .map(|c| (c.id.as_str(), c.name.as_str(), c.text.as_str()));
     if let Some(id) = search_pick(ui, &mut d.card_query, "Search cards", cards) {
-        let card = DeckCard { card: id.into(), upgraded: d.add_upgraded, enchantment: None };
+        let card = DeckCard { card: id.into(), upgraded: d.add_upgraded, enchantment: None, enchant_amount: None };
         d.changes.push(Change::AddCard(card));
     }
     // The cards the suggestions look for: one click adds the one taken.
@@ -185,7 +185,12 @@ pub fn show(ui: &mut Ui, v: &ViewCtx, d: &mut NodeDraft, out: &mut Vec<Action>) 
             for id in wanted {
                 let name = v.catalog.card_name(id);
                 if ui.small_button(name).on_hover_text("Add to this floor's changes").clicked() {
-                    let card = DeckCard { card: id.clone(), upgraded: d.add_upgraded, enchantment: None };
+                    let card = DeckCard {
+                        card: id.clone(),
+                        upgraded: d.add_upgraded,
+                        enchantment: None,
+                        enchant_amount: None,
+                    };
                     d.changes.push(Change::AddCard(card));
                 }
             }

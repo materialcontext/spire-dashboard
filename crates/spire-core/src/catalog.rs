@@ -142,6 +142,9 @@ pub struct Card {
     /// Stars the card costs on top of energy (Regent).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub star_cost: Option<u8>,
+    /// X is paid in Stars rather than energy (Stardust).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub x_star_cost: bool,
     /// Orbs the card channels (Defect).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub channels: Vec<OrbChannel>,
@@ -1076,6 +1079,10 @@ pub struct GameRules {
     /// percent, read from the power's description. `None` if unknown.
     #[serde(default)]
     pub vulnerable_pct: Option<u32>,
+    /// How much less damage a Weak creature deals with attacks, in percent,
+    /// read from the power's description. `None` if unknown.
+    #[serde(default)]
+    pub weak_pct: Option<u32>,
     /// Ascension from which Ancients heal only `weary_heal_pct` of missing
     /// HP ("Weary Traveler"). Every run starts at 0 HP and is healed by the
     /// first Ancient, so this also lowers starting HP.
@@ -1122,6 +1129,7 @@ impl Default for GameRules {
             double_boss_from: Some(10),
             double_boss_act: 2,
             vulnerable_pct: None,
+            weak_pct: None,
             weary_from: Some(2),
             weary_heal_pct: 80,
             rest_heal_pct: 30,

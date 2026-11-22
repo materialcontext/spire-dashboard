@@ -391,7 +391,9 @@ fn play(sim: &DeckSim, foe: Foe, way: Way) -> Line {
         let keep = thinned(junk + passing);
         let mods = foe.stages[stage].mods;
         let (attack, block) = (out.damage.mean * keep, out.block.mean * keep);
-        let coming = incoming(stage, t - since) + enraged;
+        // Weak on the enemy takes its share off what each turn brings.
+        let weakened = |d: f32| d * (1.0 - out.mitigation);
+        let coming = weakened(incoming(stage, t - since) + enraged);
         let share = share_for(coming, block);
         let attacking = 1.0 - share;
         let landed = mods.land(attack * attacking, hits * attacking * keep, per_hit, cards * keep, &mut slippery);
@@ -421,8 +423,8 @@ fn play(sim: &DeckSim, foe: Foe, way: Way) -> Line {
             // with that turn's block (there's nothing left to attack, but
             // the way still splits the same way).
             let blast_turn = foe.blast.map(|floor| {
-                let blast = floor.max(incoming(stage, t + 1 - since));
                 let next = output(t + 1);
+                let blast = floor.max(incoming(stage, t + 1 - since)) * (1.0 - next.mitigation);
                 lost += taken(&next, blast, share_for(blast, next.block.mean * keep), keep);
                 t as u32 + 2
             });
@@ -430,10 +432,11 @@ fn play(sim: &DeckSim, foe: Foe, way: Way) -> Line {
             return Line { way, blast_turn, junk, kill_turn: Some(t as u32 + 1), hp_loss: lost.round() as u32 };
         }
         // A stage that arrived this turn takes its first enemy turn now.
-        let coming = if stunned { 0.0 } else { incoming(stage, t - since) + enraged };
+        let coming = if stunned { 0.0 } else { weakened(incoming(stage, t - since) + enraged) };
         stunned = false;
         let through = taken(&out, coming, share_for(coming, block), keep);
-        lost += through;
+        // HP the deck spends on purpose (Bloodletting, a held Burn).
+        lost += through + out.self_damage;
         if through > 0.0 {
             junk += foe.stages[stage].mods.junk_unblocked;
         }
@@ -727,7 +730,8 @@ mod tests {
 
     fn sim(attack: f32, block: f32) -> DeckSim {
         let s = |m| Spread { mean: m, low: m, high: m };
-        let turn = TurnOutput { damage: s(attack), block: s(block), block_steps: Steps::flat(block) };
+        let turn =
+            TurnOutput { damage: s(attack), block: s(block), block_steps: Steps::flat(block), ..TurnOutput::default() };
         DeckSim { turns: vec![turn; 5], ..Default::default() }
     }
 
@@ -929,6 +933,7 @@ mod tests {
             damage: Spread { mean: attack, low: attack, high: attack },
             block: Spread { mean, low, high },
             block_steps: Steps { values, known: true },
+            ..TurnOutput::default()
         };
         DeckSim { turns: vec![turn; 5], ..Default::default() }
     }
