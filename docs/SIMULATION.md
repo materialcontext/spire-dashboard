@@ -83,3 +83,5 @@ Card Block + Dexterity + Defend bonus (Fasten) + Stretch (spent by the card, add
 ## Not read yet
 
 `audit -- --mechanics`: 77 of 133 powers and 84 of 315 relics are read; most unread relics act outside combat. Unread combat effects: conditions ("end your turn without Block", "the first time"), random cards or orbs, choices ("put a card from your Discard Pile into your Hand", Headbutt, Hologram, Dredge), enemy deaths, HP loss, Block retention (Barricade, Sturdy Clamp), "this turn" buffs, most "for each" scaling. The Relics tab and power pages say what is simulated.
+
+[research/](research/README.md) goes card by card and relic by relic: what each reads, what it misses, and how cards and relics interact.
