@@ -208,6 +208,9 @@ pub struct Wave {
     pub hp: u32,
     /// The power that summoned it (`None` for the starting lineup).
     pub summoned_by: Option<String>,
+    /// The phase it is of its monster (index into `Monster::phases`), for
+    /// a monster that revived.
+    pub phase: Option<usize>,
 }
 
 /// The most common lineup, then the phases its monsters revive into, then
@@ -242,7 +245,7 @@ pub fn lineup_waves(enc: &Encounter, catalog: &Catalog, scaling: Scaling, turns:
         let plan = pattern::plan_spawned(m, scaling.deadly, vulnerable, turns);
         let mp =
             MonsterPlan { monster: id.clone(), name: m.name.clone(), count, plan, death_blow: m.death_blow.is_some() };
-        Some(Wave { plans: vec![mp], hp: (lo + hi) / 2 * count, summoned_by: Some(power.to_string()) })
+        Some(Wave { plans: vec![mp], hp: (lo + hi) / 2 * count, summoned_by: Some(power.to_string()), phase: None })
     };
     // Phases a monster revives into: one more stage each, from the phase's
     // opening move. (A revive that skips a turn isn't counted.)
@@ -250,15 +253,15 @@ pub fn lineup_waves(enc: &Encounter, catalog: &Catalog, scaling: Scaling, turns:
         .iter()
         .filter_map(|mp| catalog.monsters.get(&mp.monster))
         .flat_map(|m| {
-            m.phases.iter().map(move |ph| {
+            m.phases.iter().enumerate().map(move |(k, ph)| {
                 let (lo, hi) = ph.hp_at(scaling.tough);
                 let plan = pattern::plan_from(m, &ph.start, scaling.deadly, vulnerable, turns);
                 let mp = MonsterPlan { monster: m.id.clone(), name: m.name.clone(), count: 1, plan, death_blow: false };
-                Wave { plans: vec![mp], hp: (lo + hi) / 2, summoned_by: None }
+                Wave { plans: vec![mp], hp: (lo + hi) / 2, summoned_by: None, phase: Some(k) }
             })
         })
         .collect();
-    let mut waves = vec![Wave { plans, hp, summoned_by: None }];
+    let mut waves = vec![Wave { plans, hp, summoned_by: None, phase: None }];
     waves.extend(phases);
     for (id, n, power, in_place) in &summoned {
         let (repeats, count) = if *in_place { (*n, 1) } else { (1, *n) };

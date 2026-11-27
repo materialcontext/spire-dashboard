@@ -108,3 +108,24 @@ fn axebots_replace_each_other_so_they_need_no_area_damage() {
     // Monsters that do stand together still ask for it.
     assert!(wants_aoe("TOADPOLES_WEAK"));
 }
+
+/// Each stage's rules, as the survival check fights them.
+fn stages(id: &str) -> Vec<Vec<String>> {
+    use spire_core::analysis::{survival, threats};
+    let cat = spire_data::bundled_catalog();
+    let enc = cat.encounters.get(&EncounterId::new(id)).unwrap_or_else(|| panic!("{id} in the bundle"));
+    threats::lineup_waves(enc, &cat, Scaling::default(), 12)
+        .iter()
+        .map(|w| survival::stage_rules(w, &cat).into_iter().map(|r| r.power.power).collect())
+        .collect()
+}
+
+#[test]
+fn each_phase_fights_under_its_own_powers() {
+    // Test Subject gains Painful Stabs on its first revive and Nemesis on
+    // its second (patterns.json, from the wiki), not from the start.
+    assert_eq!(
+        stages("TEST_SUBJECT_BOSS"),
+        vec![vec!["ADAPTABLE", "ENRAGE"], vec!["ADAPTABLE", "PAINFUL_STABS"], vec!["NEMESIS"]]
+    );
+}

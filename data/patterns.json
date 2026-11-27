@@ -140,12 +140,14 @@
         {
           "hp_min": 200,
           "hp_min_asc": 212,
-          "start": "MULTI_CLAW"
+          "start": "MULTI_CLAW",
+          "powers": ["ADAPTABLE", "PAINFUL_STABS"]
         },
         {
           "hp_min": 300,
           "hp_min_asc": 313,
-          "start": "PHASE3_LACERATE"
+          "start": "PHASE3_LACERATE",
+          "powers": ["NEMESIS"]
         }
       ],
       "moves": [
@@ -166,7 +168,7 @@
           "says": "Adaptable revives it; after reviving it uses Multi-Claw if respawns < 2, Lacerate if respawns >= 2. Multi-Claw is listed as one hit of 10. No HP given."
         }
       ],
-      "note": "Multi-Claw gains a hit each use; modelled at its first 3 hits. Each phase's rules apply to the whole fight here, and the turn spent reviving isn't counted."
+      "note": "Multi-Claw gains a hit each use; modelled at its first 3 hits. Each phase holds the powers the wiki gives it (phase 2: Adaptable and Painful Stabs; phase 3: Nemesis); the turn spent reviving isn't counted."
     },
     {
       "monster": "DECIMILLIPEDE_SEGMENT_FRONT",

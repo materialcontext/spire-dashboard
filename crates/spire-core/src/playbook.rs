@@ -705,7 +705,7 @@ impl Default for SimAssumptions {
         SimAssumptions {
             hand_size: 5,
             max_hand: 10,
-            turns: 5,
+            turns: 8,
             trials: 400,
             arrow_return_hits: 3,
             max_orb_slots: 10,
