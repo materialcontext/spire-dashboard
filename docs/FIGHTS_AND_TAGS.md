@@ -26,7 +26,7 @@ Thresholds: the playbook's `fights`. Gaps are researched into `data/patterns.jso
 
 ## Fight rules (`analysis::rules`)
 
-Read from monster power text: Slippery, Intangible, Skittish, Hardened Shell (many hits); Personal Hive, Slow (few cards or Skills); Enrage and the like. Each changes the damage that lands in the survival ways (`Mods`) and can demand a role (many hits → Chip).
+Read from monster power text: Slippery, Intangible, Skittish, Hardened Shell (many hits); Personal Hive, Slow (few cards or Skills); Enrage and the like. Each changes the damage that lands in the survival ways (`Mods`) and can demand a role (many hits → Chip). Intangible is advice only: community wins at the Intangible bosses take as long as the check predicts without it, so it doesn't slow the predicted kill. A power a move gives holds only in stages that use the move, and a revived phase holds the powers its source gives it.
 
 ## Roles and jobs
 

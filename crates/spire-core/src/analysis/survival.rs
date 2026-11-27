@@ -31,8 +31,7 @@
 //!
 //! **Fight rules** change the damage that lands, from what the simulator
 //! counts per turn (hits, damage per hit, cards and Skills played):
-//! Slippery spends early hits at 1 HP each, Intangible turns a turn's damage
-//! into its hits, Skittish's Block soaks the first hit, Hardened Shell caps
+//! Slippery spends early hits at 1 HP each, Skittish's Block soaks the first hit, Hardened Shell caps
 //! a turn, Slow adds damage per card played, Personal Hive adds a Dazed per
 //! hit, Painful Stabs a Wound per turn with unblocked damage, Enrage
 //! Strength per Skill, and Shriek or Plow skip an enemy turn at an HP line.
@@ -49,9 +48,8 @@
 //! - Rules are read from the power's text and amount, per stage: a power
 //!   a move gives holds only in stages that use the move, and a revived
 //!   phase holds the powers a source gives it (`patterns.json`).
-//!   Intangible a move gives covers as many turns as its amount, each time
-//!   the pattern uses the move; Intangible from a power's wording ("every
-//!   other turn") covers half. Slippery isn't regained.
+//!   Intangible is advice only (many hits): community wins show it doesn't
+//!   slow the kill. Slippery isn't regained.
 //! - Potions, and cards the simulator can't read.
 
 use crate::analysis::jobs;
@@ -138,8 +136,9 @@ impl Way {
 pub struct Mods {
     /// HP losses that are 1 each (Slippery), spent by the first hits.
     pub slippery: f32,
-    /// Share of player turns the enemy is Intangible (each hit does 1).
-    pub intangible: f32,
+    /// It turns Intangible some turns. Advice only (many hits): the kill
+    /// isn't slowed, see `land`.
+    pub intangible: bool,
     /// Block it gains on the first hit each turn (Skittish).
     pub skittish: f32,
     /// Most HP it can lose in a turn (Hardened Shell).
@@ -169,7 +168,7 @@ impl Mods {
             let n = r.power.amount.unwrap_or(1).max(1) as f32;
             match r.kind {
                 RuleKind::HitsLoseOne => m.slippery = m.slippery.max(n),
-                RuleKind::Intangible => m.intangible = 0.5,
+                RuleKind::Intangible => m.intangible = true,
                 RuleKind::BlockOnFirstHit => m.skittish = m.skittish.max(n),
                 RuleKind::HpCapPerTurn => m.cap = Some(m.cap.map_or(n, |c| c.min(n))),
                 RuleKind::MorePerCard => m.per_card = m.per_card.max(0.1 * n),
@@ -201,9 +200,11 @@ impl Mods {
             *slippery -= spent;
         }
         d = (d - self.skittish).max(0.0);
-        if self.intangible > 0.0 {
-            d = (1.0 - self.intangible) * d + self.intangible * hits.min(d);
-        }
+        // Intangible doesn't slow the kill: community wins at Soul Fysh and
+        // Test Subject take as long as the check predicts with it left out
+        // (median +1 turn, as at other bosses; counting each Intangible
+        // turn's hits at 1 put 69% of Soul Fysh wins past the horizon).
+        // Players spend those turns on Block and setup.
         self.cap.map_or(d, |c| d.min(c)).max(0.0)
     }
 }
@@ -533,45 +534,6 @@ fn granting<'m>(m: &'m Monster, power: &'m str) -> impl Iterator<Item = (&'m str
     })
 }
 
-/// Share of player turns a stage's monster is Intangible when a move gives
-/// it Intangible directly (Soul Fysh's Fade): each use, weighted by its
-/// chance on that turn, covers as many player turns as its amount, over
-/// the turns the pattern walks. `None` when no move gives it, so the
-/// rule's own wording decides (Nemesis: every other turn).
-pub fn intangible_share(wave: &Wave, catalog: &Catalog) -> Option<f32> {
-    let mut best: Option<f32> = None;
-    for p in &wave.plans {
-        let Some(m) = catalog.monsters.get(&p.monster) else { continue };
-        let givers: Vec<(&str, i32)> = granting(m, "INTANGIBLE").collect();
-        if givers.is_empty() || p.plan.turns.is_empty() {
-            continue;
-        }
-        let covered: f32 = p
-            .plan
-            .turns
-            .iter()
-            .map(|t| {
-                let weighted: f32 = t.options.iter().map(|o| o.chance.unwrap_or(0.0)).sum();
-                t.options
-                    .iter()
-                    .filter_map(|o| {
-                        let amount = givers.iter().find(|(name, _)| *name == o.name)?.1.max(1) as f32;
-                        let chance = if weighted > 0.0 {
-                            o.chance.unwrap_or(0.0) / weighted
-                        } else {
-                            1.0 / t.options.len() as f32
-                        };
-                        Some(chance * amount)
-                    })
-                    .sum::<f32>()
-            })
-            .sum();
-        let share = (covered / p.plan.turns.len() as f32).min(1.0);
-        best = Some(best.map_or(share, |b: f32| b.max(share)));
-    }
-    best
-}
-
 /// The rules that change the play, in words, with what answers them.
 fn rule_words(rules: &[rules::Rule], play: &PlayStats) -> Vec<RuleNote> {
     let mut out: Vec<RuleNote> = Vec::new();
@@ -665,7 +627,7 @@ fn limits(
     {
         add(Role::FastDamage, format!("the kill takes about {k} turns; players usually finish in {pace:.0}"));
     }
-    let chip = mods.slippery > 0.0 || mods.intangible > 0.0 || mods.skittish > 0.0;
+    let chip = mods.slippery > 0.0 || mods.intangible || mods.skittish > 0.0;
     if chip && play.hits < playbook.fights.chip_hits {
         add(Role::Chip, format!("its rules punish few hits; you land {:.1} a turn", play.hits));
     }
@@ -712,15 +674,7 @@ pub fn for_encounter(
         .iter()
         .zip(&series)
         .zip(&wave_rules)
-        .map(|((w, (incoming, statuses)), r)| {
-            let mut mods = Mods::of(r, fades);
-            if mods.intangible > 0.0
-                && let Some(share) = intangible_share(w, catalog)
-            {
-                mods.intangible = share;
-            }
-            Stage { incoming, statuses, hp: w.hp, mods }
-        })
+        .map(|((w, (incoming, statuses)), r)| Stage { incoming, statuses, hp: w.hp, mods: Mods::of(r, fades) })
         .collect();
     // The blast follows the last kill. Its size grows over the fight and
     // the data gives only its starting value, so it counts as at least

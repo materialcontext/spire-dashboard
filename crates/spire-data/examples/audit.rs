@@ -244,15 +244,13 @@ fn patterns(cat: &Catalog, pb: &spire_core::playbook::Playbook) {
         }
         // Rules per stage: a power a move gives holds only where the move is used.
         let waves = spire_core::analysis::threats::lineup_waves(e, cat, Scaling::default(), 12);
-        if waves.len() > 1 || waves.iter().any(|w| spire_core::analysis::survival::intangible_share(w, cat).is_some()) {
+        if waves.len() > 1 {
             for (k, w) in waves.iter().enumerate() {
                 let rules: Vec<String> = spire_core::analysis::survival::stage_rules(w, cat)
                     .iter()
                     .map(|r| power_words(&r.power.power).to_string())
                     .collect();
-                let intangible = spire_core::analysis::survival::intangible_share(w, cat)
-                    .map_or(String::new(), |x| format!(" · Intangible {:.0}% of turns", x * 100.0));
-                println!("  stage {} ({} HP): {}{intangible}", k + 1, w.hp, rules.join(", "));
+                println!("  stage {} ({} HP): {}", k + 1, w.hp, rules.join(", "));
             }
         }
         for r in &s.rules {
