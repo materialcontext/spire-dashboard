@@ -545,3 +545,24 @@ fn scaling_powers_are_played_for_what_they_build() {
     let last = |s: &spire_core::analysis::sim::DeckSim| s.turns.last().unwrap().damage.mean;
     assert!(last(&demon) > last(&strike) * 1.5, "{} vs {}", last(&demon), last(&strike));
 }
+
+#[test]
+fn potions_held_boost_the_fight() {
+    use spire_core::analysis::survival::potion_boost;
+    use spire_core::ids::PotionId;
+    let sim = fight("IRONCLAD", &[("STRIKE_IRONCLAD", 5), ("DEFEND_IRONCLAD", 5)], &[]);
+    let boost = |ids: &[&str]| potion_boost(&ids.iter().map(|i| PotionId::new(*i)).collect::<Vec<_>>(), cat(), &sim, 4);
+    // Fire Potion: its damage on the first turn.
+    assert_eq!(boost(&["FIRE_POTION"]).damage, vec![20.0, 0.0, 0.0, 0.0]);
+    // Strength lasts; Flex takes it back at the end of the turn.
+    let strength = boost(&["STRENGTH_POTION"]).damage;
+    assert!(strength.iter().all(|d| *d > 1.0), "{strength:?}");
+    let flex = boost(&["FLEX_POTION"]).damage;
+    assert!(flex[0] > 0.0 && flex[1..].iter().all(|d| *d == 0.0), "{flex:?}");
+    // Block, Plating and Weak.
+    assert_eq!(boost(&["BLOCK_POTION"]).block, vec![12.0, 0.0, 0.0, 0.0]);
+    assert_eq!(boost(&["HEART_OF_IRON"]).block, vec![7.0, 6.0, 5.0, 4.0]);
+    assert_eq!(boost(&["WEAK_POTION"]).weak_turns, 3);
+    // Healing isn't counted.
+    assert_eq!(boost(&["BLOOD_POTION"]), boost(&[]));
+}

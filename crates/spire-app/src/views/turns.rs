@@ -357,8 +357,8 @@ fn outlook_detail(ui: &mut Ui, o: &Outlook, stats: Option<&EncounterStats>) {
     if let Some((median, p90)) = stats.and_then(|s| s.win_damage) {
         ui.label(format!("Winners lost {median} HP (median); 1 in 10, {p90}+."));
     }
-    let how = if o.died.is_some() { "ranked against community decks here" } else { "no potions or debuffs" };
-    ui.label(caption(format!("Simulated on averages; {how}.")));
+    let ranked = if o.died.is_some() { "; ranked against community decks here" } else { "" };
+    ui.label(caption(format!("Simulated on averages, potions held drunk on turn 1{ranked}.")));
 }
 
 /// Every monster's turns in full, for the Enemies tab.

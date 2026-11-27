@@ -43,14 +43,17 @@
 //! What it leaves out, so it reads as a guide, not a forecast:
 //! - Enemies in a stage die together: damage from one that falls early
 //!   still counts, and damage past a stage's HP carries into the next.
-//! - Debuffs on the player (Weak, Frail) and on enemies are not modelled,
-//!   except Vulnerable the pattern puts on the player.
+//! - Debuffs on the player (Weak, Frail) are not modelled, except
+//!   Vulnerable the pattern puts on the player; on enemies, only Weak
+//!   (from the simulator, and from potions).
 //! - Rules are read from the power's text and amount, per stage: a power
 //!   a move gives holds only in stages that use the move, and a revived
 //!   phase holds the powers a source gives it (`patterns.json`).
 //!   Intangible is advice only (many hits): community wins show it doesn't
 //!   slow the kill. Slippery isn't regained.
-//! - Potions, and cards the simulator can't read.
+//! - Potions held are all drunk on the first turn (`potion_boost`);
+//!   healing, Thorns and the potions the reader can't word aren't counted.
+//! - Cards the simulator can't read.
 
 use crate::analysis::jobs;
 use crate::analysis::rules::{self, Kind as RuleKind};
@@ -244,6 +247,98 @@ pub struct Foe<'a> {
     /// Player turns played out: how long wins here take (9 in 10 of them),
     /// else `MAX_TURNS`.
     pub horizon: usize,
+    /// What the potions held add (`potion_boost`).
+    pub boost: &'a Boost,
+    /// Share of an attack Weak takes off (0–1), for a potion's Weak.
+    pub weak_pct: f32,
+}
+
+/// No potions.
+pub static NO_BOOST: Boost = Boost { damage: Vec::new(), block: Vec::new(), weak_turns: 0 };
+
+/// What the potions you hold add to a fight if you drink them all on its
+/// first turn, turn by turn. Each potion's text goes through the mechanics
+/// reader (as played), and its effects are priced on the deck's own
+/// averages. Community decks use potions in two thirds of boss fights and
+/// half of elite fights, and the fights where they do are the ones the
+/// check otherwise reads long.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Boost {
+    /// Damage added on each player turn.
+    pub damage: Vec<f32>,
+    /// Block added on each player turn.
+    pub block: Vec<f32>,
+    /// Enemy turns, from the first, the enemy is Weak.
+    pub weak_turns: usize,
+}
+
+impl Boost {
+    fn at(v: &[f32], t: usize) -> f32 {
+        v.get(t).copied().unwrap_or(0.0)
+    }
+}
+
+/// The boost from `potions` over `turns` player turns, priced on `sim`:
+/// damage on the first turn; Strength on every hit after (a turn of it
+/// when the potion takes it back); Vulnerable on the attack while it
+/// lasts; Poison as it ticks down; Block, Plating and Dexterity as Block;
+/// Weak as turns of it; energy, draws and free cards at an average card's
+/// damage. Healing, Thorns, Intangible and the rest aren't counted.
+pub fn potion_boost(potions: &[crate::ids::PotionId], catalog: &Catalog, sim: &DeckSim, turns: usize) -> Boost {
+    use crate::mechanics::{Effect, When};
+    let mut b = Boost { damage: vec![0.0; turns], block: vec![0.0; turns], weak_turns: 0 };
+    if sim.turns.is_empty() || turns == 0 {
+        return b;
+    }
+    let attack = |t: usize| sim.turns[t.min(sim.turns.len() - 1)].damage.mean;
+    let per_card = attack(0) / sim.play.cards.max(1.0);
+    let per_energy = attack(0) / (sim.energy as f32).max(1.0);
+    let vulnerable = catalog.rules.vulnerable_pct.unwrap_or(50) as f32 / 100.0;
+    let orbs: Vec<_> = catalog.orbs.values().cloned().collect();
+    for p in potions.iter().filter_map(|id| catalog.potions.get(id)) {
+        let m = crate::mechanics::read(&p.text, &orbs, true);
+        // "At the end of your turn, lose 5 Strength": a turn of it only.
+        let takes_back =
+            |stat: fn(&Effect) -> bool| m.triggers.iter().any(|(w, es)| *w == When::TurnEnd && es.iter().any(stat));
+        for e in m.triggers.iter().filter(|(w, _)| *w == When::Played).flat_map(|(_, es)| es) {
+            let all = |b: &mut Vec<f32>, per: f32, n: usize| b.iter_mut().take(n).for_each(|x| *x += per);
+            match e {
+                Effect::Damage(n) | Effect::DamageAll(n) => b.damage[0] += *n as f32,
+                Effect::Strength(n) => {
+                    let lasts = if takes_back(|e| matches!(e, Effect::Strength(x) if *x < 0)) { 1 } else { turns };
+                    all(&mut b.damage, *n as f32 * sim.play.hits, lasts);
+                }
+                Effect::Dexterity(n) => {
+                    let lasts = if takes_back(|e| matches!(e, Effect::Dexterity(x) if *x < 0)) { 1 } else { turns };
+                    all(&mut b.block, *n as f32 * 1.5, lasts);
+                }
+                Effect::Vulnerable(n) => {
+                    for (t, d) in b.damage.iter_mut().enumerate().take(*n as usize) {
+                        *d += attack(t) * vulnerable;
+                    }
+                }
+                // Each tick deals the stack, then it drops by one.
+                Effect::Poison(n) => {
+                    for (t, d) in b.damage.iter_mut().enumerate().take(*n as usize) {
+                        *d += (*n as usize - t) as f32;
+                    }
+                }
+                Effect::Block(n) => b.block[0] += *n as f32,
+                Effect::Plating(n) => {
+                    for (t, x) in b.block.iter_mut().enumerate().take(*n as usize) {
+                        *x += (*n as usize - t) as f32;
+                    }
+                }
+                Effect::Weak(n) => b.weak_turns = b.weak_turns.max(*n as usize),
+                Effect::Energy(n) => b.damage[0] += *n as f32 * per_energy,
+                Effect::Draw(n) => b.damage[0] += *n as f32 * per_card,
+                Effect::MakeRandom { n, .. } | Effect::Make { n, .. } => b.damage[0] += (*n).max(1) as f32 * per_card,
+                Effect::AutoPlay { n, .. } | Effect::Fetch { n, .. } => b.damage[0] += (*n).max(1) as f32 * per_card,
+                _ => {}
+            }
+        }
+    }
+    b
 }
 
 impl Foe<'_> {
@@ -395,9 +490,10 @@ fn play(sim: &DeckSim, foe: Foe, way: Way) -> Line {
         let out = output(t);
         let keep = thinned(junk + passing);
         let mods = foe.stages[stage].mods;
-        let (attack, block) = (out.damage.mean * keep, out.block.mean * keep);
+        let (attack, block) = (out.damage.mean * keep + Boost::at(&foe.boost.damage, t), out.block.mean * keep);
         // Weak on the enemy takes its share off what each turn brings.
-        let weakened = |d: f32| d * (1.0 - out.mitigation);
+        let weak = if t < foe.boost.weak_turns { foe.weak_pct } else { 0.0 };
+        let weakened = |d: f32| d * (1.0 - out.mitigation.max(weak));
         let coming = weakened(incoming(stage, t - since) + enraged);
         let share = share_for(coming, block);
         let attacking = 1.0 - share;
@@ -439,6 +535,8 @@ fn play(sim: &DeckSim, foe: Foe, way: Way) -> Line {
         // A stage that arrived this turn takes its first enemy turn now.
         let coming = if stunned { 0.0 } else { weakened(incoming(stage, t - since) + enraged) };
         stunned = false;
+        // A potion's Block goes up before the turn's cards.
+        let coming = (coming - Boost::at(&foe.boost.block, t)).max(0.0);
         let through = taken(&out, coming, share_for(coming, block), keep);
         // HP the deck spends on purpose (Bloodletting, a held Burn).
         lost += through + out.self_damage;
@@ -687,6 +785,8 @@ pub fn for_encounter(
         .map(|b| b.amount.unwrap_or(0) as f32)
         .reduce(f32::max);
     let shape = shape::of(enc, catalog, scaling, &playbook.fights);
+    // Potions held go into the fight (the elites and bosses this check reads).
+    let boost = potion_boost(&state.potions, catalog, sim, MAX_TURNS);
     let foe = Foe {
         stages: &stages,
         blast,
@@ -697,6 +797,8 @@ pub fn for_encounter(
         pace: enc.stats.as_ref().map(|s| s.avg_turns).filter(|p| *p > 0.0),
         slower_by: playbook.fights.slower_by,
         horizon: horizon(enc),
+        boost: &boost,
+        weak_pct: catalog.rules.weak_pct.unwrap_or(0) as f32 / 100.0,
     };
     let any = series.iter().any(|(_, s)| s.iter().any(|n| *n > 0.0));
     let joins = waves
@@ -784,6 +886,8 @@ mod tests {
             pace: None,
             slower_by: 1.5,
             horizon: MAX_TURNS,
+            boost: &NO_BOOST,
+            weak_pct: 0.25,
         }
     }
 

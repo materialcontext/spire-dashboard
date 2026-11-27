@@ -56,6 +56,8 @@ pub struct BossDeck {
     /// How the fight went: turns taken and HP lost.
     pub turns: Option<u32>,
     pub hp_lost: Option<u32>,
+    /// Potions used in the fight.
+    pub potions_used: Vec<spire_core::ids::PotionId>,
 }
 
 /// One run's decks going into each boss fight: as samples for the
@@ -139,7 +141,16 @@ pub fn fight_decks(line: &str, catalog: &Catalog, kinds: &[NodeKind]) -> RunDeck
                 let sample =
                     Sample { character: character.clone(), act: state.act_index, state: state.clone(), weight: 1.0 };
                 let turns = point.and_then(|p| p.rooms.first()).and_then(|r| r.turns_taken).filter(|t| *t > 0);
-                let hp_lost = point.and_then(|p| p.player_stats.first()).and_then(|s| s.damage_taken);
+                let stats = point.and_then(|p| p.player_stats.first());
+                let hp_lost = stats.and_then(|s| s.damage_taken);
+                let potions_used = stats
+                    .map(|s| {
+                        s.potion_used
+                            .iter()
+                            .map(|p| spire_core::ids::PotionId::new(crate::run_file::entry(p)))
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 out.boss_decks.push(BossDeck {
                     sample,
                     won: won_fight,
@@ -147,6 +158,7 @@ pub fn fight_decks(line: &str, catalog: &Catalog, kinds: &[NodeKind]) -> RunDeck
                     kind: n.kind,
                     turns,
                     hp_lost,
+                    potions_used,
                 });
             }
             if n.kind == NodeKind::Boss
