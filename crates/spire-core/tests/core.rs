@@ -893,7 +893,7 @@ fn sim_is_deterministic_and_bounded_by_energy() {
     let s = sim_state(&cat, &deck);
     let a = sim::simulate(&s, &cat, &quick());
     assert_eq!(a, sim::simulate(&s, &cat, &quick()), "same deck, same numbers");
-    assert_eq!(a.turns.len(), 5);
+    assert_eq!(a.turns.len(), 8);
     // Three energy, one-cost cards: at most three Strikes or three Defends a turn.
     for t in &a.turns {
         assert!(t.damage.mean > 6.0 && t.damage.mean <= 18.0, "damage {:?}", t.damage);
@@ -1181,7 +1181,7 @@ fn glass_decays_each_turn() {
     s.relics = vec![core];
     let sim = sim::simulate(&s, &cat, &quick());
     let by_turn: Vec<f32> = sim.turns.iter().map(|t| t.damage.mean).collect();
-    assert_eq!(by_turn, vec![4.0, 3.0, 2.0, 1.0, 0.0]);
+    assert_eq!(by_turn, vec![4.0, 3.0, 2.0, 1.0, 0.0, 0.0, 0.0, 0.0]);
     assert_eq!(sim.relics_simulated, vec!["CORE".to_string()]);
 }
 

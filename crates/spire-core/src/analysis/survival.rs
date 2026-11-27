@@ -46,8 +46,12 @@
 //!   still counts, and damage past a stage's HP carries into the next.
 //! - Debuffs on the player (Weak, Frail) and on enemies are not modelled,
 //!   except Vulnerable the pattern puts on the player.
-//! - Rules are read from the power's text and amount; Intangible from a
-//!   move counts as every other turn, and Slippery isn't regained.
+//! - Rules are read from the power's text and amount, per stage: a power
+//!   a move gives holds only in stages that use the move, and a revived
+//!   phase holds the powers a source gives it (`patterns.json`).
+//!   Intangible a move gives covers as many turns as its amount, each time
+//!   the pattern uses the move; Intangible from a power's wording ("every
+//!   other turn") covers half. Slippery isn't regained.
 //! - Potions, and cards the simulator can't read.
 
 use crate::analysis::jobs;
@@ -56,7 +60,7 @@ use crate::analysis::shape;
 use crate::analysis::sim::{DeckSim, PlayStats, TurnOutput};
 use crate::analysis::tags::Tag;
 use crate::analysis::threats::{Scaling, Wave, lineup_incoming, lineup_statuses, lineup_waves};
-use crate::catalog::{Catalog, Encounter, FightDemands, Measure};
+use crate::catalog::{Catalog, Encounter, FightDemands, Measure, Monster, PowerTarget};
 use crate::playbook::{Playbook, Role};
 use crate::run::RunState;
 
@@ -496,8 +500,76 @@ pub fn outlook(sim: &DeckSim, foe: Foe, hp: i32) -> Option<Outlook> {
 }
 
 /// A stage's rules, from its monsters' powers.
-fn stage_rules(wave: &Wave, catalog: &Catalog) -> Vec<rules::Rule> {
-    wave.plans.iter().filter_map(|p| catalog.monsters.get(&p.monster)).flat_map(rules::of).collect()
+/// The rules a stage fights under. A phase a source gives powers for
+/// holds just those (Test Subject: Painful Stabs, then Nemesis). Otherwise
+/// a power a move gives the monster holds only in stages whose pattern
+/// uses that move; one the data lists as innate, or that no move gives,
+/// holds throughout.
+pub fn stage_rules(wave: &Wave, catalog: &Catalog) -> Vec<rules::Rule> {
+    wave.plans
+        .iter()
+        .filter_map(|p| Some((p, catalog.monsters.get(&p.monster)?)))
+        .flat_map(|(p, m)| {
+            let used: Vec<&str> = p.plan.turns.iter().flat_map(|t| &t.options).map(|o| o.name.as_str()).collect();
+            let phase = wave.phase.and_then(|k| m.phases.get(k)).filter(|ph| !ph.powers.is_empty());
+            rules::of(m).into_iter().filter(move |r| {
+                if let Some(ph) = phase {
+                    return ph.powers.contains(&r.power.power);
+                }
+                let mut givers = granting(m, &r.power.power).peekable();
+                givers.peek().is_none()
+                    || m.innate_powers.iter().any(|i| i.power == r.power.power)
+                    || givers.any(|(mv, _)| used.contains(&mv))
+            })
+        })
+        .collect()
+}
+
+/// The moves that give a monster a power, by name, with the amount.
+fn granting<'m>(m: &'m Monster, power: &'m str) -> impl Iterator<Item = (&'m str, i32)> + 'm {
+    m.moves.iter().filter_map(move |mv| {
+        let p = mv.powers.iter().find(|p| p.power == power && p.target == PowerTarget::Monster)?;
+        Some((mv.name.as_str(), p.amount))
+    })
+}
+
+/// Share of player turns a stage's monster is Intangible when a move gives
+/// it Intangible directly (Soul Fysh's Fade): each use, weighted by its
+/// chance on that turn, covers as many player turns as its amount, over
+/// the turns the pattern walks. `None` when no move gives it, so the
+/// rule's own wording decides (Nemesis: every other turn).
+pub fn intangible_share(wave: &Wave, catalog: &Catalog) -> Option<f32> {
+    let mut best: Option<f32> = None;
+    for p in &wave.plans {
+        let Some(m) = catalog.monsters.get(&p.monster) else { continue };
+        let givers: Vec<(&str, i32)> = granting(m, "INTANGIBLE").collect();
+        if givers.is_empty() || p.plan.turns.is_empty() {
+            continue;
+        }
+        let covered: f32 = p
+            .plan
+            .turns
+            .iter()
+            .map(|t| {
+                let weighted: f32 = t.options.iter().map(|o| o.chance.unwrap_or(0.0)).sum();
+                t.options
+                    .iter()
+                    .filter_map(|o| {
+                        let amount = givers.iter().find(|(name, _)| *name == o.name)?.1.max(1) as f32;
+                        let chance = if weighted > 0.0 {
+                            o.chance.unwrap_or(0.0) / weighted
+                        } else {
+                            1.0 / t.options.len() as f32
+                        };
+                        Some(chance * amount)
+                    })
+                    .sum::<f32>()
+            })
+            .sum();
+        let share = (covered / p.plan.turns.len() as f32).min(1.0);
+        best = Some(best.map_or(share, |b: f32| b.max(share)));
+    }
+    best
 }
 
 /// The rules that change the play, in words, with what answers them.
@@ -640,7 +712,15 @@ pub fn for_encounter(
         .iter()
         .zip(&series)
         .zip(&wave_rules)
-        .map(|((w, (incoming, statuses)), r)| Stage { incoming, statuses, hp: w.hp, mods: Mods::of(r, fades) })
+        .map(|((w, (incoming, statuses)), r)| {
+            let mut mods = Mods::of(r, fades);
+            if mods.intangible > 0.0
+                && let Some(share) = intangible_share(w, catalog)
+            {
+                mods.intangible = share;
+            }
+            Stage { incoming, statuses, hp: w.hp, mods }
+        })
         .collect();
     // The blast follows the last kill. Its size grows over the fight and
     // the data gives only its starting value, so it counts as at least

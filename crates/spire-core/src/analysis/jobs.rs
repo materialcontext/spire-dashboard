@@ -9,7 +9,7 @@
 //! | Mitigation | Block on an ordinary turn (the low end: what you can count on) |
 //! | Survival | Block on a turn spent defending (the high end) |
 //! | Fast Damage | Damage over the first 3 turns |
-//! | Scaling Damage | How damage grows: the last simulated turn over the first |
+//! | Scaling Damage | How damage grows: the last simulated turn over the first (turn 8: about a boss fight) |
 //! | AoE | Share of damage that hits every enemy |
 //! | Chip | Attack hits per turn |
 //!
@@ -37,6 +37,8 @@ pub struct Jobs {
     pub burst: f32,
     /// Last simulated turn's damage over the first's (1.0: flat).
     pub scaling: f32,
+    /// The last simulated turn, which `scaling` is read at.
+    pub scaling_turn: usize,
     /// Share of damage that hits every enemy (0–1).
     pub aoe: f32,
     /// Attack hits per turn.
@@ -62,6 +64,7 @@ pub fn measure(sim: &DeckSim) -> Jobs {
         fast_damage: turns.iter().take(FAST_TURNS).map(|t| t.damage.mean).sum(),
         burst: turns.iter().map(|t| t.damage.high).fold(0.0, f32::max),
         scaling: if first > 0.0 { last / first } else { 1.0 },
+        scaling_turn: turns.len(),
         aoe: sim.play.area_share,
         chip: sim.play.hits,
         floor: if avg_damage > 0.0 { mean(|t| t.damage.low) / avg_damage } else { 0.0 },
@@ -88,8 +91,8 @@ impl Jobs {
             Role::Survival => format!("{:.0} Block on a defending turn", self.survival),
             Role::FastDamage => format!("{:.0} damage over turns 1–{FAST_TURNS}", self.fast_damage),
             Role::ScalingDamage => match self.scaling {
-                s if s >= 1.05 => format!("damage grows ×{s:.1} by turn 5"),
-                s if s <= 0.95 => format!("damage falls to ×{s:.1} by turn 5"),
+                s if s >= 1.05 => format!("damage grows ×{s:.1} by turn {}", self.scaling_turn),
+                s if s <= 0.95 => format!("damage falls to ×{s:.1} by turn {}", self.scaling_turn),
                 _ => "damage stays flat".into(),
             },
             Role::Aoe => match self.aoe {
@@ -107,7 +110,7 @@ pub fn describe_job(role: Role) -> &'static str {
         Role::Mitigation => "Block on an ordinary turn",
         Role::Survival => "Block on a turn spent defending",
         Role::FastDamage => "damage over the first 3 turns",
-        Role::ScalingDamage => "how much damage grows by turn 5",
+        Role::ScalingDamage => "how much damage grows over a fight",
         Role::Aoe => "share of damage that hits every enemy",
         Role::Chip => "attack hits a turn",
     }

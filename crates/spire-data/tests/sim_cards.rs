@@ -220,9 +220,10 @@ fn dualcast_evokes_on_demand() {
     let with = fight("DEFECT", &[("ZAP", 5), ("DUALCAST", 5)], &[]);
     // Against dead cards, so the difference is what Dualcast itself adds.
     let without = fight("DEFECT", &[("ZAP", 5), ("WOUND", 5)], &[]);
-    // Evoking trades the orb's passive for its evoke twice: a modest gain
-    // over five turns, where it used to add nothing.
-    assert!(total(&with, true) > total(&without, true) + 2.0, "{} vs {}", total(&with, true), total(&without, true));
+    // Evoking trades the orb's later passives for its evoke twice: damage
+    // comes sooner (and the passives it gives up are missed later).
+    let early = |s: &spire_core::analysis::sim::DeckSim| s.turns[..2].iter().map(|t| t.damage.mean).sum::<f32>();
+    assert!(early(&with) > early(&without) + 5.0, "{} vs {}", early(&with), early(&without));
 }
 
 #[test]
@@ -532,4 +533,15 @@ fn every_card_fetches_end_with_a_full_hand() {
     // full hand they go back there and must not be taken again.
     let sim = fight("DEFECT", &[("ALL_FOR_ONE", 4), ("CLAW", 12), ("GO_FOR_THE_EYES", 6), ("BEAM_CELL", 6)], &[]);
     assert!(sim.turns[3].damage.mean > 0.0);
+}
+
+#[test]
+fn scaling_powers_are_played_for_what_they_build() {
+    // Demon Form does nothing the turn it's played; its Strength each turn
+    // is worth the turns left, so it's played early and the deck ramps.
+    let starter = [("STRIKE_IRONCLAD", 5), ("DEFEND_IRONCLAD", 4), ("BASH", 1)];
+    let demon = fight("IRONCLAD", &[starter[0], starter[1], starter[2], ("DEMON_FORM", 1)], &[]);
+    let strike = fight("IRONCLAD", &[starter[0], starter[1], starter[2], ("STRIKE_IRONCLAD", 1)], &[]);
+    let last = |s: &spire_core::analysis::sim::DeckSim| s.turns.last().unwrap().damage.mean;
+    assert!(last(&demon) > last(&strike) * 1.5, "{} vs {}", last(&demon), last(&strike));
 }

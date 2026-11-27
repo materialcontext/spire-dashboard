@@ -1921,22 +1921,10 @@ impl<'a> Fight<'a> {
             Lean::Damage => (attack, defend * 0.1),
             Lean::Block => (defend, attack * 0.1),
         };
-        // Powers are worth playing early: a flat value plus what they do now.
+        // A power: a flat value, what it does now, and what its triggers do
+        // over the rest of the fight (Demon Form's Strength each turn).
         let power = if p.power && !p.mech.is_empty() {
-            8.0 + p
-                .mech
-                .triggers
-                .iter()
-                .filter(|(w, _)| *w == When::Played)
-                .flat_map(|(_, es)| es)
-                .map(|e| match e {
-                    Effect::Strength(n) | Effect::Dexterity(n) => *n as f32 * 4.0,
-                    Effect::Focus(n) => *n as f32 * 3.0 * self.orb_slots as f32,
-                    Effect::Energy(n) | Effect::Draw(n) => *n as f32 * 3.0,
-                    Effect::Block(n) | Effect::Plating(n) => *n as f32,
-                    _ => 2.0,
-                })
-                .sum::<f32>()
+            8.0 + p.mech.triggers.iter().map(|(w, es)| self.trigger_worth(w, es, lean)).sum::<f32>()
         } else {
             0.0
         };
@@ -1948,8 +1936,9 @@ impl<'a> Fight<'a> {
             _ => 0.0,
         };
         let setup = replay
-            + (e.strength + e.dexterity) as f32 * 4.0
-            + e.focus as f32 * 3.0 * self.orb_slots as f32
+            + self.lasting(&Effect::Strength(e.strength))
+            + self.lasting(&Effect::Dexterity(e.dexterity))
+            + self.lasting(&Effect::Focus(e.focus))
             // This turn only: worth what the rest of the hand can use.
             + (e.temp[0] + e.temp[1]) as f32 * 1.5
             + e.temp[2] as f32 * self.orbs.len() as f32
@@ -2094,6 +2083,72 @@ impl<'a> Fight<'a> {
     }
 
     /// Rough worth of one effect to the lean, for triggers a card sets up.
+    /// Turns left in the simulated fight, this one included: how long
+    /// something gained now keeps paying.
+    fn turns_left(&self) -> f32 {
+        (self.s.rules.turns as f32 - self.turn as f32).max(1.0)
+    }
+
+    /// A lasting stat's worth each turn it holds: Strength on a typical
+    /// turn's hits, Dexterity on its Block cards, Focus on every orb.
+    fn per_turn(&self, e: &Effect) -> Option<f32> {
+        match e {
+            Effect::Strength(n) => Some(*n as f32 * 2.0),
+            Effect::Dexterity(n) => Some(*n as f32 * 1.5),
+            Effect::Focus(n) => Some(*n as f32 * self.orb_slots as f32),
+            _ => None,
+        }
+    }
+
+    /// A lasting stat gained now, over the turns it holds.
+    fn lasting(&self, e: &Effect) -> f32 {
+        self.per_turn(e).map_or(0.0, |v| v * self.turns_left())
+    }
+
+    /// What a power's trigger is worth if the power is played now: its
+    /// effect on play, and each firing to come over the rest of the fight.
+    /// A lasting stat counts each firing for the turns left after it, so an
+    /// early Demon Form is worth far more than a late one. Triggers on
+    /// events count one firing a turn (one a card played, for "whenever
+    /// you play").
+    fn trigger_worth(&self, w: &When, es: &[Effect], lean: Lean) -> f32 {
+        let once = |f: &Self, e: &Effect| match e {
+            Effect::Strength(_) | Effect::Dexterity(_) | Effect::Focus(_) => f.lasting(e),
+            Effect::Energy(n) | Effect::Draw(n) => *n as f32 * 3.0,
+            Effect::Block(n) | Effect::Plating(n) => *n as f32,
+            _ => 2.0,
+        };
+        if *w == When::Played {
+            return es.iter().map(|e| once(self, e)).sum();
+        }
+        let now = self.turn as u32 + 1;
+        let last = self.s.rules.turns.max(now);
+        // Turns it fires on from here (1-based), and each firing's worth
+        // given the turns left after it.
+        let fires = |t: u32| match w {
+            When::TurnEnd => true,
+            When::OnPlay(_) | When::EveryPlays { .. } | When::OnDraw | When::OnDrawOf(_) => true,
+            _ if matches!(w, When::CombatStart | When::TurnNumber(_)) => false,
+            _ => t > now && starts_turn(w, t),
+        };
+        let rate = match w {
+            When::OnPlay(_) => 3.0,
+            When::TurnEnd | When::TurnStart | When::TurnNumber(_) | When::FirstTurns(_) | When::TurnsFrom(_) => 1.0,
+            When::EveryTurns(_) | When::CombatStart => 1.0,
+            _ => 0.5,
+        };
+        (now..=last)
+            .filter(|&t| fires(t))
+            .map(|t| {
+                let left = (last - t + 1) as f32;
+                es.iter()
+                    .map(|e| self.per_turn(e).map_or_else(|| self.effect_worth(e, lean), |v| v * left))
+                    .sum::<f32>()
+                    * rate
+            })
+            .sum()
+    }
+
     fn effect_worth(&self, e: &Effect, lean: Lean) -> f32 {
         let (hit, guard) = match lean {
             Lean::Damage => (1.0, 0.1),

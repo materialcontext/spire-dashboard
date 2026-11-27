@@ -1,6 +1,6 @@
 # Deck simulator: order of operations
 
-`spire_core::analysis::sim` plays seeded fights against a passive target. Order changes results; this page fixes it.
+`spire_core::analysis::sim` plays seeded fights against a passive target, 8 turns each (`simulation.turns`: about a boss fight; elites and hallway fights end sooner). The survival check reads turns past the last as the last one. Order changes results; this page fixes it.
 
 Sources: **[Data]** Spire Codex game data · **[Codex]** Codex [combat](https://spire-codex.com/mechanics/combat-mechanics) and [orb](https://spire-codex.com/mechanics/orb-mechanics) mechanics, written from the game's classes · **[Wiki]** StS2 wiki: [Vulnerable](https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2:Vulnerable), [Weak](https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2:Weak), [Gambling Chip](https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2:Gambling_Chip) · **[Player]** confirmed in play by the project owner.
 
@@ -81,6 +81,13 @@ Card Block + Dexterity + Defend bonus (Fasten) + Stretch (spent by the card, add
 - Each turn's Block keeps its spread (`TurnOutput::block_steps`, every 5%) for the survival check.
 
 **Open:** rounding per hit (Codex) versus once at the end (Wiki); they differ only when fractions add up across hits.
+
+## How cards are picked
+
+Each play takes the card worth most per energy for the turn's lean (damage or Block). What lasts counts for the turns left in the fight, so setup is played early and skipped late:
+
+- Strength, Dexterity and Focus are worth what they add each turn (about two hits, a Block card, every orb) times the turns they hold.
+- A power's triggers count every firing still to come: Demon Form's Strength each turn counts once per later turn, each for the turns after it, so on turn 1 it outranks any Strike and on the last turn it's barely worth playing. Triggers on events (cards played, draws) count a firing or a few a turn.
 
 ## Choices
 

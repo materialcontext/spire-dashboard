@@ -700,6 +700,10 @@ pub struct Phase {
     pub hp_max_asc: Option<u32>,
     /// The move its pattern starts from in this phase.
     pub start: String,
+    /// The powers it holds in this phase, when a source says they change
+    /// (Test Subject gains Painful Stabs, then Nemesis). Empty: as listed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub powers: Vec<String>,
 }
 
 impl Phase {

@@ -67,10 +67,12 @@ pub fn warnings(sim: &DeckSim, state: &RunState, catalog: &Catalog, playbook: &P
     for store in [Store::Aim, Store::Vigor, Store::Stretch] {
         let f = sim.stores[store as usize];
         let makers = count(deck, catalog, |c, up| makes(store, c, up));
-        if makers == 0 || f.gained < lines.min_gained {
+        let users = count(deck, catalog, |c, up| uses(store, c, up));
+        // Makers with nothing to use them on are worth a word however
+        // little they make (left in hand, they make nothing at all).
+        if makers == 0 || (users > 0 && f.gained < lines.min_gained) {
             continue;
         }
-        let users = count(deck, catalog, |c, up| uses(store, c, up));
         let (maker, user) = match store {
             Store::Aim => ("Aim card", "Shoot card"),
             Store::Vigor => ("Vigor card", "attack"),
