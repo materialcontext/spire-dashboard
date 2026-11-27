@@ -169,6 +169,11 @@ pub struct TurnOutput {
     pub mitigation: f32,
     /// HP you lose on purpose this turn (Bloodletting, Burns held).
     pub self_damage: f32,
+    /// Block this turn when playing for damage (Defends played with the
+    /// energy left), on average: a hand does some of both.
+    pub block_attacking: f32,
+    /// Damage this turn when playing for block, on average.
+    pub damage_defending: f32,
 }
 
 /// Character resources a deck produces, averaged per turn.
@@ -2953,6 +2958,9 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
     // turn, and HP lost on purpose.
     let mut weakened = vec![0.0f32; turns];
     let mut self_damage = vec![0.0f32; turns];
+    // What each lean does on the other side, on average.
+    let mut block_attacking = vec![0.0f32; turns];
+    let mut damage_defending = vec![0.0f32; turns];
     let mut turnover = 0usize;
     let mut drawn_by = vec![[0u32; ODDS_TURNS]; groups.len()];
     let (mut drawn, mut dead, mut unspent, mut stranded) = (0u32, 0u32, 0.0f32, 0.0f32);
@@ -2970,6 +2978,8 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
             block[t].push(d.block);
             weakened[t] += f32::from(u8::from(d.weak_end));
             self_damage[t] += d.hp_lost;
+            block_attacking[t] += a.block;
+            damage_defending[t] += d.damage;
             hits += a.hits;
             hit_damage += a.attack_damage;
             area += a.area;
@@ -3031,6 +3041,8 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
                     block_steps: Steps::of(&b),
                     mitigation: weakened[t] / n * weak_cut,
                     self_damage: self_damage[t] / n,
+                    block_attacking: block_attacking[t] / n,
+                    damage_defending: damage_defending[t] / n,
                 }
             })
             .collect(),

@@ -1,12 +1,14 @@
 //! Is the deck on track to survive a fight, and which way wins it?
 //!
-//! Plays the fight out on averages: each turn the deck deals the damage the
-//! simulator expects when attacking and blocks what it expects when
-//! defending; the enemies deal their expected damage for that turn of their
-//! pattern. The player acts first, so a fight won on turn N takes N − 1
+//! Plays the fight out on averages: each turn the deck leans between the
+//! simulator's two hands, played for damage and played for Block (each does
+//! some of both), and the enemies still standing deal their expected damage
+//! for that turn of their pattern. Single-target damage goes to the enemy
+//! that takes away the most damage per HP; area damage hits them all; a
+//! minion leaves when its leader falls. The player acts first, so a fight won on turn N takes N − 1
 //! enemy turns. It's played four ways, each a way players win fights:
 //!
-//! - **Race:** attack every turn and take the hits.
+//! - **Race:** play every hand for damage (blocking only with what is left).
 //! - **Wall:** block what each turn brings, attack with the rest.
 //! - **Windows:** block the spike turns in full, attack all-out between
 //!   them (only for fights with spikes).
@@ -41,8 +43,8 @@
 //! stage's pattern starts on the following enemy turn.
 //!
 //! What it leaves out, so it reads as a guide, not a forecast:
-//! - Enemies in a stage die together: damage from one that falls early
-//!   still counts, and damage past a stage's HP carries into the next.
+//! - Damage past a stage's last enemy carries into the next stage. Each
+//!   enemy's HP is its share of the stage's by its own HP range.
 //! - Debuffs on the player (Weak, Frail) are not modelled, except
 //!   Vulnerable the pattern puts on the player; on enemies, only Weak
 //!   (from the simulator, and from potions).
@@ -221,6 +223,86 @@ pub struct Stage<'a> {
     pub statuses: &'a [f32],
     pub hp: u32,
     pub mods: Mods,
+    /// Each enemy on its own, so one that falls stops attacking. Empty:
+    /// the stage fights as one enemy.
+    pub members: &'a [Member],
+}
+
+/// One enemy of a stage: its HP and expected damage per enemy turn.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Member {
+    pub hp: f32,
+    pub incoming: Vec<f32>,
+    /// It leaves once the enemies that aren't minions have fallen
+    /// ("Minions abandon combat without their leader").
+    pub minion: bool,
+}
+
+/// Enemies still standing in a stage, with the HP each has left.
+struct Standing<'a> {
+    members: std::borrow::Cow<'a, [Member]>,
+    left: Vec<f32>,
+}
+
+impl<'a> Standing<'a> {
+    fn of(stage: &Stage<'a>) -> Standing<'a> {
+        let members: std::borrow::Cow<'a, [Member]> = if stage.members.is_empty() {
+            std::borrow::Cow::Owned(vec![Member {
+                hp: stage.hp as f32,
+                incoming: stage.incoming.to_vec(),
+                minion: false,
+            }])
+        } else {
+            std::borrow::Cow::Borrowed(stage.members)
+        };
+        let left = members.iter().map(|m| m.hp).collect();
+        Standing { members, left }
+    }
+
+    /// Every enemy has fallen, or every leader has and its minions left.
+    fn down(&self) -> bool {
+        let leaders = self.members.iter().any(|m| !m.minion);
+        self.members.iter().zip(&self.left).all(|(m, h)| *h <= 0.0 || (leaders && m.minion))
+    }
+
+    /// What the enemies still standing deal on enemy turn `t`.
+    fn incoming(&self, t: usize) -> f32 {
+        self.members
+            .iter()
+            .zip(&self.left)
+            .filter(|(_, h)| **h > 0.0)
+            .map(|(m, _)| m.incoming.get(t).copied().unwrap_or(0.0))
+            .sum()
+    }
+
+    /// Deals `damage`: the `area` share to every enemy standing, the rest
+    /// to one at a time, the one that takes away the most damage per HP
+    /// first. Returns the HP taken off and what's left over once all fall.
+    fn hit(&mut self, damage: f32, area: f32, t: usize) -> (f32, f32) {
+        let mut removed = 0.0;
+        let wide = damage * area;
+        for h in self.left.iter_mut().filter(|h| **h > 0.0) {
+            let took = wide.min(*h);
+            *h -= took;
+            removed += took;
+        }
+        let mut single = damage - wide;
+        while single > 0.0 && !self.down() {
+            let soon = |m: &Member| m.incoming.iter().skip(t).take(3).sum::<f32>();
+            // Each enemy by its own damage per HP. Rushing a leader to send
+            // its minions away isn't how players take these fights: at The
+            // Kin it would end fights two turns sooner than community wins.
+            let worth = |k: usize| soon(&self.members[k]) / self.left[k];
+            let next =
+                (0..self.left.len()).filter(|&k| self.left[k] > 0.0).max_by(|&a, &b| worth(a).total_cmp(&worth(b)));
+            let Some(k) = next else { break };
+            let took = single.min(self.left[k]);
+            self.left[k] -= took;
+            removed += took;
+            single -= took;
+        }
+        (removed, single.max(0.0))
+    }
 }
 
 /// What the deck is up against.
@@ -431,17 +513,33 @@ pub struct SpikeOdds {
     pub odds: f32,
 }
 
-/// What gets through a turn of `coming` damage when the way spends `share`
-/// of it blocking. A turn spent wholly on Block counts bad draws: the
-/// average shortfall over the deck's whole spread, not the shortfall of its
-/// average (a deck that blocks 20 on average still takes hits from 26 on
-/// its weaker hands). `keep` thins the Block for junk in the deck.
+/// A turn's damage and Block when the way leans `share` of the way from
+/// playing for damage to playing for Block. Each lean does some of both (a
+/// hand played for damage still plays its Defends with the energy left),
+/// so a way mixes the two leans' whole output. `keep` thins it for junk.
+fn mix(out: &TurnOutput, share: f32, keep: f32) -> (f32, f32) {
+    let attack = out.damage.mean * (1.0 - share) + out.damage_defending * share;
+    let block = out.block_attacking * (1.0 - share) + out.block.mean * share;
+    (attack * keep, block * keep)
+}
+
+/// The lean that blocks `coming` with the least damage given up: none when
+/// playing for damage blocks it already, all of it when even playing for
+/// Block doesn't.
+fn need(out: &TurnOutput, coming: f32, keep: f32) -> f32 {
+    let (low, high) = (out.block_attacking * keep, out.block.mean * keep);
+    if high > low { ((coming - low) / (high - low)).clamp(0.0, 1.0) } else { 0.0 }
+}
+
+/// What gets through a turn of `coming` damage at lean `share`. A turn
+/// spent wholly on Block counts bad draws: the average shortfall over the
+/// deck's whole spread, not the shortfall of its average (a deck that
+/// blocks 20 on average still takes hits from 26 on its weaker hands).
 fn taken(out: &TurnOutput, coming: f32, share: f32, keep: f32) -> f32 {
-    let block = out.block.mean * keep;
     if share >= 1.0 && out.block_steps.known {
         out.block_steps.short_of(coming, keep)
     } else {
-        (coming - block * share).max(0.0)
+        (coming - mix(out, share, keep).1).max(0.0)
     }
 }
 
@@ -455,20 +553,18 @@ impl Outlook {
 /// Plays out one way.
 fn play(sim: &DeckSim, foe: Foe, way: Way) -> Line {
     let output = |t: usize| sim.turns[t.min(sim.turns.len() - 1)];
-    let share_for = |coming: f32, block: f32| {
-        let need = if block > 0.0 { (coming / block).min(1.0) } else { 0.0 };
-        match way {
-            Way::Race => 0.0,
-            Way::Scale(s) => s,
-            Way::Wall => need,
-            Way::Windows(at) if coming >= at as f32 => need,
-            Way::Windows(_) => 0.0,
-        }
+    let share_for = |coming: f32, out: &TurnOutput, keep: f32| match way {
+        Way::Race => 0.0,
+        Way::Scale(s) => s,
+        Way::Wall => need(out, coming, keep),
+        Way::Windows(at) if coming >= at as f32 => need(out, coming, keep),
+        Way::Windows(_) => 0.0,
     };
     let Some(first) = foe.stages.first() else {
         return Line { way, blast_turn: None, junk: 0.0, kill_turn: None, hp_loss: 0 };
     };
-    let PlayStats { hits, per_hit, cards, skills, .. } = sim.play;
+    let PlayStats { hits, per_hit, cards, skills, area_share, .. } = sim.play;
+    let mut standing = Standing::of(first);
     let mut dealt = 0.0f32;
     let mut lost = 0.0f32;
     let mut junk = 0.0f32;
@@ -490,15 +586,18 @@ fn play(sim: &DeckSim, foe: Foe, way: Way) -> Line {
         let out = output(t);
         let keep = thinned(junk + passing);
         let mods = foe.stages[stage].mods;
-        let (attack, block) = (out.damage.mean * keep + Boost::at(&foe.boost.damage, t), out.block.mean * keep);
         // Weak on the enemy takes its share off what each turn brings.
         let weak = if t < foe.boost.weak_turns { foe.weak_pct } else { 0.0 };
         let weakened = |d: f32| d * (1.0 - out.mitigation.max(weak));
-        let coming = weakened(incoming(stage, t - since) + enraged);
-        let share = share_for(coming, block);
-        let attacking = 1.0 - share;
-        let landed = mods.land(attack * attacking, hits * attacking * keep, per_hit, cards * keep, &mut slippery);
-        dealt += landed;
+        let coming = weakened(standing.incoming(t - since) + enraged);
+        let share = share_for(coming, &out, keep);
+        let attack = mix(&out, share, keep).0;
+        // Hits land in proportion to the damage played.
+        let attacking = if out.damage.mean > 0.0 { attack / (out.damage.mean * keep) } else { 1.0 - share };
+        let attack = attack + Boost::at(&foe.boost.damage, t);
+        let landed = mods.land(attack, hits * attacking * keep, per_hit, cards * keep, &mut slippery);
+        let (removed, mut over) = standing.hit(landed, area_share, t - since);
+        dealt += removed;
         let added = mods.junk_per_hit * hits * attacking * keep;
         if mods.junk_fades {
             // This turn's draw already happened; the cards drawn next turn
@@ -512,32 +611,37 @@ fn play(sim: &DeckSim, foe: Foe, way: Way) -> Line {
             stunned = true;
             stun_used = true;
         }
-        while dealt >= clears && stage + 1 < foe.stages.len() {
+        while standing.down() && stage + 1 < foe.stages.len() {
             stage += 1;
             since = t;
             clears += foe.stages[stage].hp as f32;
             slippery = foe.stages[stage].mods.slippery;
             (enraged, stun_used) = (0.0, false);
+            // Damage past a stage's last enemy carries into the next.
+            standing = Standing::of(&foe.stages[stage]);
+            let (removed, left) = standing.hit(over, 0.0, 0);
+            dealt += removed;
+            over = left;
         }
-        if dealt >= clears {
+        if standing.down() {
             // A blow after death: one more hit at the end of the next turn,
             // with that turn's block (there's nothing left to attack, but
             // the way still splits the same way).
             let blast_turn = foe.blast.map(|floor| {
                 let next = output(t + 1);
                 let blast = floor.max(incoming(stage, t + 1 - since)) * (1.0 - next.mitigation);
-                lost += taken(&next, blast, share_for(blast, next.block.mean * keep), keep);
+                lost += taken(&next, blast, share_for(blast, &next, keep), keep);
                 t as u32 + 2
             });
             let junk = junk + passed;
             return Line { way, blast_turn, junk, kill_turn: Some(t as u32 + 1), hp_loss: lost.round() as u32 };
         }
         // A stage that arrived this turn takes its first enemy turn now.
-        let coming = if stunned { 0.0 } else { weakened(incoming(stage, t - since) + enraged) };
+        let coming = if stunned { 0.0 } else { weakened(standing.incoming(t - since) + enraged) };
         stunned = false;
         // A potion's Block goes up before the turn's cards.
         let coming = (coming - Boost::at(&foe.boost.block, t)).max(0.0);
-        let through = taken(&out, coming, share_for(coming, block), keep);
+        let through = taken(&out, coming, share_for(coming, &out, keep), keep);
         // HP the deck spends on purpose (Bloodletting, a held Burn).
         lost += through + out.self_damage;
         if through > 0.0 {
@@ -599,6 +703,32 @@ pub fn outlook(sim: &DeckSim, foe: Foe, hp: i32) -> Option<Outlook> {
 }
 
 /// A stage's rules, from its monsters' powers.
+/// Each enemy of a wave on its own: its expected damage per enemy turn,
+/// and its share of the wave's HP by its own HP range.
+fn members_of(wave: &Wave, catalog: &Catalog, scaling: Scaling) -> Vec<Member> {
+    let mut out = Vec::new();
+    for mp in &wave.plans {
+        let own = catalog.monsters.get(&mp.monster).map_or(1.0, |m| {
+            let (lo, hi) = m.hp_at(scaling.tough);
+            ((lo + hi) as f32 / 2.0).max(1.0)
+        });
+        let incoming: Vec<f32> = crate::analysis::pattern::incoming(std::slice::from_ref(&mp.plan), MAX_TURNS)
+            .into_iter()
+            .map(|(_, expected, _)| expected)
+            .collect();
+        let minion =
+            catalog.monsters.get(&mp.monster).is_some_and(|m| rules::of(m).iter().any(|r| r.kind == RuleKind::Minion));
+        out.extend((0..mp.count).map(|_| Member { hp: own, incoming: incoming.clone(), minion }));
+    }
+    let total: f32 = out.iter().map(|m| m.hp).sum();
+    if total > 0.0 {
+        for m in &mut out {
+            m.hp *= wave.hp as f32 / total;
+        }
+    }
+    out
+}
+
 /// The rules a stage fights under. A phase a source gives powers for
 /// holds just those (Test Subject: Painful Stabs, then Nemesis). Otherwise
 /// a power a move gives the monster holds only in stages whose pattern
@@ -768,11 +898,19 @@ pub fn for_encounter(
         catalog.cards.values().any(|c| r.power.text.contains(c.name.as_str()) && c.has_keyword("Ethereal", false))
     };
     let wave_rules: Vec<Vec<rules::Rule>> = waves.iter().map(|w| stage_rules(w, catalog)).collect();
+    let members: Vec<Vec<Member>> = waves.iter().map(|w| members_of(w, catalog, scaling)).collect();
     let stages: Vec<Stage> = waves
         .iter()
         .zip(&series)
         .zip(&wave_rules)
-        .map(|((w, (incoming, statuses)), r)| Stage { incoming, statuses, hp: w.hp, mods: Mods::of(r, fades) })
+        .zip(&members)
+        .map(|(((w, (incoming, statuses)), r), members)| Stage {
+            incoming,
+            statuses,
+            hp: w.hp,
+            mods: Mods::of(r, fades),
+            members,
+        })
         .collect();
     // The blast follows the last kill. Its size grows over the fight and
     // the data gives only its starting value, so it counts as at least
@@ -872,7 +1010,7 @@ mod tests {
     }
 
     fn stage(incoming: &[f32], hp: u32) -> [Stage<'_>; 1] {
-        [Stage { incoming, statuses: &[], hp, mods: Mods::default() }]
+        [Stage { incoming, statuses: &[], hp, mods: Mods::default(), members: &[] }]
     }
 
     fn foe<'a>(stages: &'a [Stage<'a>], blast: Option<f32>) -> Foe<'a> {
@@ -889,6 +1027,44 @@ mod tests {
             boost: &NO_BOOST,
             weak_pct: 0.25,
         }
+    }
+
+    #[test]
+    fn a_hand_played_for_damage_still_blocks_with_what_is_left() {
+        // 20 damage and 5 Block playing for damage; 10 Block playing for Block.
+        let mut d = sim(20.0, 10.0);
+        for t in &mut d.turns {
+            t.block_attacking = 5.0;
+        }
+        let o = outlook(&d, foe(&stage(&[5.0; 20], 100), None), 60).unwrap();
+        // Racing loses nothing: its own Block covers the 5 coming.
+        assert_eq!((race(&o).kill_turn, race(&o).hp_loss), (Some(5), 0));
+    }
+
+    #[test]
+    fn a_fallen_enemy_stops_attacking() {
+        // One enemy hits hard and has little HP, the other the reverse. The
+        // first falls on turn 1, and only the second's 1 a turn comes after.
+        let members = [
+            Member { hp: 10.0, incoming: vec![10.0; 20], minion: false },
+            Member { hp: 100.0, incoming: vec![1.0; 20], minion: false },
+        ];
+        let stages =
+            [Stage { incoming: &[11.0; 20], statuses: &[], hp: 110, mods: Mods::default(), members: &members }];
+        let o = outlook(&sim(20.0, 0.0), foe(&stages, None), 60).unwrap();
+        assert_eq!((race(&o).kill_turn, race(&o).hp_loss), (Some(6), 5));
+    }
+
+    #[test]
+    fn minions_leave_with_their_leader() {
+        // The leader falls first (more damage per HP); its minion leaves.
+        let members = [
+            Member { hp: 10.0, incoming: vec![2.0; 20], minion: false },
+            Member { hp: 100.0, incoming: vec![5.0; 20], minion: true },
+        ];
+        let stages = [Stage { incoming: &[7.0; 20], statuses: &[], hp: 110, mods: Mods::default(), members: &members }];
+        let o = outlook(&sim(20.0, 0.0), foe(&stages, None), 60).unwrap();
+        assert_eq!(race(&o).kill_turn, Some(1));
     }
 
     fn race(o: &Outlook) -> Line {
@@ -940,8 +1116,8 @@ mod tests {
         let mut summoned = [15.0f32; 20];
         summoned[0] = 0.0;
         let stages = [
-            Stage { incoming: &[5.0; 20], statuses: &[], hp: 40, mods: Mods::default() },
-            Stage { incoming: &summoned, statuses: &[], hp: 60, mods: Mods::default() },
+            Stage { incoming: &[5.0; 20], statuses: &[], hp: 40, mods: Mods::default(), members: &[] },
+            Stage { incoming: &summoned, statuses: &[], hp: 60, mods: Mods::default(), members: &[] },
         ];
         let o = outlook(&sim(20.0, 0.0), foe(&stages, None), 80).unwrap();
         assert_eq!(race(&o).kill_turn, Some(5));
@@ -953,7 +1129,8 @@ mod tests {
         // Three unplayable cards a turn into a ten-card deck.
         let statuses = [3.0f32; 20];
         let clean = outlook(&sim(20.0, 0.0), foe(&stage(&[5.0; 20], 120), None), 60).unwrap();
-        let junked = [Stage { incoming: &[5.0; 20], statuses: &statuses, hp: 120, mods: Mods::default() }];
+        let junked =
+            [Stage { incoming: &[5.0; 20], statuses: &statuses, hp: 120, mods: Mods::default(), members: &[] }];
         let slowed = outlook(&sim(20.0, 0.0), foe(&junked, None), 60).unwrap();
         assert_eq!(race(&clean).kill_turn, Some(6));
         assert!(race(&slowed).kill_turn.unwrap_or(99) > 8, "{:?}", race(&slowed));
@@ -994,7 +1171,7 @@ mod tests {
     }
 
     fn ruled(incoming: &[f32], hp: u32, mods: Mods) -> [Stage<'_>; 1] {
-        [Stage { incoming, statuses: &[], hp, mods }]
+        [Stage { incoming, statuses: &[], hp, mods, members: &[] }]
     }
 
     fn hitting(attack: f32, hits: f32) -> DeckSim {
