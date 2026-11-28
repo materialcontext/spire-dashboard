@@ -128,11 +128,9 @@ fn card_row(ui: &mut Ui, v: &ViewCtx, row: &DeckRow, out: &mut Vec<Action>) {
         } else {
             r.context_menu(|ui| card_menu(ui, v, row, out));
         }
-        if let Some(what) = &row.unmet {
-            ui.label(RichText::new(format!("needs {what}")).small().color(warn())).on_hover_text(format!(
-                "Nothing in this run supplies {what}, so this card does nothing: it counts as a dead card \
-                 and fills no role."
-            ));
+        if let Some(dead) = &row.unmet {
+            ui.label(RichText::new(dead.label()).small().color(warn()))
+                .on_hover_text(format!("{} It counts as a dead card and fills no role.", dead.explain()));
         }
         if let Some(e) = &row.card.enchantment {
             ui.label(RichText::new(v.catalog.enchantment_name(e)).small().color(info()));

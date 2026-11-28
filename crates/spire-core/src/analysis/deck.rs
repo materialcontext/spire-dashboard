@@ -15,9 +15,9 @@ pub struct ClassifiedCard<'a> {
     pub roles: Vec<Role>,
     /// Tags with the upgrade applied.
     pub tags: Vec<Tagged>,
-    /// What it needs that nothing in the run supplies: it does nothing, so
-    /// it's a dead card with no roles.
-    pub unmet: Option<String>,
+    /// Why it does nothing in this run (a need nothing supplies, or a
+    /// relic's lock): a dead card with no roles.
+    pub unmet: Option<crate::analysis::requirements::Dead>,
 }
 
 impl ClassifiedCard<'_> {
@@ -60,8 +60,8 @@ pub struct DeckRow {
     /// Cannot be removed or transformed.
     pub eternal: bool,
     pub tags: Vec<Tagged>,
-    /// What it needs that nothing in the run supplies (a dead card).
-    pub unmet: Option<String>,
+    /// Why it does nothing in this run (a dead card).
+    pub unmet: Option<crate::analysis::requirements::Dead>,
 }
 
 pub fn deck_rows(cards: &[ClassifiedCard<'_>]) -> Vec<DeckRow> {
@@ -170,10 +170,11 @@ pub fn deck_profile(deck: &[DeckCard], catalog: &Catalog, playbook: &Playbook) -
     profile(&classify(deck, catalog, playbook))
 }
 
-/// The run's deck classified, with the cards whose need nothing in the run
-/// supplies (its relics and character count) marked dead.
+/// The run's deck classified, with the cards that do nothing in it marked
+/// dead: a need nothing supplies (its relics and character count), or a
+/// relic's lock on all the card does.
 pub fn classify_run<'a>(state: &'a RunState, catalog: &'a Catalog, playbook: &Playbook) -> Vec<ClassifiedCard<'a>> {
-    let unmet = crate::analysis::requirements::unmet(state, catalog, &playbook.simulation.requirements);
+    let unmet = crate::analysis::requirements::dead(state, catalog, &playbook.simulation.requirements);
     let mut cards = classify(&state.deck, catalog, playbook);
     for c in &mut cards {
         if let Some(what) = unmet.get(&c.deck.card) {

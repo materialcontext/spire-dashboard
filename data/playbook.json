@@ -1,7 +1,9 @@
 {
   "version": 1,
   "tag_lines": {
-    "chip_damage": 4
+    "chip_damage": 4,
+    "big_turn": 5,
+    "big_turn_cards": 9
   },
   "tag_rules": [
     {
@@ -361,6 +363,11 @@
     {
       "role": "survival",
       "tag": "block",
+      "min": 9
+    },
+    {
+      "role": "survival",
+      "tag": "scaling_block",
       "min": 9
     },
     {

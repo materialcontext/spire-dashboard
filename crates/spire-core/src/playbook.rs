@@ -259,11 +259,28 @@ pub struct TagLines {
     /// A card's damage (all its hits) at or under this is Chip Damage, not
     /// Damage.
     pub chip_damage: u32,
+    /// How often a trigger on an event (a card played, a Star spent, a card
+    /// exhausted) fires on a big turn: a Block engine's Scaling (block) is
+    /// its Block per firing times this.
+    #[serde(default = "default_big_turn")]
+    pub big_turn: u32,
+    /// How many cards a big turn plays: a trigger on every card played
+    /// (Afterimage) fires this often, more than one on a kind of card.
+    #[serde(default = "default_big_turn_cards")]
+    pub big_turn_cards: u32,
+}
+
+fn default_big_turn() -> u32 {
+    5
+}
+
+fn default_big_turn_cards() -> u32 {
+    9
 }
 
 impl Default for TagLines {
     fn default() -> Self {
-        TagLines { chip_damage: 4 }
+        TagLines { chip_damage: 4, big_turn: default_big_turn(), big_turn_cards: default_big_turn_cards() }
     }
 }
 

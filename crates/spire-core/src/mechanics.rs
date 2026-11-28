@@ -422,6 +422,15 @@ pub enum Passive {
     EchoFirstOfCombat,
     /// The first attack each turn deals this many percent more.
     FirstAttackBonus(i32),
+    /// No cards are drawn during your turn; the start-of-turn draw still
+    /// happens (Fiddle).
+    NoDrawInTurn,
+    /// At most this many cards are played each turn (Velvet Choker).
+    PlayCap(i32),
+    /// Gold can't be gained (Ectoplasm).
+    NoGold,
+    /// Potions can't be obtained (Sozu).
+    NoPotions,
 }
 
 impl Passive {
@@ -439,6 +448,10 @@ impl Passive {
             Passive::RetainHand => "Keep your hand".into(),
             Passive::ConserveEnergy => "Unspent Energy carries over".into(),
             Passive::FreeSkills => "Skills cost 0 and exhaust".into(),
+            Passive::NoDrawInTurn => "No draws during your turn".into(),
+            Passive::PlayCap(n) => format!("At most {n} cards a turn"),
+            Passive::NoGold => "No Gold".into(),
+            Passive::NoPotions => "No Potions".into(),
             Passive::ExtraHit => "Multi-hit attacks hit once more".into(),
             Passive::EchoEachTurn => "First card each turn plays twice".into(),
             Passive::EchoFirstOfCombat => "First card of combat plays twice".into(),
@@ -533,6 +546,10 @@ impl Passive {
             Passive::ExtraHit => "extra_hit",
             Passive::EchoEachTurn | Passive::EchoFirstOfCombat => "echo",
             Passive::FirstAttackBonus(_) => "first_attack_bonus",
+            Passive::NoDrawInTurn => "no_draw_in_turn",
+            Passive::PlayCap(_) => "play_cap",
+            Passive::NoGold => "no_gold",
+            Passive::NoPotions => "no_potions",
         }
     }
 }
@@ -1978,6 +1995,19 @@ fn passive(sentence: &str) -> Option<Passive> {
     if has(&["vulnerable", "enemies", "take", "an", "additional"]) {
         return pct.map(Passive::VulnerableBonus);
     }
+    // Locks: what the run can't do while it holds the relic.
+    if has(&["may", "not", "draw", "cards", "during", "your", "turn"]) {
+        return Some(Passive::NoDrawInTurn);
+    }
+    if has(&["cannot", "play", "more", "than"]) && (has(&["per", "turn"]) || has(&["each", "turn"])) {
+        return num_before("cards").map(Passive::PlayCap);
+    }
+    if has(&["no", "longer", "gain", "gold"]) {
+        return Some(Passive::NoGold);
+    }
+    if has(&["no", "longer", "obtain", "potions"]) {
+        return Some(Passive::NoPotions);
+    }
     if has(&["additional", "damage"]) && !has(&["first"]) {
         let n = num_before("additional")?;
         if has(&["containing", "strike"]) {
@@ -2228,7 +2258,8 @@ mod tests {
         );
         let m = read("Gain 1 Energy at the start of each turn. You can no longer obtain Potions.", &[], false);
         assert_eq!(m.triggers, vec![(When::TurnStart, vec![Effect::Energy(1)])]);
-        assert_eq!(m.unread, vec!["You can no longer obtain Potions"]);
+        // Sozu's lock is a passive: the run can't obtain Potions.
+        assert_eq!((m.passives, m.unread.len()), (vec![Passive::NoPotions], 0));
         assert_eq!(
             triggers("Gain an additional 1 Energy at the start of your 3rd turn, and every turn after that.", false),
             vec![(When::TurnsFrom(3), vec![Effect::Energy(1)])]

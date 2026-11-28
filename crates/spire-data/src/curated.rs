@@ -175,5 +175,8 @@ mod tests {
         assert_eq!(&names[..4], &["Beeeees!", "Spear!", "Pheromone Spit", "Beeeees!"]);
         let test_subject = &cat.monsters[&MonsterId::new("TEST_SUBJECT")];
         assert_eq!((test_subject.hp_min, test_subject.phases.len()), (100, 2));
+        // Multi-Claw is the Codex's single hit (see the entry's note).
+        let claw = pattern::plan_from(test_subject, "MULTI_CLAW", false, 50, 1);
+        assert_eq!(claw.turns[0].options[0].hits, 1);
     }
 }

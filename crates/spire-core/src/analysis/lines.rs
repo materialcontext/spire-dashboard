@@ -10,7 +10,8 @@
 //! decks can't top the list on luck. On held-out runs, mined lines beat the
 //! baseline by a few points on average: a nudge, not a guarantee.
 //!
-//! **Suggestions** ([`suggest`]) are at most a few, best first:
+//! **Suggestions** ([`suggest`]) are at most a few, best first, and never a
+//! card a relic's lock leaves doing nothing (Fiddle and a pure draw card):
 //! 1. lines within reach: the deck holds part of the line and the missing
 //!    card is offered in this act often enough to hope for; ranked by the
 //!    line's rate against the act's boss when known;
@@ -226,8 +227,19 @@ pub fn lines_within_reach(state: &RunState, catalog: &Catalog, playbook: &Playbo
     let Some(act) = act_lines(state, catalog) else { return Vec::new() };
     let base = rate(act.all);
     let boss = state.boss.as_ref();
+    // A relic's lock (Fiddle: no draws during your turn) can leave a line's
+    // card doing nothing in this run.
+    let locks = crate::analysis::requirements::locks(state, catalog);
+    let blocked = |c: &CardId| {
+        catalog.cards.get(c).is_some_and(|card| {
+            locks.iter().any(|(lock, _)| crate::analysis::requirements::blocked(card, lock, catalog))
+        })
+    };
     let mut found: Vec<(f32, f32, Suggestion)> = Vec::new();
     for line in &act.lines {
+        if line.cards.iter().any(blocked) {
+            continue;
+        }
         let missing: Vec<&CardId> = line.cards.iter().filter(|c| !held(state, c)).collect();
         if missing.is_empty() || missing.len() > lines.max_missing as usize || missing.len() == line.cards.len() {
             continue;
@@ -390,7 +402,11 @@ pub fn fillers(
 /// The best class card supplying what `card` needs, when the run lacks it.
 fn partner_for(state: &RunState, catalog: &Catalog, playbook: &Playbook, card: &CardId) -> Option<CardId> {
     let cards = classify_run(state, catalog, playbook);
-    let what = cards.iter().find(|c| &c.deck.card == card)?.unmet.clone()?;
+    let crate::analysis::requirements::Dead::Needs(what) =
+        cards.iter().find(|c| &c.deck.card == card)?.unmet.clone()?
+    else {
+        return None;
+    };
     let req = playbook.simulation.requirements.iter().find(|r| r.what == what)?;
     let met_by = req.met_by.as_ref()?;
     reward_cards(state, catalog)

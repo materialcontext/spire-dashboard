@@ -150,12 +150,7 @@
           "powers": ["NEMESIS"]
         }
       ],
-      "moves": [
-        {
-          "id": "MULTI_CLAW",
-          "hits": 3
-        }
-      ],
+      "moves": [],
       "sources": [
         {
           "url": "https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2:Test_Subject",
@@ -166,9 +161,14 @@
           "url": "https://spire-codex.com/api/monsters?channel=beta",
           "read": true,
           "says": "Adaptable revives it; after reviving it uses Multi-Claw if respawns < 2, Lacerate if respawns >= 2. Multi-Claw is listed as one hit of 10. No HP given."
+        },
+        {
+          "url": "https://spire-codex.com/api/exports/runs",
+          "read": true,
+          "says": "Community runs (beta): 230 wins at Test Subject over six export pages lose a median 29 HP (damage_taken) in a median 9.5 turns."
         }
       ],
-      "note": "Multi-Claw gains a hit each use; modelled at its first 3 hits. Each phase holds the powers the wiki gives it (phase 2: Adaptable and Painful Stabs; phase 3: Nemesis); the turn spent reviving isn't counted."
+      "note": "Multi-Claw follows the Codex (one hit of 10, 11 at Ascension), not the wiki's 3 growing hits: community wins here lose a median 29 HP over the whole fight, which decks that block 16-24 a turn couldn't against 3+ hits of 11 every phase-2 turn. Each phase holds the powers the wiki gives it (phase 2: Adaptable and Painful Stabs; phase 3: Nemesis); the turn spent reviving isn't counted."
     },
     {
       "monster": "DECIMILLIPEDE_SEGMENT_FRONT",

@@ -101,7 +101,7 @@ fn roles(ui: &mut Ui, v: &ViewCtx, c: &Composition) {
     let who = if c.all_characters { "all characters'" } else { "this character's" };
     ui.label(caption("Roles")).on_hover_text(format!(
         "Winners: A10 decks ({who}, {:.0} effective) that beat the Act {} boss. Band: middle half; tick: \
-         median. Amber: a side that loses the boss more often.",
+         median. Bars in the deck's mark colours; an amber outline: a side that loses the boss more often.",
         c.effective,
         c.act + 1
     ));

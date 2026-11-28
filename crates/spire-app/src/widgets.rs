@@ -376,8 +376,10 @@ pub fn bar(ui: &mut Ui, label: &str, value: u32, extra: u32, max: u32, color: Co
 }
 
 /// A value on a range: the middle half as a faint band, the median as a
-/// tick, the value as a bar from zero; `warn` colours it as a warning.
-/// `text` sits on the right.
+/// tick, the value as a bar from zero in `color` (a role's, so it matches
+/// the deck's marks). `warn_it` outlines the track and colours the label
+/// and `text` (on the right) as a warning; the bar keeps its colour, since
+/// amber sits next to Scaling Damage's gold and AoE's orange.
 pub fn range_bar(
     ui: &mut Ui,
     label: &str,
@@ -400,7 +402,10 @@ pub fn range_bar(
         painter.rect_filled(band, 0.0, color.gamma_multiply(0.25));
         let bar = Rect::from_min_max(rect.min, egui::pos2(x(value), rect.min.y + rect.height() * 0.5 + 2.0));
         let bar = bar.translate(vec2(0.0, rect.height() * 0.25 - 1.0));
-        painter.rect_filled(bar, 0.0, if warn_it { warn() } else { color });
+        painter.rect_filled(bar, 0.0, color);
+        if warn_it {
+            painter.rect_stroke(rect, 0.0, Stroke::new(1.0, warn()), StrokeKind::Outside);
+        }
         painter.vline(x(range.p50), (rect.min.y - 3.0)..=(rect.max.y + 3.0), Stroke::new(1.5, text_dim()));
         ui.label(RichText::new(text).small().color(if warn_it { warn() } else { crate::style::color::text() }));
     })
