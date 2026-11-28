@@ -20,8 +20,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::catalog::{Card, CardType, Rarity, Target};
-use crate::mechanics::{self, Effect};
-use crate::playbook::Playbook;
+use crate::mechanics::{self, Effect, When};
+use crate::playbook::{Playbook, TagLines};
 
 /// What a card does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -190,9 +190,23 @@ pub fn read(card: &Card, upgraded: bool, playbook: &Playbook) -> Vec<Tagged> {
             None => out.push(Tagged { tag, value, hits }),
         }
     };
-    let effects = mechanics::read(card.text_at(upgraded), &[], true);
+    let mech = mechanics::read(card.text_at(upgraded), &[], true);
     let text = mechanics::card_text(card.text_at(upgraded), &[]);
-    let effects: Vec<&Effect> = effects.triggers.iter().flat_map(|(_, es)| es).collect();
+    let effects: Vec<&Effect> = mech.triggers.iter().flat_map(|(_, es)| es).collect();
+    // Block engines: a trigger on an event gives its Block each time, so on
+    // a big turn (`tag_lines.big_turn` events) it adds up (Child of the
+    // Stars per Star spent, Feel No Pain per exhaust, Rage per Attack).
+    let engine = mech
+        .triggers
+        .iter()
+        .chain(text.this_turn.iter())
+        .filter_map(|(w, es)| {
+            let firings = big_turn_firings(w, &playbook.tag_lines)?;
+            let block: i32 = es.iter().filter_map(|e| if let Effect::Block(n) = e { Some(*n) } else { None }).sum();
+            (block > 0).then_some(block * firings as i32)
+        })
+        .max()
+        .unwrap_or(0);
     let power = |name: &str| card.powers.iter().find(|p| p.power.eq_ignore_ascii_case(name)).map(|p| p.amount);
 
     // Damage, by target, and its hits. A curse's or status's damage is to
@@ -272,6 +286,9 @@ pub fn read(card: &Card, upgraded: bool, playbook: &Playbook) -> Vec<Tagged> {
             add(tag, n, 1);
         }
     }
+    if engine > 0 {
+        add(Tag::ScalingBlock, engine, 1);
+    }
     for (names, tag) in [
         (&["Strength", "Focus", "Poison", "Doom"][..], Tag::ScalingDamage),
         (&["Dexterity", "Plating"][..], Tag::ScalingBlock),
@@ -291,6 +308,33 @@ pub fn read(card: &Card, upgraded: bool, playbook: &Playbook) -> Vec<Tagged> {
     }
     out.sort();
     out
+}
+
+/// How many times a trigger fires on a big turn of `big` events: an event
+/// trigger `big` times, "every N" of them `big / N` times, a first-time-each-
+/// turn one once. `None` for timings that aren't events (turn start, play).
+fn big_turn_firings(w: &When, lines: &TagLines) -> Option<u32> {
+    let big = lines.big_turn;
+    match w {
+        When::Played
+        | When::CombatStart
+        | When::TurnStart
+        | When::TurnEnd
+        | When::TurnNumber(_)
+        | When::FirstTurns(_)
+        | When::TurnsFrom(_)
+        | When::EveryTurns(_) => None,
+        // Melodies last the fight: holding all three happens once.
+        When::First { .. } | When::OnAllMelodies => Some(1),
+        // One named card (Sovereign Blade, Sadness) comes up a time or two.
+        When::OnPlay(mechanics::CardFilter::Named(_)) | When::OnMake(mechanics::CardFilter::Named(_)) => {
+            Some(big.min(2))
+        }
+        When::OnPlay(mechanics::CardFilter::Any) => Some(lines.big_turn_cards),
+        When::EveryPlays { filter: mechanics::CardFilter::Any, n, .. } => Some(lines.big_turn_cards / (*n).max(1)),
+        When::Every { n, .. } | When::EveryPlays { n, .. } => Some(big / (*n).max(1)),
+        _ => Some(big),
+    }
 }
 
 /// A card's tags and where they come from: the player's override, the

@@ -45,6 +45,8 @@ Bad-draw damage is a note, not a role. Roles share no name with a card or relic.
 
 Fourteen, each with its number: Damage, Chip Damage, Multi-Hit, Area, Block, Weak, Vulnerable, Draw, Energy, Scaling and Setup on the damage or Block side, Clean-Up. Read from card numbers, the mechanics reader and `tag_rules`; hand-set and personal tags replace the reading. Roles come from tags (`tag_roles`, `role_rules`). A role shortfall points at the tags to look for.
 
+A Block engine (Feel No Pain, Child of the Stars, Afterimage, Plating) is Scaling on the Block side, valued at its Block on a big turn: per firing times the playbook's `tag_lines.big_turn` (5 events) or `big_turn_cards` (9 cards, for a trigger on every card played). At 9 or more it counts for Survival, since its Block climbs past what a fight's spikes ask.
+
 ## Deck styles (`analysis::styles`)
 
 | Style | Strong in |
