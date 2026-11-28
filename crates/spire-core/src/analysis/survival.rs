@@ -648,7 +648,9 @@ fn play(sim: &DeckSim, foe: Foe, way: Way) -> Line {
             junk += foe.stages[stage].mods.junk_unblocked;
         }
         junk += statuses(stage, t - since);
-        enraged += foe.stages[stage].mods.per_skill * skills;
+        // Enrage (Strength per Skill): players hold Skills back here, so
+        // only the Skills of the turn's lean to Block feed it.
+        enraged += foe.stages[stage].mods.per_skill * skills * share_for(coming, &out, keep);
         let pile = foe.deck + junk + passing;
         if pile > 0.0 {
             passing *= 1.0 - (foe.hand / pile).min(1.0);
