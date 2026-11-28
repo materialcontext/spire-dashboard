@@ -606,6 +606,8 @@ struct Mods {
     echo_each_turn: bool,
     echo_first_of_combat: bool,
     first_attack_bonus: i32,
+    no_draw_in_turn: bool,
+    play_cap: Option<i32>,
 }
 
 impl Mods {
@@ -627,6 +629,10 @@ impl Mods {
             Passive::EchoEachTurn => self.echo_each_turn = true,
             Passive::EchoFirstOfCombat => self.echo_first_of_combat = true,
             Passive::FirstAttackBonus(n) => self.first_attack_bonus += n,
+            Passive::NoDrawInTurn => self.no_draw_in_turn = true,
+            Passive::PlayCap(n) => self.play_cap = Some(self.play_cap.map_or(*n, |c| c.min(*n))),
+            // Outside the fight.
+            Passive::NoGold | Passive::NoPotions => {}
         }
     }
 }
@@ -860,6 +866,8 @@ struct Fight<'a> {
     /// Extra cards to draw with this turn's hand (start-of-turn effects).
     pending_draw: i32,
     played_this_turn: u32,
+    /// The start-of-turn draw is done: later draws happen during the turn.
+    in_turn: bool,
     attacked_this_turn: bool,
     played_any: bool,
     depth: u8,
@@ -968,6 +976,7 @@ impl<'a> Fight<'a> {
             next_extra: Vec::new(),
             pending_draw: 0,
             played_this_turn: 0,
+            in_turn: false,
             attacked_this_turn: false,
             played_any: false,
             depth: 0,
@@ -977,7 +986,8 @@ impl<'a> Fight<'a> {
     }
 
     fn draw_cards(&mut self, n: i32) {
-        if self.now_rules.draw_lock {
+        // Fiddle: no draws once the turn's own draw is done.
+        if self.now_rules.draw_lock || (self.in_turn && self.mods.no_draw_in_turn) {
             return;
         }
         for _ in 0..n.max(0) {
@@ -2565,6 +2575,10 @@ impl<'a> Fight<'a> {
         // A deck can loop for ever (free cards that draw each other); the
         // game would let it, the simulator stops.
         for _ in 0..MAX_PLAYS {
+            // Velvet Choker: no more cards past the cap.
+            if self.mods.play_cap.is_some_and(|c| self.played_this_turn as i32 >= c) {
+                break;
+            }
             let best = self
                 .hand
                 .iter()
@@ -2602,6 +2616,7 @@ impl<'a> Fight<'a> {
         let carried = if self.mods.conserve_energy { self.energy } else { 0 };
         self.energy = self.s.energy + std::mem::take(&mut self.next_energy) + carried;
         self.played_this_turn = 0;
+        self.in_turn = false;
         self.attacked_this_turn = false;
         self.lost_hp_this_turn = false;
         self.now_rules = TurnRules { double_attacks: std::mem::take(&mut self.double_next), ..TurnRules::default() };
@@ -2639,6 +2654,7 @@ impl<'a> Fight<'a> {
         }
         let extra = std::mem::take(&mut self.pending_draw);
         self.draw_cards(self.s.rules.hand_size as i32 + extra);
+        self.in_turn = true;
         // Imbued cards play themselves, free, as the combat starts.
         if self.turn == 0 {
             let setup: &'a Setup<'a> = self.s;
@@ -2782,8 +2798,8 @@ pub fn simulate(state: &RunState, catalog: &Catalog, rules: &SimAssumptions) -> 
     let orbs: Vec<&Orb> = catalog.orbs.values().collect();
     let all_orbs: Vec<Orb> = catalog.orbs.values().cloned().collect();
 
-    // Cards whose need nothing in the run supplies do nothing: dead.
-    let unmet = crate::analysis::requirements::unmet(state, catalog, &rules.requirements);
+    // Cards that do nothing in this run (an unmet need, a relic's lock): dead.
+    let unmet = crate::analysis::requirements::dead(state, catalog, &rules.requirements);
     let mut groups: Vec<(DeckCard, String, u32)> = Vec::new();
     let mut plays = Vec::new();
     for d in &state.deck {

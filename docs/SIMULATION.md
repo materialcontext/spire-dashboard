@@ -70,6 +70,7 @@ Card Block + Dexterity + Defend bonus (Fasten) + Stretch (spent by the card, add
 - Trigger chains stop three levels deep.
 - Same-timing relics and powers: no card reads a value mid-timing, so their order can't change results.
 - Cards whose need nothing supplies (`simulation.requirements`: Sadness, Shivs, Souls, Sovereign Blade, orbs, Lightning, Arrows, Stars) are dead draws. *[Player]*
+- Relic locks, read from relic text: Fiddle (no draws during your turn; the start-of-turn draw still happens), Velvet Choker (at most 6 cards a turn), Sozu (no Potions), Ectoplasm (no Gold). A card whose every effect a lock forbids (Acrobatics, Battle Trance and Dark Embrace under Fiddle; Alchemize under Sozu) is a dead draw and is never suggested; one that keeps another effect (Pommel Strike's damage) is played without the locked part. *[Data]*
 - Setup is worth what the deck can spend: Aim at the deck's Shoot cards' mean multiplier, Vigor with any attack, Stretch with any Block card. Stores per turn feed `analysis::balance`.
 - A shot Arrow returns after 3 attack hits (`simulation.arrow_return_hits`). *[Player]*
 - Forge: the first Forge in a fight adds the Forge card (`GameRules::forge_card`, Sovereign Blade) to the hand, or the discard pile when the hand is full; every Forge adds its amount to that card's damage, wherever it is. It then cycles like any card. Sword Sage's Replay plays it again; Conqueror doubles it for the turn and Parry gives Block per play. Seeking Edge (hits all) isn't read. *[Codex glossary]*

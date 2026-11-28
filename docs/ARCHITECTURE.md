@@ -46,7 +46,7 @@ Pure functions over (state, catalog, playbook).
 |---|---|
 | `deck` | Cards → roles (Mitigation, Survival, Fast Damage, Scaling Damage, AoE, Chip); `DeckProfile` with starters apart; `coverage` (any card for a role: unmeasured fights) |
 | `tags` | 14 tags with numbers, from card numbers, `mechanics` and `tag_rules`; roles come from tags |
-| `requirements` | Cards dead without something the run supplies (Growth without Sadness, Shoot without Arrows) |
+| `requirements` | Dead cards: a need nothing in the run supplies (Growth without Sadness, Shoot without Arrows), or a relic's lock on all the card does (Acrobatics under Fiddle) |
 | `sim` | Deck simulator: seeded fights vs a passive target, a damage and a block policy sharing shuffles. Order of operations in `docs/SIMULATION.md` |
 | `jobs` | Each role's job from the sim (Block ordinary/defending turn, damage turns 1–3, growth, AoE share, hits a turn) |
 | `composition` | The deck's `Measure`s (jobs, role shares, damage to Block, size, dead draws) on the range of A10 decks that beat this act's boss, moving from act entry to the boss by floors played. Flags only on a `Risk`. `risks` (data refresh) keeps a side when its boss win-rate gap is ≥ `min_gap`, its player-resampled bootstrap interval stays below zero, and both player halves agree |
